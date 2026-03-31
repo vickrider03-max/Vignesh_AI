@@ -1,0 +1,711 @@
+/*@!Encoding:1252*/
+includes
+{
+ 
+}
+
+variables
+{
+  enum ImdType {DEACT_RQ, ACT_RQ};
+  mstimer Timer20ms;
+  mstimer Timer1000ms;
+  timer Timer3s;
+  int TimeCounter_IDM = 0;
+  int TimeCounter_IDM_SNA = 0;
+  int TimeCounter_CC = 0;
+  int TimeCounter_SOC = 0;
+  int TimeCounter_SwCutOpen = 0;
+  int TimeCounter_SwCutClose = 0;
+}
+
+on start
+{
+  
+    
+  setTimerCyclic(Timer20ms,20);
+  setTimerCyclic(Timer1000ms,1000);
+  
+  $PT4_BMS_ThermEvent_Disp_Rq_ST3 = 0; //no Warn
+  
+  $PT4_BMS_Bat_Emgcy_Oper_Rq = 0;
+  $PT4_HVBat_Intrlk_Stat_ST3 = 2;
+  $PT4_BMS_BatCutSw_Err_ST3 = 0; //no error
+  $PT4_HVBat_SW_Wld_Dtct_Actv = 1;
+  
+  $PT4_HVBat_HighVolt_Sw_Stat_ST3 = 0; //0 open, 1parralel 2 series 3sna
+  $PT4_HVBat_HighVolt_Sw_Err_ST3 = 0;
+  $PT4_HVBat_Serial_Flt_ST3 = 1; //1 False, 2 True
+  $PT4_HVBat_Parallel_Flt_ST3 = 1; //1 False, 2 True
+  $PT4_HVBat_Parallel_Sw_Err_ST3 = 0;
+  $PT4_HVBat_Serial_Sw_Err_ST3 = 0;
+  
+  $PT4_HVBat_BattVoltDsChrgDiff_Max_ST3 = 58; //400
+  $PT4_HVBat_BattVoltChrgDiff_Max_ST3 = -275; //825
+  
+  
+  $PT4_HVBat_ChrgCurr_Target_ST3 = 100; //Ampere
+
+  $PT4_HVBat_HV_Actv_Rq_ST3 = 0;
+
+  $PT4_HVBat_NumOfActvCellStrings_ST3 = 1;
+  $PT4_HVBat_NumOfCellsPerString_ST3 = 192; //1
+  $PT4_HVBat_IsoVolt_HVPlus2Gnd_ST3 = 1000;
+
+  $PT4_HVBat_ExtIso_Err_ST3 = 0;
+  $PT4_HVBat_IntIso_Err_ST3 = 0;
+  $PT4_HVBat_Iso_Warn_ST3 = 0;
+  $PT4_HVBat_Intrlk_Stat_ST3 = 2;
+
+  $PT4_BMS_DschrgCurr_Max_Critic_ST3 = -600;
+  $PT4_BMS_RemainEnergyThrpt_ST3 = 20;
+
+  $PT4_BMS_ChrgCurr_Max_Critic_ST3 = 520;
+  $PT4_BMS_Bat_Temp_MinLim_ST3 = -20; //alternativ SNA: 255
+  $PT4_BMS_Bat_Temp_MaxLim_ST3 = 80; //alternativ SNA: 255
+  $PT4_BMS_Bat_Temp_ST3 = 20; //20
+  $PT4_BMS_Bat_Temp_V2_ST3 = 20; //20
+  $PT4_BMS_Bat_Temp_Max_ST3 = 21;
+  $PT4_BMS_Bat_Temp_Max_V2_ST3 = 21;
+  $PT4_BMS_Bat_Temp_Min_ST3 = 19;
+  $PT4_BMS_Bat_Temp_Min_V2_ST3 = 19;
+  
+  
+
+  $PT4_BMS_ChrgCurr_PredLongTm_ST3 = 95; //83
+  $PT4_BMS_ChrgVolt_PredLongTm_ST3 = 774; //794.7
+  $PT4_BMS_DschrgVolt_PredLongTm_ST3 = 677; //704
+  $PT4_BMS_MeasPoint_BatTemp_Max_ST3 = 16; //1
+  $PT4_BMS_CoolInletTemp_ST3 = 255; //20
+  $PT4_BMS_DschrgCurr_PredLongTm_ST3 = -348.2; // -272.5
+  $PT4_BMS_Bat_SOC_MaxLim_ST3 = 100;
+  $PT4_BMS_Bat_SOC_MinLim_ST3 = 0;
+
+  $PT4_BMS_Srv_Rq_ST3 = 1;
+  $PT4_BMS_Warn_Err_ST3 = 0; //alternativ SNA: 7
+
+  $PT4_BMS_Bat_Int_Res_Chrg_ST3 = 130; //144
+  $PT4_BMS_Bat_Int_Res_Dschrg_ST3 = 120;//144
+  
+  if (@sysvar::Hardware_Settings::Carline == 4) //AMG.EA
+  {
+    $PT4_BMS_Bat_RefCpcty_SOC_Calc_ST3 = 500200;    
+  }
+  else
+  {
+    $PT4_BMS_Bat_RefCpcty_SOC_Calc_ST3 = 471200;
+  }
+  
+  //SOC
+  $PT4_BMS_Bat_SOC_ST3     = @sysvar::Hardware_EV::SysEV_BMS_SOC;
+  $PT4_BMS_Bat_SOC_Max_ST3 = _min(@sysvar::Hardware_EV::SysEV_BMS_SOC+1,100);
+  $PT4_BMS_Bat_SOC_Min_ST3 = _max(@sysvar::Hardware_EV::SysEV_BMS_SOC-1,0);
+  $PT4_BMS_SupBat_Sw_OpnTm_ST3 = 0; //30
+  $PT4_BMS_MeasPoint_BatTemp_Min_ST3 = 49; //1
+  $PT4_BMS_OBD_ErrMemClr_Trgr_ST3 = 1; //alternativ SNA: 3
+
+  // Cells
+  $PT4_BMS_Bat_CellVolt_Max_ST3 = 3.2;
+  $PT4_BMS_Bat_CellVolt_Min_ST3 = 3.0;
+  $PT4_BMS_Bat_CellVoltChrg_Max_ST3 = 4.2;
+  $PT4_BMS_Bat_CellVoltChrg_Max_Critic_ST3 = 4.25;
+  $PT4_BMS_Bat_CellVoltDschrg_Min_ST3 = 2.503;
+  $PT4_BMS_Bat_CellVoltDschrg_Min_Critic_ST3 = 1.9;
+  
+  $PT4_HVBat_CellVoltDsChrgDiff_Min_ST3 = 1.436;
+  $PT4_HVBat_CellVoltChrgDiff_Min_ST3 = 0.302; //0.135
+  $PT4_HVBat_CellVoltDsChrgDiff_Min_Critic_ST3 = 1.545;//alternativ SNA: 8191
+  $PT4_HVBat_CellVoltChrgDiff_Min_Critic_ST3 = 1.345;//alternativ SNA: 8191
+  
+  $PT4_BMS_Bat_Curr_ST3 = 0;
+
+  $PT4_BMS_SupBat_Term_30c_Trgrd_ST3 = 1;
+  $PT4_BMS_PreChrgRst_Ovrht_ST3 = 1;//alternativ SNA: 3
+  
+  $PT4_BMS_Bat_LHOM_ST3 = 1;
+  
+  $PT4_HVBat_Volt_Rated_ST3 = 700;
+  $PT4_HVBat_Temp_MaxAllowed_ST3 = 63;
+  $PT4_HVBat_Energy_Rated_ST3 = 89;
+  $PT4_HVBat_CellVolt_MaxAllowed_ST3 = 4.33;
+  $PT4_HVBat_Capacity_Rated_ST3 = 127;
+  $PT4_HVBat_NumOfCellsPerString_ST3 = 192;
+  
+  if (@sysvar::Hardware_Settings::Carline == 10)
+  {
+    @sysvar::Hardware_BMS::BatVoltage_Set = -0.0097*($PT4_BMS_Bat_SOC_ST3)*($PT4_BMS_Bat_SOC_ST3)+1.9*($PT4_BMS_Bat_SOC_ST3)+310;
+  }
+  else{
+    @sysvar::Hardware_BMS::BatVoltage_Set = -0.0097*($PT4_BMS_Bat_SOC_ST3)*($PT4_BMS_Bat_SOC_ST3)+1.9*($PT4_BMS_Bat_SOC_ST3)+710;
+  }
+
+  $PT4_BMS_Bat_Volt_ST3 = @sysvar::Hardware_BMS::BatVoltage_Set;
+
+  $PT4_BMS_BatCutFast_Opn_Rq_ST3 = 1;
+  $PT4_BMS_BatCutImm_Opn_Rq_ST3 = 1;
+  $PT4_BMS_BatCutSw_Err_ST3 = 0;
+  $PT4_BMS_BatCutSw_Stat_DCDCOnly_ST3 = 3;//SNA vorher: 2
+  $PT4_BMS_BatCutSw_Stat_ST3 = 0;
+
+
+  $PT4_BMS_BatNoCurr_Rq_ST3 = 1; // can false
+  $PT4_BMS_ChrgCurr_Max_ST3 = 203; //100
+
+  $PT4_BMS_Critic_Err_ST3 = 2;
+  $PT4_BMS_DschrgCurr_Max_ST3 = -585; //100
+  $PT4_BMS_MIL_On_Rq_ST3 = 1; //1 = False, alternativ 3 SNA möglich
+
+  $PT4_BMS_CellNr_ST3 = 1;
+  $PT4_BMS_Bat_ChrgLd_Val_ST3 = 0;
+  $PT4_BMS_Bat_DschrgLd_Val_ST3 = 0;
+  $PT4_BMS_CellGrpNr_ST3 = 10;
+  $PT4_BMS_LinkVolt_ST3 = 0;
+  
+  //Predicated values: SNA for now okay
+  //$PT4_BMS_DschrgCurr_PredShortTm_ST3 = 100;
+  //$PT4_BMS_ChrgCurr_PredShortTm_ST3 = 100;
+  //$PT4_BMS_ChrgVolt_PredShortTm_ST3 = 760;
+  //$PT4_BMS_DschrgVolt_PredShortTm_ST3 = 700;
+  
+  $PT4_BMS_Bat_Volt_OpnCircVolt_ST3 = 769.4;
+  $PT4_BMS_DschrgCurr_Max_Extd_ST3 = -585; //-350
+  $PT4_BMS_CoolPmp_RPM_ST3 = 10;
+  
+  
+  $PT4_HVBat_Energy_ChgEnd_ST3 = 80; //80kwh
+  
+  // Bat-Serial 42: Special for CRC true target 16
+  $PT4_BMS_BatId_ST3 = 42;
+  
+  if (@sysvar::Hardware_Settings::Carline == 1 || @sysvar::Hardware_Settings::Carline == 4) //Eva2M
+  {
+    //Switch Bat
+    $PT4_HVBat_CCSW_Flt_ST3 = 0;
+    $PT4_HVBat_CCSW_CutSw_Err_ST3 = 0;
+    $PT4_HVBat_CCSW_CutSw_Stat_ST3 = 0;
+    $PT4_HVBat_CCSW_ExtIso_Err_ST3 = 0;
+    
+    $PT4_HVBat_DCSW_Flt_ST3 = 1;
+    $PT4_HVBat_DCSW_CutSw_Stat_ST3 = 0;
+    $PT4_HVBat_DCSW_CutSw_Err_ST3 = 0;
+    $PT4_HVBat_DCSW_ChrgCurr_Max_ST3 = 0;
+    
+  }
+  else
+  {
+    $PT4_HVBat_CCSW_Flt_ST3 = 3;
+    $PT4_HVBat_CCSW_CutSw_Err_ST3 = 15;
+    $PT4_HVBat_CCSW_CutSw_Stat_ST3 = 3;
+    $PT4_HVBat_CCSW_ExtIso_Err_ST3 = 3;
+    
+    $PT4_HVBat_DCSW_Flt_ST3 = 1;
+    $PT4_HVBat_DCSW_CutSw_Err_ST3 = 15;
+    $PT4_HVBat_DCSW_CutSw_Stat_ST3 = 3;
+    $PT4_HVBat_DCSW_ChrgCurr_Max_ST3 = 65535;
+  }
+  
+  if  (@sysVar::Test::SysTestSchema == 0)
+    {
+      @sysvar::Hardware_EV::SysEV_BMS_SOC = 50;
+    }
+
+  
+  
+  
+  // BMS SOC update
+  setTimerCyclic(Timer1000ms,1000);
+}
+
+
+on key 'b'
+{
+  @sysvar::Hardware_EV::SysEV_BMS_SOC +=10;
+  if (@sysvar::Hardware_EV::SysEV_BMS_SOC>100)
+    @sysvar::Hardware_EV::SysEV_BMS_SOC = 100;
+}
+on key 'n'
+{
+  @sysvar::Hardware_EV::SysEV_BMS_SOC -=10;
+    if (@sysvar::Hardware_EV::SysEV_BMS_SOC<0)
+    @sysvar::Hardware_EV::SysEV_BMS_SOC = 0;
+}
+
+on timer Timer1000ms
+{
+  if (@sysvar::Hardware_EV::SysEV_BMS_SOC>0.1 || @sysvar::Hardware_EV::SysEV_BMS_SOC<100)
+  {
+    @sysvar::Hardware_EV::SysEV_BMS_SOC=@sysvar::Hardware_EV::SysEV_BMS_SOC+($PT4_BMS_Bat_Curr_ST3*100/$PT4_BMS_Bat_RefCpcty_SOC_Calc_ST3);
+  }
+  
+  
+  
+//  if(@sysvar::IL_CAN3::NODES::N_BMS::EnableNode == 1 && @sysvar::Hardware_Settings::BusState == 1)
+//    {
+//      //Cyclic 
+//      $PT4_BMS_ThermEvent_Disp_Rq_ST3 = 0;
+//    }
+  
+  
+}
+
+on timer Timer20ms
+{
+  if(@sysvar::IL_CAN3::NODES::N_BMS::EnableNode == 1 && @sysvar::Hardware_Settings::BusState == 1)
+    {
+      if (@sysvar::Hardware_Settings::Carline == 4) //AMG.EA
+      {
+        $PT4_BMS_Bat_RefCpcty_SOC_Calc_ST3 = 500200;    
+      }
+      else
+      {
+        $PT4_BMS_Bat_RefCpcty_SOC_Calc_ST3 = 471200;
+      }
+      $PT4_HVBat_Intrlk_Stat_ST3 = @sysvar::Hardware_BMS::BMS_IntrLk;
+      $PT4_BMS_BatCutFast_Opn_Rq_ST3 = @sysvar::Hardware_BMS::BMS_FastOpnRq;
+      $PT4_BMS_BatCutSw_Err_ST3 = @sysvar::Hardware_BMS::BMS_CsidStuck;
+    
+      $PT4_BMS_Bat_Volt_ST3 = @sysvar::Hardware_BMS::BatVoltage;
+      $PT4_BMS_LinkVolt_ST3 = @sysvar::Hardware_BMS::LinkVoltage;
+      //$PT4_HVBat_HighVolt_Sw_Stat_ST3 = 2;
+      $PT4_BMS_Bat_Curr_ST3 = BatCurSimulation();
+      $PT4_BMS_ChrgCurr_Max_ST3 = @sysvar::Hardware_BMS::DcCurMax;
+      /* IMD */
+      $PT4_HVBat_Iso_Warn_ST3   = @sysvar::Hardware_BMS::IMD;
+      $PT4_HVBat_ExtIso_Err_ST3 = @sysvar::Hardware_BMS::IMD;
+      $PT4_HVBat_IntIso_Err_ST3 = @sysvar::Hardware_BMS::IMD;
+      /* BAT SOC */
+      $PT4_BMS_Bat_SOC_ST3     = @sysvar::Hardware_EV::SysEV_BMS_SOC;
+      $PT4_HVBat_Bat_SOC_Serial_ST3 =  $PT4_BMS_Bat_SOC_ST3;
+      $PT4_BMS_Bat_SOC_Max_ST3 = _min(@sysvar::Hardware_EV::SysEV_BMS_SOC+1,100);
+      $PT4_BMS_Bat_SOC_Min_ST3 = _max(@sysvar::Hardware_EV::SysEV_BMS_SOC-1,0);
+      if (@sysvar::Hardware_BMS::Manipulate_BatVolt == 0)
+      {
+        if (@sysvar::Hardware_Settings::Carline == 10)
+        {
+          @sysvar::Hardware_BMS::BatVoltage_Set = -0.0097*($PT4_BMS_Bat_SOC_ST3)*($PT4_BMS_Bat_SOC_ST3)+1.9*($PT4_BMS_Bat_SOC_ST3)+310;
+        }
+        else{
+          @sysvar::Hardware_BMS::BatVoltage_Set = -0.0097*($PT4_BMS_Bat_SOC_ST3)*($PT4_BMS_Bat_SOC_ST3)+1.9*($PT4_BMS_Bat_SOC_ST3)+710;
+        }
+      }
+      else
+      {/* Set battery voltage to fixed value */
+        @sysvar::Hardware_BMS::BatVoltage_Set = @sysvar::Hardware_BMS::BatVoltage;
+      }
+      
+      
+      
+
+      
+      /* Switch: Open Switch on pressed button */
+      if (@sysvar::Hardware_BMS::OpenSwitch != 1)
+      {
+    	  $PT4_BMS_BatCutSw_Stat_ST3 = @sysvar::Hardware_BMS::SwitchStat;
+      }
+      else
+      {
+    	  $PT4_BMS_BatCutSw_Stat_ST3 = 0;
+      }
+      LinkVoltageSim();
+      
+      /* Run IMD simulation */
+      ImdSimulation();
+      
+      /* Run simulation for Eva2M or AMGEA */
+      if (@sysvar::Hardware_Settings::Carline == 1 || @sysvar::Hardware_Settings::Carline == 4)
+      {
+        ChargingContactors();
+        VoltageSimulation();
+        CcswSim();
+      }
+    }
+}
+
+on sysvar sysvar::Hardware_Settings::Carline
+{
+  if (@sysvar::Hardware_Settings::Carline == 1 || @sysvar::Hardware_Settings::Carline == 4 ) //Eva2M or AMGEA
+  {
+    //Switch Bat
+    $PT4_HVBat_CCSW_Flt_ST3 = 0;
+    $PT4_HVBat_CCSW_CutSw_Err_ST3 = 0;
+    $PT4_HVBat_CCSW_CutSw_Stat_ST3 = 0;
+    $PT4_HVBat_CCSW_ExtIso_Err_ST3 = 0;
+    
+    $PT4_HVBat_DCSW_Flt_ST3 = 1;
+    $PT4_HVBat_DCSW_CutSw_Stat_ST3 = 0;
+    $PT4_HVBat_DCSW_CutSw_Err_ST3 = 0;
+    $PT4_HVBat_DCSW_ChrgCurr_Max_ST3 = 0;
+  }
+  else
+  {
+    $PT4_HVBat_CCSW_Flt_ST3 = 3;
+    $PT4_HVBat_CCSW_CutSw_Err_ST3 = 15;
+    $PT4_HVBat_CCSW_CutSw_Stat_ST3 = 3;
+    $PT4_HVBat_CCSW_ExtIso_Err_ST3 = 3;
+    
+    $PT4_HVBat_DCSW_Flt_ST3 = 1;
+    $PT4_HVBat_DCSW_CutSw_Err_ST3 = 15;
+    $PT4_HVBat_DCSW_CutSw_Stat_ST3 = 3;
+    $PT4_HVBat_DCSW_ChrgCurr_Max_ST3 = 65535;
+  }
+}
+
+
+
+
+
+double BatCurSimulation()
+{
+  double retVal;
+  double tempCurr;
+  switch(@sysvar::Hardware_Settings::Carline)
+  {
+    case 0: //MMA
+      if($PT4_ACC_DcCurr_ST3 != 0)
+        tempCurr = @sysvar::Hardware_PCCU::CurDcAcCharg - @sysvar::Hardware_EV::AuxCurEth;
+      else if ($PT4_HV_PD_DcChrg_Curr_ST3 != 0)
+        tempCurr = (@sysvar::Hardware_EVSE::Meas_PresentCurrent - @sysvar::Hardware_EV::AuxCurEth + @sysvar::Hardware_Settings::EvseCurrentOffset + @sysvar::Hardware_BMS::DcCurOffset);
+      else
+        tempCurr = -@sysvar::Hardware_EV::AuxCurEth; //Standby to driving
+    break;
+      
+    case 1: //EVA2M
+      if($PT4_OBChrg_HVDC_Curr_ST3 != 0)
+        tempCurr = @sysvar::Hardware_OBC::OBChrgDCCurrAct- @sysvar::Hardware_EV::AuxCurEth;
+      else if ($PT4_HVBat_DCB_HVDC_Curr_ST3 != 0)
+        tempCurr = (@sysvar::Hardware_EVSE::Meas_PresentCurrent - @sysvar::Hardware_EV::AuxCurEth + @sysvar::Hardware_Settings::EvseCurrentOffset + @sysvar::Hardware_BMS::DcCurOffset);
+      else
+        tempCurr = -@sysvar::Hardware_EV::AuxCurEth; //Standby to driving
+    break;
+      
+    case 2: //MBEAM
+      if($PT4_ACC_DcCurr_ST3 != 0)
+        tempCurr = @sysvar::Hardware_PCCU::CurDcAcCharg - @sysvar::Hardware_EV::AuxCurEth;
+      else if ($PT4_HV_PD_DcChrg_Curr_ST3 != 0)
+        tempCurr = (@sysvar::Hardware_EVSE::Meas_PresentCurrent - @sysvar::Hardware_EV::AuxCurEth + @sysvar::Hardware_Settings::EvseCurrentOffset + @sysvar::Hardware_BMS::DcCurOffset);
+      else
+        tempCurr = -@sysvar::Hardware_EV::AuxCurEth; //Standby to driving
+    break;
+      
+    case 4: //AMGEA
+      if($PT4_ACC_DcCurr_ST3 != 0)
+        tempCurr = @sysvar::Hardware_PCCU::CurDcAcCharg - @sysvar::Hardware_EV::AuxCurEth;
+      else if ($PT4_HV_PD_DcChrg_Curr_ST3 != 0)
+        tempCurr = (@sysvar::Hardware_EVSE::Meas_PresentCurrent - @sysvar::Hardware_EV::AuxCurEth + @sysvar::Hardware_Settings::EvseCurrentOffset + @sysvar::Hardware_BMS::DcCurOffset);
+      else
+        tempCurr = -@sysvar::Hardware_EV::AuxCurEth; //Standby to driving
+    break;
+      
+    case 10: //PHEV EU7
+      if($PT4_OBChrg_HVDC_Curr_ST3 != 0)
+        tempCurr = @sysvar::Hardware_OBC::OBChrgDCCurrAct- @sysvar::Hardware_EV::AuxCurEth;
+      else if ($PT4_DCB_HVDC_Curr_ST3 != 0)
+        tempCurr = (@sysvar::Hardware_EVSE::Meas_PresentCurrent - @sysvar::Hardware_EV::AuxCurEth + @sysvar::Hardware_Settings::EvseCurrentOffset + @sysvar::Hardware_BMS::DcCurOffset);
+      else
+        tempCurr = -@sysvar::Hardware_EV::AuxCurEth; //Standby to driving
+    break;
+    
+    default:
+      tempCurr = -@sysvar::Hardware_EV::AuxCurEth; //Standby to driving
+    break;
+  }
+  
+  retVal = tempCurr;
+  //retVal =  (_max(@sysvar::Hardware_EVSE::Meas_PresentCurrent, @sysvar::Hardware_PCCU::CurDcAc) - @sysvar::Hardware_PCCU::CurAuxEFuse + @sysvar::Hardware_Settings::EvseCurrentOffset);
+  return retVal;
+}
+
+void LinkVoltageSim()
+{
+  if($PT4_VEPM_Energy_Rq_ST3 == 1)
+  {
+    if (@sysvar::Hardware_Settings::Carline == 1 ||@sysvar::Hardware_Settings::Carline == 4 ) //EVA2M or AMGEA
+    {
+      if($CDCC::PT4_VEPM_HighVoltMd_Rq_ST3 == 0 && $PT4_BMS_BatCutSw_Stat_ST3 == 2)
+      {
+        @sysvar::Hardware_BMS::BatVoltage =  @sysvar::Hardware_BMS::BatVoltage_Set/2;
+        @sysvar::Hardware_BMS::LinkVoltage = @sysvar::Hardware_BMS::BatVoltage_Set/2;
+        $PT4_HVBat_HighVolt_Sw_Stat_ST3 = 1;
+      }  
+      else if ($CDCC::PT4_VEPM_HighVoltMd_Rq_ST3 == 0 && $PT4_BMS_BatCutSw_Stat_ST3 == 0)
+      {
+        @sysvar::Hardware_BMS::LinkVoltage = 0;
+        @sysvar::Hardware_BMS::BatVoltage = @sysvar::Hardware_BMS::BatVoltage_Set/2;
+        $PT4_HVBat_HighVolt_Sw_Stat_ST3 = 1;
+      }
+      else if($PT4_VEPM_HighVoltMd_Rq_ST3 == 1 && $PT4_BMS_BatCutSw_Stat_ST3 == 2)
+      {
+        @sysvar::Hardware_BMS::LinkVoltage = @sysvar::Hardware_BMS::BatVoltage_Set;
+        @sysvar::Hardware_BMS::BatVoltage = @sysvar::Hardware_BMS::BatVoltage_Set;
+        $PT4_HVBat_HighVolt_Sw_Stat_ST3 = 2;
+      }
+      else if($PT4_VEPM_HighVoltMd_Rq_ST3 == 1 && $PT4_BMS_BatCutSw_Stat_ST3 == 0)
+      {
+        @sysvar::Hardware_BMS::LinkVoltage = 0;
+        @sysvar::Hardware_BMS::BatVoltage = @sysvar::Hardware_BMS::BatVoltage_Set;
+        $PT4_HVBat_HighVolt_Sw_Stat_ST3 = 2;
+      }
+      else //SNA
+      {
+        @sysvar::Hardware_BMS::LinkVoltage = 0;
+        @sysvar::Hardware_BMS::BatVoltage = @sysvar::Hardware_BMS::BatVoltage_Set;
+        $PT4_HVBat_HighVolt_Sw_Stat_ST3 = 0;
+      } 
+    }
+    else //MMA
+    {
+      if ($PT4_BMS_BatCutSw_Stat_ST3 == 2)
+      {
+        @sysvar::Hardware_BMS::BatVoltage = @sysvar::Hardware_BMS::BatVoltage_Set;
+        @sysvar::Hardware_BMS::LinkVoltage = @sysvar::Hardware_BMS::BatVoltage_Set;
+        $PT4_HVBat_HighVolt_Sw_Stat_ST3 = 2;
+      }
+      else
+      {
+        @sysvar::Hardware_BMS::BatVoltage = @sysvar::Hardware_BMS::BatVoltage_Set;
+        @sysvar::Hardware_BMS::LinkVoltage = 0;
+        $PT4_HVBat_HighVolt_Sw_Stat_ST3 = 2;
+      }
+      
+    }
+  }
+  else //NO VOLT RQ
+  {
+    @sysvar::Hardware_BMS::BatVoltage = @sysvar::Hardware_BMS::BatVoltage_Set;
+    @sysvar::Hardware_BMS::LinkVoltage = 0;
+    $PT4_HVBat_HighVolt_Sw_Stat_ST3 = 0;
+  } 
+    
+}
+
+void ImdSimulation()
+{
+  /* IMD handling */
+  if ($PT4_VEPM_PNHV_Bat_IsoMeas_Enbl_ST3 == DEACT_RQ && @sysvar::Hardware_BMS::IMD != 2) //Deactivation request
+  {
+    /* Increment counter */
+        TimeCounter_IDM++;
+      /* Consider PCCU timer for closing */
+        if (TimeCounter_IDM >= @sysvar::Hardware_Settings::ImdShutdownTime / 20)
+        {
+           @sysvar::Hardware_BMS::IMD = 2; // Deactivated
+           TimeCounter_IDM = 0;
+           TimeCounter_IDM_SNA = 0;
+        }
+  }
+  else if ($PT4_VEPM_PNHV_Bat_IsoMeas_Enbl_ST3 == ACT_RQ && @sysvar::Hardware_BMS::IMD ==2)
+  {
+    @sysvar::Hardware_BMS::IMD = 3; // SNA
+    TimeCounter_IDM = 0;
+    TimeCounter_IDM_SNA = 0;
+  }
+  else if ($PT4_VEPM_PNHV_Bat_IsoMeas_Enbl_ST3 == ACT_RQ && @sysvar::Hardware_BMS::IMD ==3)
+  {
+    /* Increment counter */
+    TimeCounter_IDM_SNA++;
+    /* Consider BMS IMD SNA Timer */
+    if (TimeCounter_IDM_SNA >= @sysvar::Hardware_Settings::ImdSNATime / 20)
+    {
+       @sysvar::Hardware_BMS::IMD = 0; // No Error
+       TimeCounter_IDM_SNA = 0;
+    }
+  }
+  
+  /* Switch handling */
+  if ($PT4_VEPM_Energy_Rq_ST3 == 0) // open
+  {
+    /* init Close counter */
+    TimeCounter_SwCutClose = 0;
+    /* Increment counter */
+    TimeCounter_SwCutOpen++;
+  /* Consider PCCU timer for closing */
+     if ((TimeCounter_SwCutOpen >= @sysvar::Hardware_Settings::BmsCutOpenTime / 20)&&  @sysvar::Hardware_BMS::SwitchStat != 0)
+    {
+       @sysvar::Hardware_BMS::SwitchStat = 0;
+       TimeCounter_SwCutOpen = 0;
+    }
+    
+  }
+  else if ($PT4_VEPM_Energy_Rq_ST3 == 1) //close
+  {
+    /* init Close counter */
+    TimeCounter_SwCutOpen = 0;
+    /* Increment counter */
+    TimeCounter_SwCutClose++;
+  /* Consider PCCU timer for closing */
+     if ((TimeCounter_SwCutClose >= @sysvar::Hardware_Settings::BmsCutCloseTime / 20)&&  @sysvar::Hardware_BMS::SwitchStat != 2)
+    {
+       @sysvar::Hardware_BMS::SwitchStat = 2;
+       TimeCounter_SwCutClose = 0;
+    }
+  }
+}
+
+
+
+void ChargingContactors()
+{
+   /* Change CAN signal */
+  $PT4_HVBat_DCSW_CutSw_Stat_ST3 = @sysvar::Hardware_PCCU::ContactorStatus;
+  if (@sysvar::Hardware_PCCU::Manipulate == 1)
+  {
+    
+  }
+  else {
+    /* Directly open conactors on button pressed */
+  if (@sysvar::Hardware_PCCU::OpenContactors == 1)
+  {
+     @sysvar::Hardware_PCCU::ContactorStatus = 0;
+  }
+  else
+  {
+  /* Cmm requests to close contactors */
+    if($PT4_CMM_DcChrgSw_Rq_ST3 == 1 && @sysvar::Hardware_PCCU::ContactorStatus != 2) 
+      {
+  
+         /* Increment counter */
+          TimeCounter_CC++;
+        /* Consider PCCU timer for closing */
+           if ((TimeCounter_CC >= @sysvar::Hardware_Settings::ContactorPreChargeTime / 20)&& @sysvar::Hardware_PCCU::ContactorStatus == 0)
+          {
+             @sysvar::Hardware_PCCU::ContactorStatus = 1;
+             
+          }
+          
+          if ((TimeCounter_CC >= @sysvar::Hardware_Settings::ContactorCloseTime / 20)&& @sysvar::Hardware_PCCU::ContactorStatus == 1)
+          {
+             @sysvar::Hardware_PCCU::ContactorStatus = 2;
+             TimeCounter_CC = 0;
+          }
+      }
+    /* Cmm requests to open contactors */
+    else if($PT4_CMM_DcChrgSw_Rq_ST3 == 0 && @sysvar::Hardware_PCCU::ContactorStatus != 0) 
+      {
+        /* Increment counter */
+          TimeCounter_CC++;
+        /* Consider PCCU timer for closing */
+          if (TimeCounter_CC >= @sysvar::Hardware_Settings::ContactorOpenTime / 20)
+          {
+             @sysvar::Hardware_PCCU::ContactorStatus = 0;
+             TimeCounter_CC = 0;
+          }
+      }
+  }
+  
+  }
+    
+  
+}
+
+void VoltageSimulation()
+{
+  /* Manipulate measured EVSE Voltage manually */
+  if(@sysvar::Hardware_BMS::Manipulate_BatVoltEvseSide) {
+    $PT4_HVBat_DCB_HVDC_Volt_ST3 = @sysvar::Hardware_BMS::BatVoltEvseSide;
+  }
+  else {
+  /* Mapping of current and voltage for DC charging */
+	if (@sysvar::Hardware_PCCU::ContactorStatus == 2)
+	{
+		/* Mapping of current and voltage for DC charging */
+		$PT4_HVBat_DCB_HVDC_Volt_ST3 = @sysvar::Hardware_BMS::LinkVoltage;
+		$PT4_HVBat_DCB_HVDC_Curr_ST3 = @sysvar::Hardware_EVSE::Meas_PresentCurrent;
+	}
+	else
+	{
+		$PT4_HVBat_DCB_HVDC_Volt_ST3 = @sysvar::Hardware_EVSE::Meas_PresentVoltage;
+		PT4_HVBat_DCB_HVDC_Curr_ST3 = 0;
+	}
+    
+    
+  }
+}
+
+void CcswSim()
+{
+  if ($PT4_VEPM_CCSW_Energy_Rq_ST3 == 1)
+  {
+    $PT4_HVBat_CCSW_CutSw_Stat_ST3 = 2; //close
+  }
+  else
+  {
+    $PT4_HVBat_CCSW_CutSw_Stat_ST3 = 0; //open
+  }
+}
+
+on sysvar sysvar::Hardware_EV::SysEV_Disp_SOC_Req
+{
+  float set_BMS_SOC_temp;
+  set_BMS_SOC_temp = Cal_BMS_SOC_preCondi(@sysvar::Hardware_EV::SysEV_Disp_SOC_Req);
+  BMS_SOC_adj(set_BMS_SOC_temp,@sysvar::Hardware_EV::SysEV_Disp_SOC_Req);
+}
+
+float Cal_BMS_SOC_preCondi(float Target_Disp_SOC)
+{
+  float BMS_SOC_preCondi = 0;
+  if ((Target_Disp_SOC) == 0)
+  {
+    BMS_SOC_preCondi = 8
+  }
+  else if ((Target_Disp_SOC > 0.0) && (Target_Disp_SOC <= 11.8)
+  
+    BMS_SOC_preCondi = Target_Disp_SOC + 9.2;
+  }
+  else if ((Target_Disp_SOC > 11.8) && (Target_Disp_SOC <= 37.8))
+  {
+    BMS_SOC_preCondi = (Target_Disp_SOC + 10.95) * 12 / 13;
+  }
+  else if ((Target_Disp_SOC > 37.8) && (Target_Disp_SOC <= 54.9))
+  {
+    BMS_SOC_preCondi = (Target_Disp_SOC + 10.29375) / 1.06875;
+  
+  else if ((Target_Disp_SOC > 54.9) && (Target_Disp_SOC <= 66.0))
+  {
+    BMS_SOC_preCondi = (Target_Disp_SOC + 12.81) / 1.11;
+  }
+  else if ((Target_Disp_SOC > 66) && (Target_Disp_SOC <= 77.4))
+  {
+    BMS_SOC_preCondi = (Target_Disp_SOC + 14.94) / 1.14;
+  }
+  else if ((Target_Disp_SOC > 77.4) && (Target_Disp_SOC <= 99.9))
+  {
+    BMS_SOC_preCondi = (Target_Disp_SOC + 18.52101) / 1.18421;
+  }
+  else
+  {
+    BMS_SOC_preCondi = 100.0;
+  }
+  return BMS_SOC_preCondi;
+}
+
+void BMS_SOC_adj (float BMS_SOC_pre, float Disp_SOC)
+{
+  
+  @sysvar::Hardware_EV::SysEV_SOC_adj = 2;
+  @sysvar::Hardware_EV::SysEV_BMS_SOC = BMS_SOC_pre;
+  TimeCounter_SOC = 0;
+  setTimer (Timer3s, 3);
+  
+}
+
+on timer Timer3s
+{
+  If ((abs(@sysvar::Hardware_EV::SysEV_CMM_SOC_to_EVSE - @sysvar::Hardware_EV::SysEV_Disp_SOC_Req)<= 0.001)  || (TimeCounter_SOC > 5))
+  {  
+    @sysvar::Hardware_EV::SysEV_SOC_adj = 1;
+  }
+  else
+  {
+    if ((@sysvar::Hardware_EV::SysEV_CMM_SOC_to_EVSE - @sysvar::Hardware_EV::SysEV_Disp_SOC_Req) > 0)
+    {
+      @sysvar::Hardware_EV::SysEV_BMS_SOC = @sysvar::Hardware_EV::SysEV_BMS_SOC - 0.1;
+      TimeCounter_SOC = TimeCounter_SOC + 1;
+      setTimer (Timer3s, 3);
+    
+    else{
+      @sysvar::Hardware_EV::SysEV_BMS_SOC = @sysvar::Hardware_EV::SysEV_BMS_SOC + 0.1;
+      TimeCounter_SOC = TimeCounter_SOC + 1;
+      setTimer (Timer3s, 3);
+    }
+  
+  
+
