@@ -388,7 +388,7 @@ if not st.session_state.is_authenticated:
             st.session_state.login_history.append({
                 "username": cleaned_username,
                 "role": "creator",
-                "timestamp": ist_time
+               # "timestamp": ist_time
             })
             # Update active users
             active_file = "active_users.json"
@@ -417,7 +417,7 @@ if not st.session_state.is_authenticated:
             st.session_state.login_history.append({
                 "username": cleaned_username,
                 "role": "user",
-                "timestamp": ist_time
+               # "timestamp": ist_time
             })
             # Update active users
             active_file = "active_users.json"
