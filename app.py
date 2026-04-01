@@ -1331,22 +1331,25 @@ with tab2:
                             else:
                                 test_cases_df = pd.DataFrame(test_cases_to_show)
 
-                                def color_verdict(val):
-                                    if val == "Pass":
-                                        return "background-color: #90EE90; color: black; font-weight: bold;"
-                                    if val in ["Fail", "Failed", "Error"]:
-                                        return "background-color: #FF6B6B; color: white; font-weight: bold;"
-                                    if val == "Not Executed":
-                                        return "background-color: #FFD700; color: black;"
-                                    if val == "Inconclusive":
-                                        return "background-color: #FFA500; color: black;"
-                                    return ""
+                            def color_verdict(val):
+                                if val == "Pass":
+                                    return "background-color: #90EE90; color: black; font-weight: bold;"
+                                if val in ["Fail", "Failed", "Error"]:
+                                    return "background-color: #FF6B6B; color: white; font-weight: bold;"
+                                if val == "Not Executed":
+                                    return "background-color: #FFD700; color: black;"
+                                if val == "Inconclusive":
+                                    return "background-color: #FFA500; color: black;"
+                                return ""
 
+                            if "verdict" in test_cases_df.columns:
                                 styled_df = test_cases_df.style.applymap(
                                     lambda x: color_verdict(x) if isinstance(x, str) else "",
                                     subset=["verdict"]
                                 )
                                 st.dataframe(styled_df, use_container_width=True, hide_index=True)
+                            else:
+                                st.dataframe(test_cases_df, use_container_width=True, hide_index=True)
 
                         verdict_counts = {
                             "Pass": fixture_info.get("pass", 0),
