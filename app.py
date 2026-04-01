@@ -268,7 +268,7 @@ def load_llm():
     for task in candidate_tasks:
         try:
             pipe = pipeline(task, model="google/flan-t5-small", max_new_tokens=128, return_full_text=False)
-            st.info(f"LLM initialized with task '{task}'.")
+            st.session_state.llm_task = task
             return HuggingFacePipeline(pipeline=pipe)
         except Exception as e:
             task_errors.append((task, str(e)))
@@ -276,8 +276,8 @@ def load_llm():
     # Only show a single warning if no task could be initialized
     if task_errors:
         st.warning("LLM initialization failed for all candidate tasks; AI features are unavailable.")
-        # Optional: store for debug if needed
         st.session_state.llm_task_errors = task_errors
+        st.session_state.llm_task = None
 
     return None
 
@@ -783,10 +783,17 @@ tab1, tab2, tab3, tab4 = st.tabs(["💬 Chat", "📊 Dashboard", "📂 Compare",
 # -------------------------------
 with tab1:
     st.subheader("Chat with Selected Documents")
+
     if st.session_state.selected_files:
-        combined_text = "\n".join([st.session_state.file_texts[f] for f in st.session_state.selected_files])
-        combined_vs = get_combined_vector_store(st.session_state.selected_files)
+        chat_files = st.multiselect("Choose file(s) for Chat", options=st.session_state.selected_files, default=[])
+        if not chat_files:
+            st.warning("No file selected for chat. Choose one or more files from the list.")
+            st.stop()
+
+        combined_text = "\n".join([st.session_state.file_texts.get(f, "") for f in chat_files])
+        combined_vs = get_combined_vector_store(chat_files)
         retriever = combined_vs.as_retriever(search_kwargs={"k": 3})
+
         llm = load_llm()
         prompt = ChatPromptTemplate.from_messages([
             ("system",
@@ -1208,26 +1215,6 @@ with tab2:
                 st.markdown("### 🧪 Test Results")
                 grouped_results = extract_test_results_grouped(soup)
 
-                with st.expander("🔍 DEBUG - Parsed Results"):
-                    debug_info = st.session_state.get('debug_parse_info', {})
-                    st.write(f"**Total lines extracted:** {debug_info.get('total_lines', 0)}")
-                    st.write(f"**Test Fixtures found:** {len(grouped_results)}")
-                    st.write(f"**Total test cases:** {sum(r.get('total', 0) for r in grouped_results.values())}")
-
-                    if debug_info.get('fixtures_found'):
-                        st.write("### Fixtures Detected:")
-                        for fixture_info in debug_info['fixtures_found']:
-                            st.write(f"- **{fixture_info['name']}** (at line {fixture_info['line_index']})")
-
-                    if debug_info.get('sample_lines'):
-                        st.write("### Sample Lines After Fixture Headers:")
-                        for sample in debug_info['sample_lines']:
-                            st.write(f"**After {sample['fixture']}:**")
-                            for l in sample['lines'][:15]:
-                                st.code(l, language="text")
-
-                    st.write("### Parsed Test Results:")
-                    st.json(grouped_results)
 
                 if grouped_results:
                     st.markdown("#### 🧪 Executed Test Cases Summary")
