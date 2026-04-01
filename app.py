@@ -346,8 +346,8 @@ def extract_statistics_from_html(file_bytes):
 
     return stats
 
-CREATOR_USERNAME = "creator"
-CREATOR_PASSWORD = "creatorpass"
+CREATOR_USERNAME = "Vignesh"
+CREATOR_PASSWORD = "Rider@100"
 
 if not st.session_state.is_authenticated:
     st.subheader("Login")
