@@ -258,16 +258,21 @@ def create_vector_store(text):
 def load_llm():
     try:
         from transformers import pipeline
-    except Exception as e:
+    except Exception:
         st.warning("LLM is unavailable because transformers could not be imported (torchvision unmet).\nInstall torch & torchvision if you want AI features.")
         return None
 
-    try:
-        pipe = pipeline("text2text-generation", model="google/flan-t5-small", max_new_tokens=128, return_full_text=False)
-        return HuggingFacePipeline(pipeline=pipe)
-    except Exception as e:
-        st.warning(f"LLM initialization failed: {e}")
-        return None
+    candidate_tasks = ["text2text-generation", "text-generation", "image-text-to-text", "table-question-answering"]
+    for task in candidate_tasks:
+        try:
+            pipe = pipeline(task, model="google/flan-t5-small", max_new_tokens=128, return_full_text=False)
+            st.info(f"LLM initialized with task '{task}'.")
+            return HuggingFacePipeline(pipeline=pipe)
+        except Exception as e:
+            st.warning(f"LLM task '{task}' failed: {e}")
+
+    st.warning("LLM initialization failed for all candidate tasks; AI features are unavailable.")
+    return None
 
 
 def get_uploaded_file_entry(file_name):
@@ -781,7 +786,13 @@ with tab1:
              "You are an intelligent document assistant. Answer ONLY using context.\nIf not found, say 'Not available in documents.'\nContext:\n{context}"),
             ("human", "{question}")
         ])
-        chain = ({"context": retriever | (lambda x: '\n'.join(x)), "question": RunnablePassthrough()} | prompt | llm)
+        chain = None
+        if llm is not None:
+            try:
+                chain = ({"context": retriever | (lambda x: '\n'.join(x)), "question": RunnablePassthrough()} | prompt | llm)
+            except Exception as e:
+                st.warning(f"Could not create LLM chain: {e}")
+                chain = None
 
         user_input = st.chat_input("Ask something... (type 'clear' to reset chat)")
         if user_input:
@@ -812,7 +823,10 @@ with tab1:
                         selected_texts = {f: st.session_state.file_texts[f] for f in st.session_state.selected_files}
                         response = highlight_multi_file_differences(selected_texts)
                     else:
-                        response = str(chain.invoke(user_input))
+                        if chain is not None:
+                            response = str(chain.invoke(user_input))
+                        else:
+                            response = "⚠️ AI model is unavailable. Use direct extraction questions such as 'how many', 'analyze', or 'compare'."
                     st.session_state.messages.append({"role": "assistant", "content": response})
 
         for msg in st.session_state.messages:
