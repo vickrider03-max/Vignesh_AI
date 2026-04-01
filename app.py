@@ -2,7 +2,7 @@ import difflib, html, re, hashlib, os, json
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from io import BytesIO
-from pytz import timezone
+#from pytz import timezone
 
 import docx, openpyxl, pdfplumber, streamlit as st
 import pandas as pd
@@ -383,7 +383,7 @@ if not st.session_state.is_authenticated:
             st.session_state.is_authenticated = True
             st.session_state.logged_in_username = cleaned_username
             st.session_state.user_role = "creator"
-            ist_tz = timezone('Asia/Kolkata')
+            # ist_tz = timezone('Asia/Kolkata')
             ist_time = datetime.now(ist_tz).strftime("%Y-%m-%d %H:%M:%S %Z")
             st.session_state.login_history.append({
                 "username": cleaned_username,
@@ -412,7 +412,7 @@ if not st.session_state.is_authenticated:
             st.session_state.is_authenticated = True
             st.session_state.logged_in_username = cleaned_username
             st.session_state.user_role = "user"
-            ist_tz = timezone('Asia/Kolkata')
+           # ist_tz = timezone('Asia/Kolkata')
             ist_time = datetime.now(ist_tz).strftime("%Y-%m-%d %H:%M:%S %Z")
             st.session_state.login_history.append({
                 "username": cleaned_username,
