@@ -2,6 +2,7 @@ import difflib, html, re, hashlib, os, json
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from io import BytesIO
+from pytz import timezone
 
 import docx, openpyxl, pdfplumber, streamlit as st
 import pandas as pd
@@ -27,7 +28,8 @@ st.title("🤖 Vignesh_AI")
 # -------------------------------
 # SESSION STATE INITIALIZATION
 # -------------------------------
-for key in ["uploaded_files", "selected_files", "file_texts", "excel_data_by_file", "vector_stores", "messages", "ask_messages"]:
+for key in ["uploaded_files", "selected_files", "file_texts", "excel_data_by_file", "vector_stores", "messages",
+            "ask_messages"]:
     if key not in st.session_state:
         st.session_state[key] = [] if key in ["uploaded_files", "selected_files", "messages", "ask_messages"] else {}
 
@@ -97,6 +99,7 @@ with st.sidebar:
             st.rerun()
 
         st.header("Upload Documents")
+        st.info("1) Upload files. 2) Check the files you need. 3) Switch tabs and work with selected files.")
         new_files = st.file_uploader(
             "Upload PDF, DOCX, TXT, PPTX, XLSX, HTML,CAPL",
             type=["pdf", "docx", "txt", "pptx", "xlsx", "html", "htm", "capl", "can"],
@@ -113,21 +116,23 @@ with st.sidebar:
 
         st.markdown("---")
         st.markdown("### Uploaded files")
-        for file_dict in st.session_state.uploaded_files[:]:
-            cols = st.columns([0.88, 0.12], vertical_alignment="center")
+        for idx, file_dict in enumerate(st.session_state.uploaded_files[:]):
+            cols = st.columns([0.70, 0.25, 0.05], vertical_alignment="center")
             with cols[0]:
                 checked = file_dict["name"] in st.session_state.selected_files
                 new_checked = st.checkbox(
                     file_dict["name"],
                     value=checked,
-                    key=f"select_{file_dict['name']}"
+                    key=f"select_file_{idx}"
                 )
             if new_checked and file_dict["name"] not in st.session_state.selected_files:
                 st.session_state.selected_files.append(file_dict["name"])
+                st.rerun()
             elif not new_checked and file_dict["name"] in st.session_state.selected_files:
                 st.session_state.selected_files.remove(file_dict["name"])
-            with cols[1]:
-                if st.button("X", key=f"del_{file_dict['name']}", help=f"Delete {file_dict['name']}", type="tertiary"):
+                st.rerun()
+            with cols[2]:
+                if st.button("X", key=f"del_file_{idx}", help=f"Delete {file_dict['name']}", type="tertiary"):
                     deleted_name = file_dict["name"]
                     st.session_state.uploaded_files = [f for f in st.session_state.uploaded_files if
                                                        f["name"] != deleted_name]
@@ -142,6 +147,7 @@ with st.sidebar:
                         st.session_state.capl_last_analyzed_file = None
                         st.session_state.capl_last_issues = None
                     st.rerun()
+        st.markdown("*Selected files above are available across all tabs.*")
 
         st.markdown("---")
         if st.button("Clear All Files"):
@@ -166,7 +172,8 @@ with st.sidebar:
                 with open(active_file, "r") as f:
                     active_users = json.load(f)
                 now = datetime.now()
-                current_active = len(set(u["username"] for u in active_users if datetime.fromisoformat(u["timestamp"]) > now - timedelta(minutes=30)))
+                current_active = len(set(u["username"] for u in active_users if
+                                         datetime.fromisoformat(u["timestamp"]) > now - timedelta(minutes=30)))
             else:
                 current_active = 0
             col1, col2 = st.columns(2)
@@ -181,14 +188,13 @@ with st.sidebar:
                     with open(active_file, "r") as f:
                         active_users = json.load(f)
                     now = datetime.now()
-                    active_users = [u for u in active_users if datetime.fromisoformat(u["timestamp"]) > now - timedelta(hours=1)]
+                    active_users = [u for u in active_users if
+                                    datetime.fromisoformat(u["timestamp"]) > now - timedelta(hours=1)]
                     with open(active_file, "w") as f:
                         json.dump(active_users, f)
                     st.success("Cleaned old active users.")
                 else:
                     st.info("No active users file found.")
-        else:
-            st.markdown("*Cannot see creator login history in user mode.*")
 
 
 # -------------------------------
@@ -259,7 +265,8 @@ def load_llm():
     try:
         from transformers import pipeline
     except Exception:
-        st.warning("LLM is unavailable because transformers could not be imported (torchvision unmet).\nInstall torch & torchvision if you want AI features.")
+        st.warning(
+            "LLM is unavailable because transformers could not be imported (torchvision unmet).\nInstall torch & torchvision if you want AI features.")
         return None
 
     candidate_tasks = ["text2text-generation", "text-generation", "image-text-to-text", "table-question-answering"]
@@ -358,6 +365,7 @@ def extract_statistics_from_html(file_bytes):
 
     return stats
 
+
 CREATOR_USERNAME = "Vignesh"
 CREATOR_PASSWORD = "Rider@100"
 
@@ -375,10 +383,12 @@ if not st.session_state.is_authenticated:
             st.session_state.is_authenticated = True
             st.session_state.logged_in_username = cleaned_username
             st.session_state.user_role = "creator"
+            ist_tz = timezone('Asia/Kolkata')
+            ist_time = datetime.now(ist_tz).strftime("%Y-%m-%d %H:%M:%S %Z")
             st.session_state.login_history.append({
                 "username": cleaned_username,
                 "role": "creator",
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                "timestamp": ist_time
             })
             # Update active users
             active_file = "active_users.json"
@@ -389,7 +399,8 @@ if not st.session_state.is_authenticated:
             else:
                 active_users = []
             # Clean old entries (>1 hour)
-            active_users = [u for u in active_users if datetime.fromisoformat(u["timestamp"]) > now - timedelta(hours=1)]
+            active_users = [u for u in active_users if
+                            datetime.fromisoformat(u["timestamp"]) > now - timedelta(hours=1)]
             # Add current
             active_users.append({"username": cleaned_username, "timestamp": now.isoformat()})
             with open(active_file, "w") as f:
@@ -401,10 +412,12 @@ if not st.session_state.is_authenticated:
             st.session_state.is_authenticated = True
             st.session_state.logged_in_username = cleaned_username
             st.session_state.user_role = "user"
+            ist_tz = timezone('Asia/Kolkata')
+            ist_time = datetime.now(ist_tz).strftime("%Y-%m-%d %H:%M:%S %Z")
             st.session_state.login_history.append({
                 "username": cleaned_username,
                 "role": "user",
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                "timestamp": ist_time
             })
             # Update active users
             active_file = "active_users.json"
@@ -415,7 +428,8 @@ if not st.session_state.is_authenticated:
             else:
                 active_users = []
             # Clean old entries (>1 hour)
-            active_users = [u for u in active_users if datetime.fromisoformat(u["timestamp"]) > now - timedelta(hours=1)]
+            active_users = [u for u in active_users if
+                            datetime.fromisoformat(u["timestamp"]) > now - timedelta(hours=1)]
             # Add current
             active_users.append({"username": cleaned_username, "timestamp": now.isoformat()})
             with open(active_file, "w") as f:
@@ -424,12 +438,14 @@ if not st.session_state.is_authenticated:
             st.rerun()
 
         else:
-            st.error("For creator: use username 'creator' and password 'creatorpass'. For users: username >3 chars, password empty.")
+            st.error(
+                "For creator: use username 'creator' and password 'creatorpass'. For users: username >3 chars, password empty.")
 
-    #st.info("Creator should use creator/creatorpass; others use any login. Creator sees admin features.")
+    # st.info("Creator should use creator/creatorpass; others use any login. Creator sees admin features.")
     st.stop()
 
-process_selected_files()
+
+# Files will be processed on-demand per tab when selected
 
 
 # -------------------------------
@@ -556,6 +572,7 @@ def generate_word_level_comparison_excel(file_texts):
     excel_io.seek(0)
     return excel_io
 
+
 # -------------------------------
 # CAPL Complier
 # -------------------------------
@@ -614,7 +631,8 @@ def analyze_capl_code_with_suggestions(code):
             })
 
         # Check for missing opening brace after control statements
-        if re.match(r'^\s*(if|else if|else|for|while|switch)\b', stripped) and not stripped.endswith('{') and not re.search(r'\)\s*\{', stripped):
+        if re.match(r'^\s*(if|else if|else|for|while|switch)\b', stripped) and not stripped.endswith(
+                '{') and not re.search(r'\)\s*\{', stripped):
             # Check if next line starts with '{'
             if i < len(lines) and not lines[i].strip().startswith('{'):
                 issues.append({
@@ -625,7 +643,8 @@ def analyze_capl_code_with_suggestions(code):
 
         # Detect missing semicolon
         if not stripped.endswith(";") and not stripped.endswith("{") and not stripped.endswith("}"):
-            if not re.match(r'^(on|variables|includes|enum|mstimer|timer|if|else|switch|case|for|while|return)\b', stripped):
+            if not re.match(r'^(on|variables|includes|enum|mstimer|timer|if|else|switch|case|for|while|return)\b',
+                            stripped):
                 issues.append({
                     "line": i,
                     "error": "Missing semicolon",
@@ -772,6 +791,84 @@ def get_combined_vector_store(file_names):
     return st.session_state.vector_stores[selection_key]
 
 
+def show_current_sidebar_selection():
+    selected = st.session_state.get("selected_files", [])
+    if selected:
+        st.info("Sidebar selected files: " + ", ".join(selected))
+    else:
+        st.info("No sidebar files selected yet. Upload and select files from the sidebar first.")
+
+
+def _help_state_key(tab_name):
+    return f"show_help_popup_{tab_name}"
+
+
+def ensure_help_popup_state(tab_name):
+    key = _help_state_key(tab_name)
+    if key not in st.session_state:
+        st.session_state[key] = True
+    return key
+
+
+def show_help_popup(tab_name, selected_files):
+    state_key = ensure_help_popup_state(tab_name)
+    st.checkbox("Show query helper popup", value=st.session_state[state_key], key=state_key)
+
+    if not st.session_state[state_key]:
+        return
+
+    if not selected_files:
+        st.markdown(
+            """
+            <div style='position:fixed; bottom:14px; right:14px; width:340px; padding:14px; background:#ffffff; border:1px solid #1f4f91; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.24); z-index:9999;'>
+                <h4 style='margin:0 0 6px 0; font-size:15px; color:#1f4f91;'>📘 Document Chat Syntax</h4>
+                <p style='margin:0; font-size:13px; color:#253659;'>Select a document first to see targeted query guidance.</p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        return
+
+    selected_types = {os.path.splitext(f)[1].lower() for f in selected_files}
+    if tab_name == "chat":
+        extra = "Try count('Approved'), find('Error'), summarize(), or specific queries like 'How many tests passed?'"
+    elif tab_name == "dashboard":
+        extra = "If *.xlsx selected, ask for columns and trend counts; *.html can be parsed for test verdicts."
+    elif tab_name == "compare":
+        extra = "Select 2+ files; use compare shorthand like compare('Error')(doc1, doc2) in natural language."
+    elif tab_name == "capl":
+        extra = "For CAPL code, use 'find missing semicolon' or 'show unused variables' style queries."
+    else:
+        extra = "Use text queries about the document content."
+
+    type_hint = ""
+    if ".xlsx" in selected_types:
+        type_hint = "For spreadsheets, reference specific columns like 'column 2' or 'total defects'."
+    elif ".html" in selected_types or ".htm" in selected_types:
+        type_hint = "For HTML, ask about login name, pass/fail stats, and fixture totals."
+    elif any(ext in selected_types for ext in [".txt", ".pdf", ".docx", ".pptx"]):
+        type_hint = "For full text files, use keywords and exact phrase search in your query."
+    elif any(ext in selected_types for ext in [".capl", ".can"]):
+        type_hint = "CAPL scripts are analyzed for syntax issues; ask for code fixes or suggestions."
+
+    st.markdown(
+        f"""
+        <div style='position:fixed; bottom:14px; right:14px; width:340px; padding:14px; background:#ffffff; border:1px solid #1f4f91; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.24); z-index:9999;'>
+            <h4 style='margin:0 0 6px 0; font-size:15px; color:#1f4f91;'>📘 {tab_name.capitalize()} Query Help</h4>
+            <p style='margin:0 0 8px 0; font-size:13px; color:#253659;'>Support for selected file types: {', '.join(sorted(selected_types))}</p>
+            <ul style='margin:0 0 8px 18px; padding:0; color:#253659; font-size:13px;'>
+                <li><code style='background:#f1f5f9; padding:1px 4px; border-radius:3px;'>count('Approved')</code> - frequency</li>
+                <li><code style='background:#f1f5f9; padding:1px 4px; border-radius:3px;'>find('Error')</code> - locate phrases</li>
+                <li><code style='background:#f1f5f9; padding:1px 4px; border-radius:3px;'>summarize()</code> - quick summary</li>
+            </ul>
+            <p style='margin:0; font-size:12px; color:#3c4f7e;'>{extra}</p>
+            <p style='margin:5px 0 0 0; font-size:12px; color:#3c4f7e;'>{type_hint}</p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
 # -------------------------------
 # TABS
 # -------------------------------
@@ -783,11 +880,21 @@ tab1, tab2, tab3, tab4 = st.tabs(["💬 Chat", "📊 Dashboard", "📂 Compare",
 # -------------------------------
 with tab1:
     st.subheader("Chat with Selected Documents")
+    st.info(
+        "Choose files in the sidebar; these choices are synchronized across all tabs.\nChat defaults to currently selected files, but you can refine selection here as needed.")
+    show_current_sidebar_selection()
+
+    if st.button("🔄 Reset Chat Selection", key="reset_chat_selection"):
+        st.session_state.chat_file_selection = st.session_state.selected_files.copy()
+        st.experimental_rerun()
+
+    show_help_popup('chat', st.session_state.selected_files)
 
     if st.session_state.selected_files:
-        chat_files = st.multiselect("Choose file(s) for Chat", options=st.session_state.selected_files, default=[])
+        chat_files = st.multiselect("Choose file(s) for Chat", options=st.session_state.selected_files,
+                                    default=st.session_state.selected_files, key="chat_file_selection")
         if not chat_files:
-            st.warning("No file selected for chat. Choose one or more files from the list.")
+            st.warning("No file selected for chat. Choose one or more files from the list above.")
             st.stop()
 
         combined_text = "\n".join([st.session_state.file_texts.get(f, "") for f in chat_files])
@@ -803,7 +910,8 @@ with tab1:
         chain = None
         if llm is not None:
             try:
-                chain = ({"context": retriever | (lambda x: '\n'.join(x)), "question": RunnablePassthrough()} | prompt | llm)
+                chain = ({"context": retriever | (lambda x: '\n'.join(x)),
+                          "question": RunnablePassthrough()} | prompt | llm)
             except Exception as e:
                 st.warning(f"Could not create LLM chain: {e}")
                 chain = None
@@ -828,13 +936,13 @@ with tab1:
                             response = "⚠️ Specify the word/phrase in quotes."
                     elif "analyze" in user_input.lower() or "summary" in user_input.lower():
                         result = ""
-                        for f in st.session_state.selected_files:
+                        for f in chat_files:
                             words = re.findall(r'\w+', st.session_state.file_texts[f].lower())
                             most_common = Counter(words).most_common(10)
                             result += f"📄 **{f}**: Total words {len(words)}, Unique {len(set(words))}, Top {most_common}\n\n"
                         response = result
                     elif "compare" in user_input.lower():
-                        selected_texts = {f: st.session_state.file_texts[f] for f in st.session_state.selected_files}
+                        selected_texts = {f: st.session_state.file_texts[f] for f in chat_files}
                         response = highlight_multi_file_differences(selected_texts)
                     else:
                         if chain is not None:
@@ -847,18 +955,26 @@ with tab1:
             role = "🧑" if msg["role"] == "user" else "🤖"
             st.markdown(f"{role} {msg['content']}", unsafe_allow_html=True)
     else:
-        st.info("Upload and select files to chat.")
+        st.info("Select files from the sidebar to start chatting.")
 
 # -------------------------------
 # TAB 2: DASHBOARD
 # -------------------------------
 with tab2:
     st.subheader("Dashboard")
-    selected_files = st.session_state.selected_files
+    show_current_sidebar_selection()
+
+    if st.button("🔄 Reset Dashboard Selection", key="reset_dashboard_selection"):
+        st.session_state.file_dropdown = "--Select File--"
+        st.experimental_rerun()
+
+    # Filter selected files for dashboard-compatible formats
     dashboard_files = [
-        f for f in selected_files
+        f for f in st.session_state.selected_files
         if f.lower().endswith((".html", ".htm", ".xlsx"))
     ]
+    show_help_popup('dashboard', dashboard_files)
+
 
     def clean_text(x):
         return re.sub(r"\s+", " ", x).strip().lower()
@@ -1149,17 +1265,25 @@ with tab2:
 
         # Calculate totals
         for fixture_name in results:
-            results[fixture_name]["total"] = len(results[fixture_name]["test_cases"])
+            # Use the maximum of: parsed test cases OR initial summary count
+            # This preserves the fixture summary count if detailed parsing didn't find individual cases
+            parsed_count = len(results[fixture_name]["test_cases"])
+            initial_count = results[fixture_name].get("total", 0)
+            results[fixture_name]["total"] = max(parsed_count, initial_count)
 
         return results
 
 
-    if not selected_files:
-        st.info("Select files to show dashboard.")
+    if not st.session_state.selected_files:
+        st.info("Select files from the sidebar to show dashboard.")
     elif not dashboard_files:
-        st.info("Select an HTML or Excel file to view dashboard details.")
+        st.info("No dashboard-friendly files selected. Choose HTML/HTM/XLSX in sidebar for dashboard details.")
     else:
-        file_dropdown = st.selectbox("Select a dashboard file", ["--Select File--"] + dashboard_files)
+        st.info(
+            "Dashboard will use sidebar-selected files. Choose any single file from the dropdown to inspect details.")
+        dashboard_index = 1 if dashboard_files else 0
+        file_dropdown = st.selectbox("Select a dashboard file", ["--Select File--"] + dashboard_files,
+                                     index=dashboard_index)
 
         if file_dropdown != "--Select File--":
             ensure_file_processed(file_dropdown)
@@ -1177,7 +1301,8 @@ with tab2:
                     if col != "--Select Column--":
                         counts = get_column_counts(data, col)
                         if counts:
-                            fig = plot_pie_chart(counts, f"{col} Distribution") if chart_type == "Pie Chart" else plot_bar_chart(
+                            fig = plot_pie_chart(counts,
+                                                 f"{col} Distribution") if chart_type == "Pie Chart" else plot_bar_chart(
                                 counts, f"{col} Distribution"
                             )
                             st.plotly_chart(fig, use_container_width=True)
@@ -1192,9 +1317,6 @@ with tab2:
                 st.markdown("### 🔐 Login Info")
                 login = extract_login_name_from_html(file_bytes)
                 st.write("Login Name:", login)
-
-                with st.expander("🔍 Debug (Raw Text Preview)"):
-                    st.text(file_bytes[:2000].decode('utf-8', errors='ignore'))
 
                 st.markdown("### 📊 Statistics")
                 stats = extract_statistics_from_html(file_bytes)
@@ -1212,12 +1334,11 @@ with tab2:
                 else:
                     st.warning("⚠️ Could not extract statistics")
 
-                st.markdown("### 🧪 Test Results")
+                st.markdown("### 📋 Test Results")
                 grouped_results = extract_test_results_grouped(soup)
 
-
                 if grouped_results:
-                    st.markdown("#### 🧪 Executed Test Cases Summary")
+                    st.markdown("#### 👉 Executed Test Cases Summary")
                     all_fixtures = sorted(grouped_results.keys())
                     max_cols = 5
                     num_cols = min(len(all_fixtures), max_cols)
@@ -1257,6 +1378,7 @@ with tab2:
 
                     df = pd.DataFrame(fixture_data)
 
+
                     def style_fixture_table(row):
                         styles = [''] * len(row)
                         if '✅ Pass' in df.columns:
@@ -1281,6 +1403,7 @@ with tab2:
                                 styles[inconc_col_idx] = 'background-color: #FFA500; color: black;'
                         return styles
 
+
                     styled_fixture_df = df.style.apply(style_fixture_table, axis=1)
                     st.dataframe(styled_fixture_df, use_container_width=True)
 
@@ -1299,7 +1422,7 @@ with tab2:
                         col4.metric("⏭️ Not Executed", fixture_info.get("not executed", 0))
                         col5.metric("❓ Inconclusive", fixture_info.get("inconclusive", 0))
 
-                        mode = st.radio("Show Test Cases", ["All", "Passed only", "Failed/Error only"], index=1,
+                        mode = st.radio("Show Test Cases", ["All", "Passed only", "Failed/Error only"], index=2,
                                         key="test_case_mode")
 
                         if fixture_info["test_cases"]:
@@ -1325,6 +1448,7 @@ with tab2:
                             else:
                                 test_cases_df = pd.DataFrame(test_cases_to_show)
 
+
                             def color_verdict(val):
                                 if val == "Pass":
                                     return "background-color: #90EE90; color: black; font-weight: bold;"
@@ -1336,8 +1460,9 @@ with tab2:
                                     return "background-color: #FFA500; color: black;"
                                 return ""
 
+
                             if "verdict" in test_cases_df.columns:
-                                styled_df = test_cases_df.style.applymap(
+                                styled_df = test_cases_df.style.map(
                                     lambda x: color_verdict(x) if isinstance(x, str) else "",
                                     subset=["verdict"]
                                 )
@@ -1355,7 +1480,8 @@ with tab2:
                         verdict_counts = {k: v for k, v in verdict_counts.items() if v > 0}
 
                         if verdict_counts:
-                            fig = plot_pie_chart(verdict_counts, f"Verdict Distribution - {selected_fixture}") if chart_type == "Pie Chart" else plot_bar_chart(
+                            fig = plot_pie_chart(verdict_counts,
+                                                 f"Verdict Distribution - {selected_fixture}") if chart_type == "Pie Chart" else plot_bar_chart(
                                 verdict_counts, f"Verdict Distribution - {selected_fixture}", horizontal=True
                             )
                             st.plotly_chart(fig, use_container_width=True)
@@ -1367,16 +1493,20 @@ with tab2:
 # -------------------------------
 with tab3:
     st.subheader("Compare Files")
+    st.info("Select at least two files to compare. File availability is driven by sidebar selection.")
+    show_current_sidebar_selection()
+    show_help_popup('compare', st.session_state.selected_files)
 
-    # Use only filenames in multiselect (uploaded_files stores dicts with name/bytes)
-    uploaded_file_names = [f.get("name") for f in st.session_state.uploaded_files if isinstance(f, dict) and "name" in f]
+    if st.button("🔄 Reset Compare Selection", key="reset_compare_selection"):
+        st.session_state.compare_file_selection = st.session_state.selected_files.copy()
+        st.experimental_rerun()
 
-    # No default selection, user must actively choose files
+    # Use selected files in multiselect (user must choose from selected_files independently)
     selected_files_for_comparison = st.multiselect(
-        "Select files to compare",
-        options=uploaded_file_names,
-        default=[],
-        key="selected_files_for_comparison"
+        "Choose files to compare",
+        options=st.session_state.selected_files,
+        default=st.session_state.selected_files,
+        key="compare_file_selection"
     )
 
     if len(selected_files_for_comparison) >= 2:
@@ -1405,6 +1535,18 @@ with tab3:
 
 with tab4:
     st.subheader("⚙️ CAPL Compiler & Analyzer")
+    st.info(
+        "Use sidebar selection for CAPL source files (.can, .txt). You can also create new CAPL scripts in the editor below.")
+    show_current_sidebar_selection()
+    show_help_popup('capl', [f for f in st.session_state.selected_files if f.lower().endswith(('.can', '.txt'))])
+
+    if st.button("🔄 Reset CAPL Selection", key="reset_capl_selection"):
+        st.session_state.capl_selection_state = None
+        st.experimental_rerun()
+
+    # Filter selected files for CAPL analysis
+    capl_selectable_files = [f for f in st.session_state.selected_files if f.lower().endswith((".can", ".txt"))]
+
     with st.expander("✍️ Create New CAPL Script", expanded=False):
         st.text_input("CAPL file name", key="capl_editor_name", help="Enter a file name ending with .can")
         st.text_area("Write CAPL code", key="capl_editor_code", height=260)
@@ -1462,7 +1604,8 @@ with tab4:
 
                 file_bytes = st.session_state.capl_editor_code.encode("utf-8")
                 existing_index = next(
-                    (idx for idx, file_info in enumerate(st.session_state.uploaded_files) if file_info["name"] == new_file_name),
+                    (idx for idx, file_info in enumerate(st.session_state.uploaded_files) if
+                     file_info["name"] == new_file_name),
                     None
                 )
 
@@ -1483,12 +1626,12 @@ with tab4:
 
     if use_all_txt:
         capl_files = [
-            f for f in st.session_state.selected_files
+            f for f in capl_selectable_files
             if f.lower().endswith((".can", ".txt"))
         ]
     else:
         capl_files = [
-            f for f in st.session_state.selected_files
+            f for f in capl_selectable_files
             if f.lower().endswith((".can", ".txt")) and
                is_capl_code(st.session_state.file_texts.get(f, ""))
         ]
@@ -1498,7 +1641,8 @@ with tab4:
     else:
         ensure_files_processed(capl_files)
         capl_options = ["--Select CAPL file--"] + capl_files
-        selected_capl = st.selectbox("Select CAPL file", capl_options, index=0)
+        capl_index = 1 if len(capl_options) > 1 else 0
+        selected_capl = st.selectbox("Select CAPL file", capl_options, index=capl_index)
         capl_selected = selected_capl != "--Select CAPL file--"
         action_cols = st.columns([1, 1, 4])
         with action_cols[0]:
