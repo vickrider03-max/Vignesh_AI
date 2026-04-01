@@ -263,15 +263,22 @@ def load_llm():
         return None
 
     candidate_tasks = ["text2text-generation", "text-generation", "image-text-to-text", "table-question-answering"]
+    task_errors = []
+
     for task in candidate_tasks:
         try:
             pipe = pipeline(task, model="google/flan-t5-small", max_new_tokens=128, return_full_text=False)
             st.info(f"LLM initialized with task '{task}'.")
             return HuggingFacePipeline(pipeline=pipe)
         except Exception as e:
-            st.warning(f"LLM task '{task}' failed: {e}")
+            task_errors.append((task, str(e)))
 
-    st.warning("LLM initialization failed for all candidate tasks; AI features are unavailable.")
+    # Only show a single warning if no task could be initialized
+    if task_errors:
+        st.warning("LLM initialization failed for all candidate tasks; AI features are unavailable.")
+        # Optional: store for debug if needed
+        st.session_state.llm_task_errors = task_errors
+
     return None
 
 
