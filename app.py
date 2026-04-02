@@ -2,7 +2,7 @@ import difflib, html, re, hashlib, os, json
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from io import BytesIO
-#from pytz import timezone
+from pytz import timezone
 
 import docx, openpyxl, pdfplumber, streamlit as st
 import pandas as pd
@@ -24,6 +24,81 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 # -------------------------------
 st.set_page_config(page_title="Vignesh_AI", layout="wide")
 st.title("🤖 Vignesh_AI")
+st.markdown(
+    """
+    <style>
+        :root {
+            --brand: #1f4f91;
+            --brand-soft: #eaf2ff;
+            --border: #d7e3f4;
+            --text-soft: #51627a;
+            --panel: #f8fbff;
+            --success-bg: #edf8f1;
+            --warning-bg: #fff8e8;
+        }
+        .app-card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 14px 16px;
+            margin: 8px 0 14px 0;
+        }
+        .app-card h4 {
+            margin: 0 0 6px 0;
+            color: var(--brand);
+            font-size: 15px;
+        }
+        .app-muted {
+            color: var(--text-soft);
+            font-size: 13px;
+            margin: 0;
+        }
+        .status-strip {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 10px;
+            margin: 8px 0 18px 0;
+        }
+        .status-tile {
+            background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 12px 14px;
+        }
+        .status-label {
+            color: var(--text-soft);
+            font-size: 12px;
+            margin-bottom: 4px;
+        }
+        .status-value {
+            color: #173152;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        .file-chip-wrap {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .file-chip {
+            background: var(--brand-soft);
+            color: var(--brand);
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            display: inline-block;
+            font-size: 12px;
+            padding: 5px 10px;
+        }
+        .section-note {
+            color: var(--text-soft);
+            font-size: 13px;
+            margin: 0 0 6px 0;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
 # -------------------------------
 # SESSION STATE INITIALIZATION
@@ -62,12 +137,46 @@ if "login_history" not in st.session_state:
     st.session_state.login_history = []
 if "file_uploader_key" not in st.session_state:
     st.session_state.file_uploader_key = 0
+if "show_help_popup_chat" not in st.session_state:
+    st.session_state.show_help_popup_chat = False
+if "compare_result_html" not in st.session_state:
+    st.session_state.compare_result_html = None
+if "compare_result_excel_bytes" not in st.session_state:
+    st.session_state.compare_result_excel_bytes = None
+if "compare_result_files" not in st.session_state:
+    st.session_state.compare_result_files = []
+if "chat_file_selection" not in st.session_state:
+    st.session_state.chat_file_selection = []
+if "compare_file_selection" not in st.session_state:
+    st.session_state.compare_file_selection = []
+if "file_dropdown" not in st.session_state:
+    st.session_state.file_dropdown = "--Select File--"
+if "selected_capl_file" not in st.session_state:
+    st.session_state.selected_capl_file = "--Select CAPL file--"
+
+
+@st.cache_data(show_spinner=False)
+def load_readme_text():
+    try:
+        with open("README.txt", "r", encoding="utf-8") as readme_file:
+            return readme_file.read()
+    except Exception:
+        return "README.txt could not be loaded."
 
 # -------------------------------
 # FILE UPLOAD & MANAGEMENT (SIDEBAR)
 # -------------------------------
 with st.sidebar:
     if st.session_state.is_authenticated:
+        creator_timestamp = None
+        if st.session_state.user_role == "creator" and st.session_state.login_history:
+            creator_entries = [
+                entry for entry in st.session_state.login_history
+                if entry.get("username") == st.session_state.logged_in_username and entry.get("role") == "creator"
+            ]
+            if creator_entries:
+                creator_timestamp = creator_entries[-1].get("timestamp")
+
         st.markdown(
             """
             <style>
@@ -83,7 +192,10 @@ with st.sidebar:
             unsafe_allow_html=True
         )
 
-        st.success(f"Logged in as {st.session_state.logged_in_username} ({st.session_state.user_role})")
+        status_message = f"Logged in as {st.session_state.logged_in_username} ({st.session_state.user_role})"
+        if creator_timestamp:
+            status_message += f"\nLogin time: {creator_timestamp}"
+        st.success(status_message)
         if st.button("Logout"):
             # Remove from active users
             active_file = "active_users.json"
@@ -127,10 +239,8 @@ with st.sidebar:
                 )
             if new_checked and file_dict["name"] not in st.session_state.selected_files:
                 st.session_state.selected_files.append(file_dict["name"])
-                st.rerun()
             elif not new_checked and file_dict["name"] in st.session_state.selected_files:
                 st.session_state.selected_files.remove(file_dict["name"])
-                st.rerun()
             with cols[2]:
                 if st.button("X", key=f"del_file_{idx}", help=f"Delete {file_dict['name']}", type="tertiary"):
                     deleted_name = file_dict["name"]
@@ -204,24 +314,25 @@ with st.sidebar:
 def extract_text(file_name, file_bytes):
     text = ""
     bio = BytesIO(file_bytes)
+    file_name_lower = file_name.lower()
     try:
-        if file_name.endswith(".pdf"):
+        if file_name_lower.endswith(".pdf"):
             with pdfplumber.open(bio) as pdf:
                 text = "\n".join(p.extract_text() or "" for p in pdf.pages)
-        elif file_name.endswith(".txt"):
+        elif file_name_lower.endswith(".txt"):
             text = bio.read().decode("utf-8", errors="ignore")
-        elif file_name.endswith(".can"):
+        elif file_name_lower.endswith(".can"):
             text = bio.read().decode("utf-8", errors="ignore")
-        elif file_name.endswith(".docx"):
+        elif file_name_lower.endswith(".docx"):
             doc = docx.Document(bio)
             text = "\n".join([p.text for p in doc.paragraphs])
-        elif file_name.endswith(".pptx"):
+        elif file_name_lower.endswith(".pptx"):
             prs = Presentation(bio)
             text = "\n".join(shape.text for slide in prs.slides for shape in slide.shapes if hasattr(shape, "text"))
-        elif file_name.endswith((".html", ".htm")):
+        elif file_name_lower.endswith((".html", ".htm")):
             soup = BeautifulSoup(bio.read(), "html.parser")
             text = soup.get_text(separator="\n")
-        elif file_name.endswith(".xlsx"):
+        elif file_name_lower.endswith(".xlsx"):
             wb = openpyxl.load_workbook(bio, data_only=True)
             text = "\n".join(" ".join(str(c) for c in row if c) for sh in wb for row in sh.iter_rows(values_only=True))
     except:
@@ -233,8 +344,9 @@ def extract_text(file_name, file_bytes):
 def extract_excel_data(file_name, file_bytes):
     data = []
     bio = BytesIO(file_bytes)
+    file_name_lower = file_name.lower()
     try:
-        if file_name.endswith(".xlsx"):
+        if file_name_lower.endswith(".xlsx"):
             wb = openpyxl.load_workbook(bio, data_only=True)
             for sheet in wb:
                 headers = None
@@ -300,11 +412,12 @@ def ensure_file_processed(file_name):
     file_info = get_uploaded_file_entry(file_name)
     if not file_info:
         return
+    file_name_lower = file_name.lower()
 
     if file_name not in st.session_state.file_texts:
         st.session_state.file_texts[file_name] = extract_text(file_name, file_info["bytes"])
 
-    if file_name.endswith(".xlsx") and file_name not in st.session_state.excel_data_by_file:
+    if file_name_lower.endswith(".xlsx") and file_name not in st.session_state.excel_data_by_file:
         st.session_state.excel_data_by_file[file_name] = extract_excel_data(file_name, file_info["bytes"])
 
 
@@ -366,16 +479,232 @@ def extract_statistics_from_html(file_bytes):
     return stats
 
 
+@st.cache_data(show_spinner=False)
+def extract_test_results_grouped_from_html(file_bytes):
+    soup = BeautifulSoup(BytesIO(file_bytes), "html.parser")
+    results = {}
+
+    group_tables = soup.find_all('table', class_='GroupHeadingTable')
+
+    for group_table in group_tables:
+        try:
+            rows = group_table.find_all('tr')
+            if len(rows) >= 2:
+                first_row = rows[0]
+                heading = first_row.find('big', class_='Heading3')
+
+                if heading:
+                    heading_text = heading.get_text(strip=True)
+                    fixture_match = re.search(r'Test Fixture:\s*(.+?)(?:\s|$)', heading_text, re.IGNORECASE)
+
+                    if fixture_match:
+                        fixture_name = fixture_match.group(1).strip()
+                        second_row = rows[1]
+                        overview_table = second_row.find('table', class_='OverviewResultTable')
+
+                        if overview_table:
+                            count_cell = overview_table.find('td')
+                            if count_cell:
+                                try:
+                                    count = int(count_cell.get_text(strip=True))
+
+                                    if fixture_name not in results:
+                                        results[fixture_name] = {
+                                            "name": fixture_name,
+                                            "test_cases": [],
+                                            "pass": count,
+                                            "fail": 0,
+                                            "error": 0,
+                                            "not executed": 0,
+                                            "inconclusive": 0,
+                                            "total": count,
+                                            "count_cell_class": count_cell.get('class', [''])[0]
+                                        }
+                                except ValueError:
+                                    pass
+        except Exception:
+            pass
+
+    full_text = soup.get_text("\n", strip=True)
+    lines = [l.strip() for l in full_text.split("\n") if l.strip()]
+
+    current_fixture = None
+
+    for i, line in enumerate(lines):
+        line_lower = line.lower()
+
+        if "test fixture:" in line_lower:
+            fixture_match = re.search(r'Test Fixture:\s*(.+?)(?:\s|$)', line, re.IGNORECASE)
+            if fixture_match:
+                current_fixture = fixture_match.group(1).strip()
+                if current_fixture not in results:
+                    results[current_fixture] = {
+                        "name": current_fixture,
+                        "test_cases": [],
+                        "pass": 0,
+                        "fail": 0,
+                        "error": 0,
+                        "not executed": 0,
+                        "inconclusive": 0,
+                        "total": 0
+                    }
+
+        elif re.match(r'^\d+\.\d+', line) and current_fixture:
+            verdict_match = re.search(r':\s*(Passed|Failed|Pass|Fail|Error|Not Executed|Inconclusive)\s*$', line,
+                                      re.IGNORECASE)
+
+            if verdict_match:
+                verdict_word = verdict_match.group(1).lower()
+
+                if "pass" in verdict_word:
+                    verdict_type = "Pass"
+                    results[current_fixture]["pass"] += 1
+                elif "fail" in verdict_word:
+                    verdict_type = "Failed"
+                    results[current_fixture]["fail"] += 1
+                elif "error" in verdict_word:
+                    verdict_type = "Error"
+                    results[current_fixture]["error"] += 1
+                elif "not executed" in verdict_word:
+                    verdict_type = "Not Executed"
+                    results[current_fixture]["not executed"] += 1
+                elif "inconclusive" in verdict_word:
+                    verdict_type = "Inconclusive"
+                    results[current_fixture]["inconclusive"] += 1
+                else:
+                    continue
+
+                timestamp = None
+                test_step = "Step"
+                failure_step_id = ""
+
+                def score_timestamp(candidate):
+                    if not candidate:
+                        return -1
+                    parts = candidate.split('.')
+                    if len(parts) != 2 or not parts[0].isdigit() or not parts[1].isdigit():
+                        return -1
+                    leading_num = int(parts[0])
+                    decimal_places = len(parts[1])
+                    decimal_bonus = 10000 if decimal_places >= 3 else (100 if decimal_places == 2 else 0)
+                    return decimal_bonus + leading_num
+
+                def find_best_timestamp(text):
+                    matches = re.findall(r'\b(\d+\.\d+)\b', text)
+                    if not matches:
+                        return None
+                    return max(matches, key=score_timestamp)
+
+                def find_first_relevant_timestamp(text):
+                    for m in re.findall(r'\b(\d+\.\d+)\b', text):
+                        if len(m.split('.')[1]) >= 3:
+                            return m
+                    for m in re.findall(r'\b(\d+\.\d+)\b', text):
+                        if len(m.split('.')[1]) >= 2:
+                            return m
+                    return None
+
+                def consider_timestamp(candidate):
+                    nonlocal timestamp
+                    if not candidate:
+                        return
+                    if not timestamp:
+                        timestamp = candidate
+                        return
+                    if len(timestamp.split('.')[1]) >= 3:
+                        return
+                    if len(candidate.split('.')[1]) > len(timestamp.split('.')[1]):
+                        timestamp = candidate
+                        return
+                    if score_timestamp(candidate) > score_timestamp(timestamp):
+                        timestamp = candidate
+
+                same_line_step = re.search(r'(\d+(?:\.\d+)+)\.\s+([^:]+):\s*(failed|fail|error)', line,
+                                           re.IGNORECASE)
+                if same_line_step:
+                    failure_step_id = same_line_step.group(1)
+                    action_text = same_line_step.group(2).strip()
+                    test_step = action_text
+                    consider_timestamp(find_first_relevant_timestamp(line) or find_best_timestamp(line))
+
+                for k in range(i + 1, min(i + 150, len(lines))):
+                    next_line = lines[k]
+
+                    if re.match(r'^\d+\.\d+(?:\s|$)', next_line) and k > i + 5:
+                        break
+
+                    consider_timestamp(find_first_relevant_timestamp(next_line) or find_best_timestamp(next_line))
+
+                    if verdict_type in ["Failed", "Error"] and not failure_step_id:
+                        next_line_lower = next_line.lower()
+
+                        step_match = re.search(r'(\d+(?:\.\d+)+)\.\s+([^:]+):\s*(failed|fail|error)', next_line,
+                                               re.IGNORECASE)
+                        if step_match:
+                            failure_step_id = step_match.group(1)
+                            action_text = step_match.group(2).strip()
+                            test_step = action_text
+                            consider_timestamp(find_best_timestamp(next_line))
+                        else:
+                            if any(keyword in next_line_lower for keyword in
+                                   ["condition", "value", "expected", "actual", "mismatch", "not found",
+                                    "exception", "error", "failed to", "failed"]):
+                                if not re.match(r'^\d+\.\d+', next_line):
+                                    step_num_match = re.match(r'^(\d+(?:\.\d+)*)', next_line.strip())
+                                    if step_num_match:
+                                        failure_step_id = step_num_match.group(1)
+                                        test_step = next_line[:80]
+
+                    if verdict_type == "Pass":
+                        next_line_lower = next_line.lower()
+
+                        if "execute" in next_line_lower:
+                            match = re.search(r'execute\s+(\w+)', next_line_lower)
+                            if match:
+                                test_step = match.group(1).capitalize()
+                        elif "question" in next_line_lower and "text" in next_line_lower:
+                            test_step = "Question/Text"
+                        elif "await" in next_line_lower or "wait" in next_line_lower:
+                            test_step = "Await Value Match"
+                        elif "resume" in next_line_lower:
+                            test_step = "Resume"
+                        elif "set" in next_line_lower:
+                            test_step = "Set"
+                        elif "tester" in next_line_lower and "confirmed" in next_line_lower:
+                            test_step = "Tester Confirmation"
+
+                if timestamp:
+                    results[current_fixture]["test_cases"].append({
+                        "timestamp": timestamp,
+                        "verdict": verdict_type,
+                        "details": test_step
+                    })
+
+    for fixture_name in results:
+        parsed_count = len(results[fixture_name]["test_cases"])
+        initial_count = results[fixture_name].get("total", 0)
+        results[fixture_name]["total"] = max(parsed_count, initial_count)
+
+    return results
+
+
 CREATOR_USERNAME = "Vignesh"
 CREATOR_PASSWORD = "Rider@100"
 
 if not st.session_state.is_authenticated:
     st.subheader("Login")
+    st.markdown("### Read Me First")
+    st.text_area("README", value=load_readme_text(), height=360, disabled=True)
+    has_read_readme = st.checkbox("I have read the README and want to continue")
     login_username = st.text_input("Username")
     login_password = st.text_input("Password", type="password")
     st.info("Note: For users, leave the password field blank (empty).")
 
     if st.button("Access"):
+        if not has_read_readme:
+            st.warning("Please read the README and confirm the checkbox before accessing the app.")
+            st.stop()
+
         cleaned_username = (login_username or "").strip()
         cleaned_password = (login_password or "").strip()
 
@@ -383,12 +712,12 @@ if not st.session_state.is_authenticated:
             st.session_state.is_authenticated = True
             st.session_state.logged_in_username = cleaned_username
             st.session_state.user_role = "creator"
-            # ist_tz = timezone('Asia/Kolkata')
-            #ist_time = datetime.now(ist_tz).strftime("%Y-%m-%d %H:%M:%S %Z")
+            ist_tz = timezone('Asia/Kolkata')
+            ist_time = datetime.now(ist_tz).strftime("%Y-%m-%d %H:%M:%S %Z")
             st.session_state.login_history.append({
                 "username": cleaned_username,
                 "role": "creator",
-               # "timestamp": ist_time
+                "timestamp": ist_time
             })
             # Update active users
             active_file = "active_users.json"
@@ -412,12 +741,12 @@ if not st.session_state.is_authenticated:
             st.session_state.is_authenticated = True
             st.session_state.logged_in_username = cleaned_username
             st.session_state.user_role = "user"
-           # ist_tz = timezone('Asia/Kolkata')
-           # ist_time = datetime.now(ist_tz).strftime("%Y-%m-%d %H:%M:%S %Z")
+            ist_tz = timezone('Asia/Kolkata')
+            ist_time = datetime.now(ist_tz).strftime("%Y-%m-%d %H:%M:%S %Z")
             st.session_state.login_history.append({
                 "username": cleaned_username,
                 "role": "user",
-               # "timestamp": ist_time
+                "timestamp": ist_time
             })
             # Update active users
             active_file = "active_users.json"
@@ -479,11 +808,12 @@ def plot_bar_chart(counts, title, horizontal=False):
 # -------------------------------
 # INLINE MULTI-FILE DIFF (HTML)
 # -------------------------------
-def highlight_multi_file_differences(file_texts):
-    if len(file_texts) < 2:
+@st.cache_data(show_spinner=False)
+def highlight_multi_file_differences_cached(file_items):
+    if len(file_items) < 2:
         return "Select at least two files to compare."
 
-    files = list(file_texts.keys())
+    files = [fname for fname, _ in file_items]
     css = """
     <style>
         body { font-family: Arial; margin: 20px; }
@@ -497,43 +827,70 @@ def highlight_multi_file_differences(file_texts):
         p.legend span { display:inline-block; width:20px; height:20px; margin-right:5px; vertical-align:middle; }
     </style>
     """
-    html_out = "<html><head>" + css + "</head><body><div class='scrollable'>"
-    html_out += "<p class='legend'><b>Legend:</b> <span class='missing'></span> Missing, <span class='extra'></span> Extra</p>"
-    html_out += "<table><tr><th>Line #</th>" + "".join(f"<th>{fname}</th>" for fname in files) + "</tr>"
+    html_parts = [
+        "<html><head>", css, "</head><body><div class='scrollable'>",
+        "<p class='legend'><b>Legend:</b> <span class='missing'></span> Missing, <span class='extra'></span> Extra</p>",
+        "<table><tr><th>Line #</th>",
+        "".join(f"<th>{html.escape(fname)}</th>" for fname in files),
+        "</tr>",
+    ]
 
-    file_lines = {fname: [html.escape(l) for l in t.splitlines()] for fname, t in file_texts.items()}
-    max_lines = max(len(l) for l in file_lines.values())
+    file_lines = {fname: text.splitlines() for fname, text in file_items}
+    max_lines = max(len(lines) for lines in file_lines.values())
 
     for i in range(max_lines):
-        html_out += f"<tr><td class='line-number'>{i + 1}</td>"
-        line_words_all = {f: set(file_lines[f][i].split()) if i < len(file_lines[f]) else set() for f in files}
-        all_words = set().union(*line_words_all.values())
-        for f in files:
-            words = line_words_all[f]
+        html_parts.append(f"<tr><td class='line-number'>{i + 1}</td>")
+
+        line_word_lists = {}
+        word_presence = defaultdict(int)
+        ordered_words = []
+
+        for fname in files:
+            raw_line = file_lines[fname][i] if i < len(file_lines[fname]) else ""
+            words = raw_line.split()
+            line_word_lists[fname] = words
+            seen_words = set()
+            for word in words:
+                if word not in seen_words:
+                    word_presence[word] += 1
+                    seen_words.add(word)
+                if word not in ordered_words:
+                    ordered_words.append(word)
+
+        for fname in files:
+            words = set(line_word_lists[fname])
             highlighted = []
-            for w in all_words:
-                present_in = [ff for ff, ws in line_words_all.items() if w in ws]
-                if w in words and len(present_in) < len(files):
-                    highlighted.append(f"<span class='extra'>{w}</span>")
-                elif w not in words:
-                    highlighted.append(f"<span class='missing'>{w}</span>")
+            for word in ordered_words:
+                escaped_word = html.escape(word)
+                if word in words and word_presence[word] < len(files):
+                    highlighted.append(f"<span class='extra'>{escaped_word}</span>")
+                elif word not in words:
+                    highlighted.append(f"<span class='missing'>{escaped_word}</span>")
                 else:
-                    highlighted.append(f"<span>{w}</span>")
-            html_out += f"<td>{' '.join(highlighted)}</td>"
-        html_out += "</tr>"
-    html_out += "</table></div></body></html>"
-    return html_out
+                    highlighted.append(f"<span>{escaped_word}</span>")
+            html_parts.append(f"<td>{' '.join(highlighted) if highlighted else '&nbsp;'}</td>")
+
+        html_parts.append("</tr>")
+
+    html_parts.append("</table></div></body></html>")
+    return "".join(html_parts)
+
+
+def highlight_multi_file_differences(file_texts):
+    return highlight_multi_file_differences_cached(tuple((fname, str(text)) for fname, text in file_texts.items()))
 
 
 # -------------------------------
 # COMPARE EXCEL HIGHLIGHT
 # -------------------------------
-def generate_word_level_comparison_excel(file_texts):
+@st.cache_data(show_spinner=False)
+def generate_word_level_comparison_excel_cached(file_items):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Comparison"
 
-    files = list(file_texts.keys())
+    files = [fname for fname, _ in file_items]
+    file_texts = {fname: text for fname, text in file_items}
     ws.append(["Line #"] + files)
     file_lines = {f: [l.split() for l in t.splitlines()] for f, t in file_texts.items()}
 
@@ -569,6 +926,11 @@ def generate_word_level_comparison_excel(file_texts):
 
     excel_io = BytesIO()
     wb.save(excel_io)
+    return excel_io.getvalue()
+
+
+def generate_word_level_comparison_excel(file_texts):
+    excel_io = BytesIO(generate_word_level_comparison_excel_cached(tuple((fname, str(text)) for fname, text in file_texts.items())))
     excel_io.seek(0)
     return excel_io
 
@@ -577,7 +939,8 @@ def generate_word_level_comparison_excel(file_texts):
 # CAPL Complier
 # -------------------------------
 
-def analyze_capl_code_with_suggestions(code):
+@st.cache_data(show_spinner=False)
+def analyze_capl_code_with_suggestions_cached(code):
     issues = []
 
     brace_stack = []
@@ -690,6 +1053,10 @@ def analyze_capl_code_with_suggestions(code):
     return issues
 
 
+def analyze_capl_code_with_suggestions(code):
+    return analyze_capl_code_with_suggestions_cached(code)
+
+
 # -------------------------------
 # CAPL CODE DETECTION
 # -------------------------------
@@ -704,9 +1071,13 @@ def is_capl_code(text):
     return any(keyword in text_lower for keyword in capl_keywords)
 
 
-def render_capl_code_with_highlights(code, issues=None):
+@st.cache_data(show_spinner=False)
+def render_capl_code_with_highlights_cached(code, issues_key):
     """Render CAPL code with IDE-like line highlighting for detected issues."""
-    issues = issues or []
+    issues = [
+        {"line": line, "error": error, "suggestion": suggestion}
+        for line, error, suggestion in issues_key
+    ]
     issue_lines = defaultdict(list)
 
     for issue in issues:
@@ -773,6 +1144,18 @@ def render_capl_code_with_highlights(code, issues=None):
     return code_html + f"<div class='capl-code-block'>{''.join(rendered_lines)}</div>"
 
 
+def render_capl_code_with_highlights(code, issues=None):
+    issues_key = tuple(
+        (
+            issue.get("line"),
+            issue.get("error", "Issue detected"),
+            issue.get("suggestion", "")
+        )
+        for issue in (issues or [])
+    )
+    return render_capl_code_with_highlights_cached(code, issues_key)
+
+
 def render_capl_issue_table(issues):
     if not issues:
         st.success("✅ No issues detected!")
@@ -799,6 +1182,66 @@ def show_current_sidebar_selection():
         st.info("No sidebar files selected yet. Upload and select files from the sidebar first.")
 
 
+def render_status_strip():
+    if not st.session_state.get("is_authenticated"):
+        return
+
+    available_files = st.session_state.get("selected_files", [])
+    role = st.session_state.get("user_role") or "-"
+    username = st.session_state.get("logged_in_username") or "-"
+    login_entries = st.session_state.get("login_history", [])
+    last_login = login_entries[-1]["timestamp"] if login_entries else "-"
+    last_login_display = last_login if role == "creator" else "Creator only"
+
+    st.markdown(
+        f"""
+        <div class="status-strip">
+            <div class="status-tile">
+                <div class="status-label">User</div>
+                <div class="status-value">{html.escape(username)}</div>
+            </div>
+            <div class="status-tile">
+                <div class="status-label">Role</div>
+                <div class="status-value">{html.escape(str(role).title())}</div>
+            </div>
+            <div class="status-tile">
+                <div class="status-label">Available Files</div>
+                <div class="status-value">{len(available_files)}</div>
+            </div>
+            <div class="status-tile">
+                <div class="status-label">Last Login</div>
+                <div class="status-value" style="font-size:14px;">{html.escape(str(last_login_display))}</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
+def render_file_context_card(title, available_files, active_files=None):
+    active_files = active_files or []
+    chips_html = "".join(
+        f"<span class='file-chip'>{html.escape(file_name)}</span>"
+        for file_name in active_files[:12]
+    )
+    if len(active_files) > 12:
+        chips_html += f"<span class='file-chip'>+{len(active_files) - 12} more</span>"
+
+    st.markdown(
+        f"""
+        <div class="app-card">
+            <h4>{html.escape(title)}</h4>
+            <p class="app-muted">Available from sidebar: {len(available_files)} file(s)</p>
+            <p class="app-muted">Selected in this tab: {len(active_files)} file(s)</p>
+            <div class="file-chip-wrap">
+                {chips_html if chips_html else "<span class='file-chip'>No tab files selected yet</span>"}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
 def _help_state_key(tab_name):
     return f"show_help_popup_{tab_name}"
 
@@ -806,13 +1249,13 @@ def _help_state_key(tab_name):
 def ensure_help_popup_state(tab_name):
     key = _help_state_key(tab_name)
     if key not in st.session_state:
-        st.session_state[key] = True
+        st.session_state[key] = False
     return key
 
 
 def show_help_popup(tab_name, selected_files):
     state_key = ensure_help_popup_state(tab_name)
-    st.checkbox("Show query helper popup", value=st.session_state[state_key], key=state_key)
+    st.checkbox("Show query helper popup", key=state_key)
 
     if not st.session_state[state_key]:
         return
@@ -872,6 +1315,8 @@ def show_help_popup(tab_name, selected_files):
 # -------------------------------
 # TABS
 # -------------------------------
+render_status_strip()
+
 # All authenticated users get full panel tabs; content can still be permission-aware.
 tab1, tab2, tab3, tab4 = st.tabs(["💬 Chat", "📊 Dashboard", "📂 Compare", "🧠 CAPL"])
 
@@ -879,77 +1324,85 @@ tab1, tab2, tab3, tab4 = st.tabs(["💬 Chat", "📊 Dashboard", "📂 Compare",
 # TAB 1: CHAT
 # -------------------------------
 with tab1:
-    st.subheader("Chat with Selected Documents")
-    st.info(
-        "Choose files in the sidebar; these choices are synchronized across all tabs.\nChat defaults to currently selected files, but you can refine selection here as needed.")
-    show_current_sidebar_selection()
+    chat_header_col, chat_reset_col = st.columns([8, 1])
+    with chat_header_col:
+        st.subheader("Chat with Selected Documents")
+    with chat_reset_col:
+        if st.button("🔄 Reset", key="reset_chat_selection", use_container_width=True):
+            st.session_state.chat_file_selection = []
+            st.rerun()
 
-    if st.button("🔄 Reset Chat Selection", key="reset_chat_selection"):
-        st.session_state.chat_file_selection = st.session_state.selected_files.copy()
-        st.experimental_rerun()
+    st.info(
+        "Choose files in the sidebar to make them available here. Then select only the files you want for Chat in this tab.")
+    show_current_sidebar_selection()
+    render_file_context_card("Chat File Context", st.session_state.selected_files, st.session_state.chat_file_selection)
 
     show_help_popup('chat', st.session_state.selected_files)
 
     if st.session_state.selected_files:
+        st.session_state.chat_file_selection = [
+            file_name for file_name in st.session_state.chat_file_selection
+            if file_name in st.session_state.selected_files
+        ]
         chat_files = st.multiselect("Choose file(s) for Chat", options=st.session_state.selected_files,
-                                    default=st.session_state.selected_files, key="chat_file_selection")
+                                    default=st.session_state.chat_file_selection, key="chat_file_selection")
         if not chat_files:
-            st.warning("No file selected for chat. Choose one or more files from the list above.")
-            st.stop()
-
-        combined_text = "\n".join([st.session_state.file_texts.get(f, "") for f in chat_files])
-        combined_vs = get_combined_vector_store(chat_files)
-        retriever = combined_vs.as_retriever(search_kwargs={"k": 3})
-
-        llm = load_llm()
-        prompt = ChatPromptTemplate.from_messages([
-            ("system",
-             "You are an intelligent document assistant. Answer ONLY using context.\nIf not found, say 'Not available in documents.'\nContext:\n{context}"),
-            ("human", "{question}")
-        ])
-        chain = None
-        if llm is not None:
-            try:
-                chain = ({"context": retriever | (lambda x: '\n'.join(x)),
-                          "question": RunnablePassthrough()} | prompt | llm)
-            except Exception as e:
-                st.warning(f"Could not create LLM chain: {e}")
-                chain = None
-
-        user_input = st.chat_input("Ask something... (type 'clear' to reset chat)")
-        if user_input:
-            if user_input.strip().lower() == "clear":
-                st.session_state.messages = []
-                st.success("✅ Chat cleared!")
-            else:
-                st.session_state.messages.append({"role": "user", "content": user_input})
-                with st.spinner("Thinking..."):
-                    # Word count queries
-                    if any(t in user_input.lower() for t in ["how many", "count", "number of", "occurrences"]):
-                        match = re.search(r"'(.*?)'|\"(.*?)\"", user_input)
-                        if match:
-                            word = match.group(1) or match.group(2)
-                            count = len(
-                                re.findall(rf'(?<![\w-]){re.escape(word)}(?![\w-])', combined_text, re.IGNORECASE))
-                            response = f"🔢 The word/phrase '{word}' appears {count} times."
+            st.info("Choose one or more files in this tab to start chatting.")
+        else:
+            ensure_files_processed(chat_files)
+            combined_text = "\n".join([st.session_state.file_texts.get(f, "") for f in chat_files])
+    
+            user_input = st.chat_input("Ask something... (type 'clear' to reset chat)")
+            if user_input:
+                if user_input.strip().lower() == "clear":
+                    st.session_state.messages = []
+                    st.success("✅ Chat cleared!")
+                else:
+                    st.session_state.messages.append({"role": "user", "content": user_input})
+                    with st.spinner("Thinking..."):
+                        # Word count queries
+                        if any(t in user_input.lower() for t in ["how many", "count", "number of", "occurrences"]):
+                            match = re.search(r"'(.*?)'|\"(.*?)\"", user_input)
+                            if match:
+                                word = match.group(1) or match.group(2)
+                                count = len(
+                                    re.findall(rf'(?<![\w-]){re.escape(word)}(?![\w-])', combined_text, re.IGNORECASE))
+                                response = f"🔢 The word/phrase '{word}' appears {count} times."
+                            else:
+                                response = "⚠️ Specify the word/phrase in quotes."
+                        elif "analyze" in user_input.lower() or "summary" in user_input.lower():
+                            result = ""
+                            for f in chat_files:
+                                words = re.findall(r'\w+', st.session_state.file_texts[f].lower())
+                                most_common = Counter(words).most_common(10)
+                                result += f"📄 **{f}**: Total words {len(words)}, Unique {len(set(words))}, Top {most_common}\n\n"
+                            response = result
+                        elif "compare" in user_input.lower():
+                            selected_texts = {f: st.session_state.file_texts[f] for f in chat_files}
+                            response = highlight_multi_file_differences(selected_texts)
                         else:
-                            response = "⚠️ Specify the word/phrase in quotes."
-                    elif "analyze" in user_input.lower() or "summary" in user_input.lower():
-                        result = ""
-                        for f in chat_files:
-                            words = re.findall(r'\w+', st.session_state.file_texts[f].lower())
-                            most_common = Counter(words).most_common(10)
-                            result += f"📄 **{f}**: Total words {len(words)}, Unique {len(set(words))}, Top {most_common}\n\n"
-                        response = result
-                    elif "compare" in user_input.lower():
-                        selected_texts = {f: st.session_state.file_texts[f] for f in chat_files}
-                        response = highlight_multi_file_differences(selected_texts)
-                    else:
-                        if chain is not None:
-                            response = str(chain.invoke(user_input))
-                        else:
-                            response = "⚠️ AI model is unavailable. Use direct extraction questions such as 'how many', 'analyze', or 'compare'."
-                    st.session_state.messages.append({"role": "assistant", "content": response})
+                            combined_vs = get_combined_vector_store(chat_files)
+                            retriever = combined_vs.as_retriever(search_kwargs={"k": 3})
+                            llm = load_llm()
+                            prompt = ChatPromptTemplate.from_messages([
+                                ("system",
+                                 "You are an intelligent document assistant. Answer ONLY using context.\nIf not found, say 'Not available in documents.'\nContext:\n{context}"),
+                                ("human", "{question}")
+                            ])
+                            chain = None
+                            if llm is not None:
+                                try:
+                                    chain = ({"context": retriever | (lambda x: '\n'.join(x)),
+                                              "question": RunnablePassthrough()} | prompt | llm)
+                                except Exception as e:
+                                    st.warning(f"Could not create LLM chain: {e}")
+                                    chain = None
+
+                            if chain is not None:
+                                response = str(chain.invoke(user_input))
+                            else:
+                                response = "⚠️ AI model is unavailable. Use direct extraction questions such as 'how many', 'analyze', or 'compare'."
+                        st.session_state.messages.append({"role": "assistant", "content": response})
 
         for msg in st.session_state.messages:
             role = "🧑" if msg["role"] == "user" else "🤖"
@@ -961,19 +1414,23 @@ with tab1:
 # TAB 2: DASHBOARD
 # -------------------------------
 with tab2:
-    st.subheader("Dashboard")
-    show_current_sidebar_selection()
+    dashboard_header_col, dashboard_reset_col = st.columns([8, 1])
+    with dashboard_header_col:
+        st.subheader("Dashboard")
+    with dashboard_reset_col:
+        if st.button("🔄 Reset", key="reset_dashboard_selection", use_container_width=True):
+            st.session_state.file_dropdown = "--Select File--"
+            st.rerun()
 
-    if st.button("🔄 Reset Dashboard Selection", key="reset_dashboard_selection"):
-        st.session_state.file_dropdown = "--Select File--"
-        st.experimental_rerun()
+    show_current_sidebar_selection()
 
     # Filter selected files for dashboard-compatible formats
     dashboard_files = [
         f for f in st.session_state.selected_files
         if f.lower().endswith((".html", ".htm", ".xlsx"))
     ]
-    show_help_popup('dashboard', dashboard_files)
+    active_dashboard_files = [] if st.session_state.file_dropdown == "--Select File--" else [st.session_state.file_dropdown]
+    render_file_context_card("Dashboard File Context", dashboard_files, active_dashboard_files)
 
 
     def clean_text(x):
@@ -1280,10 +1737,11 @@ with tab2:
         st.info("No dashboard-friendly files selected. Choose HTML/HTM/XLSX in sidebar for dashboard details.")
     else:
         st.info(
-            "Dashboard will use sidebar-selected files. Choose any single file from the dropdown to inspect details.")
-        dashboard_index = 1 if dashboard_files else 0
-        file_dropdown = st.selectbox("Select a dashboard file", ["--Select File--"] + dashboard_files,
-                                     index=dashboard_index)
+            "Files selected in the sidebar are available here. Choose only the dashboard file you want to inspect in this tab.")
+        dashboard_options = ["--Select File--"] + dashboard_files
+        if st.session_state.file_dropdown not in dashboard_options:
+            st.session_state.file_dropdown = "--Select File--"
+        file_dropdown = st.selectbox("Select a dashboard file", dashboard_options, key="file_dropdown")
 
         if file_dropdown != "--Select File--":
             ensure_file_processed(file_dropdown)
@@ -1312,8 +1770,6 @@ with tab2:
                     st.warning("No Excel data available for analysis.")
 
             elif file_dropdown.lower().endswith((".html", ".htm")):
-                soup = BeautifulSoup(BytesIO(file_bytes), "html.parser")
-
                 st.markdown("### 🔐 Login Info")
                 login = extract_login_name_from_html(file_bytes)
                 st.write("Login Name:", login)
@@ -1335,7 +1791,7 @@ with tab2:
                     st.warning("⚠️ Could not extract statistics")
 
                 st.markdown("### 📋 Test Results")
-                grouped_results = extract_test_results_grouped(soup)
+                grouped_results = extract_test_results_grouped_from_html(file_bytes)
 
                 if grouped_results:
                     st.markdown("#### 👉 Executed Test Cases Summary")
@@ -1492,41 +1948,66 @@ with tab2:
 # TAB 3: COMPARE
 # -------------------------------
 with tab3:
-    st.subheader("Compare Files")
-    st.info("Select at least two files to compare. File availability is driven by sidebar selection.")
-    show_current_sidebar_selection()
-    show_help_popup('compare', st.session_state.selected_files)
+    compare_header_col, compare_reset_col = st.columns([8, 1])
+    with compare_header_col:
+        st.subheader("Compare Files")
+    with compare_reset_col:
+        if st.button("🔄 Reset", key="reset_compare_selection", use_container_width=True):
+            st.session_state.compare_file_selection = []
+            st.session_state.compare_result_html = None
+            st.session_state.compare_result_excel_bytes = None
+            st.session_state.compare_result_files = []
+            st.rerun()
 
-    if st.button("🔄 Reset Compare Selection", key="reset_compare_selection"):
-        st.session_state.compare_file_selection = st.session_state.selected_files.copy()
-        st.experimental_rerun()
+    st.info("Select files in the sidebar to make them available here, then choose only the files you want to compare in this tab.")
+    show_current_sidebar_selection()
+    render_file_context_card("Compare File Context", st.session_state.selected_files, st.session_state.compare_file_selection)
 
     # Use selected files in multiselect (user must choose from selected_files independently)
+    st.session_state.compare_file_selection = [
+        file_name for file_name in st.session_state.compare_file_selection
+        if file_name in st.session_state.selected_files
+    ]
     selected_files_for_comparison = st.multiselect(
         "Choose files to compare",
         options=st.session_state.selected_files,
-        default=st.session_state.selected_files,
+        default=st.session_state.compare_file_selection,
         key="compare_file_selection"
     )
 
-    if len(selected_files_for_comparison) >= 2:
-        ensure_files_processed(selected_files_for_comparison)
+    compare_clicked = st.button("Compare Selected Files", key="run_compare_button", use_container_width=True)
 
-        selected_texts = {}
-        for f in selected_files_for_comparison:
-            raw_text = st.session_state.file_texts.get(f, "")
-            selected_texts[f] = raw_text if isinstance(raw_text, str) else str(raw_text)
+    if compare_clicked:
+        if len(selected_files_for_comparison) >= 2:
+            ensure_files_processed(selected_files_for_comparison)
 
-        st.markdown("### Inline Word-Level Comparison")
-        html_diff = highlight_multi_file_differences(selected_texts)
-        st.components.v1.html(html_diff, height=800, scrolling=True)
+            selected_texts = {}
+            for f in selected_files_for_comparison:
+                raw_text = st.session_state.file_texts.get(f, "")
+                selected_texts[f] = raw_text if isinstance(raw_text, str) else str(raw_text)
+
+            html_diff = highlight_multi_file_differences(selected_texts)
+            excel_io = generate_word_level_comparison_excel(selected_texts)
+
+            st.session_state.compare_result_html = html_diff
+            st.session_state.compare_result_excel_bytes = excel_io.getvalue()
+            st.session_state.compare_result_files = selected_files_for_comparison.copy()
+        else:
+            st.warning("Select at least two files to compare.")
+
+    if st.session_state.compare_result_html and st.session_state.compare_result_files:
+        st.info("Compared files: " + ", ".join(st.session_state.compare_result_files))
+        st.markdown(f"### Inline Word-Level Comparison ({len(st.session_state.compare_result_files)} files)")
+        st.components.v1.html(st.session_state.compare_result_html, height=800, scrolling=True)
 
         st.markdown("### Download Excel Comparison")
-        excel_io = generate_word_level_comparison_excel(selected_texts)
-        st.download_button("Download Comparison Excel", excel_io, file_name="comparison.xlsx",
-                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-    else:
+        st.download_button(
+            "Download Comparison Excel",
+            st.session_state.compare_result_excel_bytes,
+            file_name="comparison.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    elif len(selected_files_for_comparison) < 2:
         st.info("Select at least two files to compare.")
 
 # -------------------------------
@@ -1534,18 +2015,24 @@ with tab3:
 # -------------------------------
 
 with tab4:
-    st.subheader("⚙️ CAPL Compiler & Analyzer")
-    st.info(
-        "Use sidebar selection for CAPL source files (.can, .txt). You can also create new CAPL scripts in the editor below.")
-    show_current_sidebar_selection()
-    show_help_popup('capl', [f for f in st.session_state.selected_files if f.lower().endswith(('.can', '.txt'))])
+    capl_header_col, capl_reset_col = st.columns([8, 1])
+    with capl_header_col:
+        st.subheader("⚙️ CAPL Compiler & Analyzer")
+    with capl_reset_col:
+        if st.button("🔄 Reset", key="reset_capl_selection", use_container_width=True):
+            st.session_state.selected_capl_file = "--Select CAPL file--"
+            st.session_state.capl_last_analyzed_file = None
+            st.session_state.capl_last_issues = None
+            st.rerun()
 
-    if st.button("🔄 Reset CAPL Selection", key="reset_capl_selection"):
-        st.session_state.capl_selection_state = None
-        st.experimental_rerun()
+    st.info(
+        "Use sidebar selection to make CAPL source files available here. Then choose the CAPL file you want only in this tab.")
+    show_current_sidebar_selection()
 
     # Filter selected files for CAPL analysis
     capl_selectable_files = [f for f in st.session_state.selected_files if f.lower().endswith((".can", ".txt"))]
+    active_capl_files = [] if st.session_state.selected_capl_file == "--Select CAPL file--" else [st.session_state.selected_capl_file]
+    render_file_context_card("CAPL File Context", capl_selectable_files, active_capl_files)
 
     with st.expander("✍️ Create New CAPL Script", expanded=False):
         st.text_input("CAPL file name", key="capl_editor_name", help="Enter a file name ending with .can")
@@ -1623,6 +2110,7 @@ with tab4:
                 st.success(f"Saved {new_file_name} and added it to the selected files.")
 
     use_all_txt = st.checkbox("Include all .txt files as CAPL")
+    ensure_files_processed(capl_selectable_files)
 
     if use_all_txt:
         capl_files = [
@@ -1639,10 +2127,10 @@ with tab4:
     if not capl_files:
         st.warning("Upload/select CAPL (.can/.capl) files")
     else:
-        ensure_files_processed(capl_files)
         capl_options = ["--Select CAPL file--"] + capl_files
-        capl_index = 1 if len(capl_options) > 1 else 0
-        selected_capl = st.selectbox("Select CAPL file", capl_options, index=capl_index)
+        if st.session_state.selected_capl_file not in capl_options:
+            st.session_state.selected_capl_file = "--Select CAPL file--"
+        selected_capl = st.selectbox("Select CAPL file", capl_options, key="selected_capl_file")
         capl_selected = selected_capl != "--Select CAPL file--"
         action_cols = st.columns([1, 1, 4])
         with action_cols[0]:
