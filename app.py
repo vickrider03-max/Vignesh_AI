@@ -836,6 +836,25 @@ def render_document_preview(file_name, file_entry=None):
         # Parse the content into sections
         sections = parse_extracted_content(full_content)
         
+        # For PDF files, if parsing doesn't produce good content, show raw text
+        if file_name_lower.endswith('.pdf') and sections:
+            # Check if we have meaningful text content
+            has_meaningful_text = any(
+                section_type == "TEXT" and section_content.strip()
+                for section_type, _, section_content in sections
+            )
+            if not has_meaningful_text:
+                # Fall back to showing raw content
+                st.markdown("### Document Content")
+                st.text_area(
+                    "Extracted Text",
+                    value=full_content.strip(),
+                    height=600,
+                    disabled=True,
+                    key=f"raw_content_{file_name}"
+                )
+                return
+        
         if not sections:
             st.warning("Content was extracted but could not be parsed into displayable sections.")
             st.code(full_content[:1000] + ("..." if len(full_content) > 1000 else ""), language="text")
@@ -845,34 +864,38 @@ def render_document_preview(file_name, file_entry=None):
         for section_type, section_title, section_content in sections:
             if section_type == "METADATA":
                 with st.expander(f"📋 {section_title}", expanded=False):
-                    st.code(section_content, language="text")
+                    if section_content.strip():
+                        st.code(section_content, language="text")
+                    else:
+                        st.info("No metadata available")
             elif section_type == "TEXT":
-                st.markdown(f"### {section_title}")
-                # Show first 10,000 characters, with option to expand
-                if len(section_content) > 10000:
-                    st.text_area(
-                        f"{section_title} (truncated)",
-                        value=section_content[:10000] + "\n\n[... content truncated ...]",
-                        height=400,
-                        disabled=True,
-                        key=f"preview_text_{file_name}_{section_title}"
-                    )
-                    with st.expander("Show full content"):
+                if section_content.strip():  # Only show if there's actual content
+                    st.markdown(f"### {section_title}")
+                    # Show first 10,000 characters, with option to expand
+                    if len(section_content) > 10000:
                         st.text_area(
-                            f"Full {section_title}",
-                            value=section_content,
-                            height=600,
+                            f"{section_title} (truncated)",
+                            value=section_content[:10000] + "\n\n[... content truncated ...]",
+                            height=400,
                             disabled=True,
-                            key=f"preview_full_text_{file_name}_{section_title}"
+                            key=f"preview_text_{file_name}_{section_title}"
                         )
-                else:
-                    st.text_area(
-                        section_title,
-                        value=section_content,
-                        height=400,
-                        disabled=True,
-                        key=f"preview_text_{file_name}_{section_title}"
-                    )
+                        with st.expander("Show full content"):
+                            st.text_area(
+                                f"Full {section_title}",
+                                value=section_content,
+                                height=600,
+                                disabled=True,
+                                key=f"preview_full_text_{file_name}_{section_title}"
+                            )
+                    else:
+                        st.text_area(
+                            section_title,
+                            value=section_content,
+                            height=400,
+                            disabled=True,
+                            key=f"preview_text_{file_name}_{section_title}"
+                        )
             elif section_type == "TABLE":
                 with st.expander(f"📊 {section_title}", expanded=True):
                     # Try to parse table and display as dataframe
@@ -1087,10 +1110,7 @@ if preview_file_from_url:
     preview_entry = PREVIEW_STORE.get(preview_token)
     st.title("📄 File Preview")
     if preview_entry is not None:
-        st.markdown(
-            "<a href='/' style='display:inline-block;padding:10px 18px;border-radius:8px;background:#1f4f91;color:#ffffff;text-decoration:none;'>← Back to app</a>",
-            unsafe_allow_html=True,
-        )
+        # Removed "Back to app" link as requested
         st.markdown(f"### {preview_entry['name']}")
         st.markdown("---")
         render_document_preview(preview_entry['name'], file_entry=preview_entry)
