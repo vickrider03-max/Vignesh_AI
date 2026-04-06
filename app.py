@@ -2095,6 +2095,20 @@ def find_heading_page_number(text, heading):
     return None
 
 
+def resolve_heading_page_number(text, heading, toc_entries=None):
+    if not heading:
+        return None
+    heading_text = str(heading).strip()
+    if toc_entries is None:
+        toc_entries = extract_toc_with_page_numbers(text)
+    for num, title, page_num in toc_entries:
+        if title.strip().lower() == heading_text.lower():
+            return page_num
+        if heading_text.lower() in title.strip().lower() or title.strip().lower() in heading_text.lower():
+            return page_num
+    return find_heading_page_number(text, heading_text)
+
+
 def extract_document_headings(text):
     """Extract numbered headings from document text."""
     headings = []
@@ -2205,7 +2219,7 @@ def build_file_overview(file_name, text):
         for num, title in all_headings:
             content_str = f"{num} {title}" if num else title
             anchor_id = create_heading_anchor(title)
-            page_num = find_heading_page_number(text, title)
+            page_num = resolve_heading_page_number(text, title, toc_entries)
             preview_link = create_preview_link(file_name, highlight_term=title, page_num=page_num)
             if preview_link:
                 overview_parts.append(f"- <a href='{preview_link}#{anchor_id}' target='_blank'>{html.escape(content_str)}</a>")
@@ -3273,13 +3287,14 @@ with tab1:
                             for f in chat_files:
                                 file_text = st.session_state.file_texts.get(f, "")
                                 if file_text.strip():
+                                    toc_entries = extract_toc_with_page_numbers(file_text)
                                     all_headings = extract_document_headings(file_text)
                                     if all_headings:
                                         response_lines.append(f"📄 **{f}**")
                                         response_lines.append("### Document Headings")
                                         for num, title in all_headings:
                                             content_str = f"{num} {title}" if num else title
-                                            page_num = find_heading_page_number(file_text, title)
+                                            page_num = resolve_heading_page_number(file_text, title, toc_entries)
                                             display_text = f"{content_str} (Page {page_num})" if page_num else content_str
                                             preview_link = create_preview_link(f, highlight_term=title, page_num=page_num)
                                             if preview_link:
