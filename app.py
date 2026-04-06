@@ -1974,53 +1974,70 @@ def extract_document_headings(text):
 
 
 def extract_toc_with_page_numbers(text):
-    """Extract table of contents entries with page numbers from document."""
+    """Extract table of contents entries with page numbers from document.
+    Tries to find explicit TOC first, then builds one from detected headings with their page numbers."""
     toc_entries = []
     text = str(text)
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     
-    # Search throughout the document for TOC entries
+    # First, try to find explicit TOC entries
     for i, line in enumerate(lines):
-        # Skip lines that are too long or too short
         if len(line) < 5 or len(line) > 150:
             continue
         
-        # Skip metadata and page markers
-        if "Page" in line and ("Text:" in line or "Table" in line):
-            continue
-        if line.isupper() or "PDF Metadata" in line or "Total Pages" in line:
+        if ("Page" in line and ("Text:" in line or "Table" in line)) or line.isupper() or "PDF Metadata" in line:
             continue
         
-        # Try Pattern 1: "1 Overview ..................... 3" (with dots)
+        # Pattern 1: "1 Overview ..................... 3"
         match = re.match(r'^(\d+(?:\.\d+)*)\s+(.+?)\s+\.{2,}\s*(\d+)\s*$', line)
         if match:
-            num = match.group(1)
-            title = match.group(2).strip()
-            page_num = match.group(3)
+            num, title, page_num = match.group(1), match.group(2).strip(), match.group(3)
             if 3 <= len(title) <= 120:
                 toc_entries.append((num, title, page_num))
             continue
         
-        # Try Pattern 2: "1 Overview    3" (many spaces between title and page)
+        # Pattern 2: "1 Overview    3"
         match = re.match(r'^(\d+(?:\.\d+)*)\s+(.+?)\s{3,}(\d+)\s*$', line)
         if match:
-            num = match.group(1)
-            title = match.group(2).strip()
-            page_num = match.group(3)
-            num_count = len(re.findall(r'\d+', title))
-            if 3 <= len(title) <= 120 and num_count <= 2:
+            num, title, page_num = match.group(1), match.group(2).strip(), match.group(3)
+            if 3 <= len(title) <= 120 and len(re.findall(r'\d+', title)) <= 2:
                 toc_entries.append((num, title, page_num))
             continue
-        
-        # Try Pattern 3: "1 Overview" followed by page on next line
-        if re.match(r'^(\d+(?:\.\d+)*)\s+([A-Za-z].+)\s*$', line) and i + 1 < len(lines):
-            next_line = lines[i + 1].strip()
-            if re.match(r'^\d+\s*$', next_line):
-                num = re.match(r'^(\d+(?:\.\d+)*)', line).group(1)
-                title = re.match(r'^(\d+(?:\.\d+)*)\s+(.+)', line).group(2).strip()
-                page_num = next_line.strip()
-                if 3 <= len(title) <= 120:
-                    toc_entries.append((num, title, page_num))
+    
+    # If explicit TOC found, return it
+    if toc_entries:
+        return toc_entries
+    
+    # Fallback: Build TOC from detected headings and their page positions
+    headings = extract_document_headings(text)
+    if headings:
+        for num, title in headings:
+            # Find which page this heading appears on
+            # Look for "Page X Text:" that comes before this heading in the text
+            page_num = None
+            search_pattern = re.escape(title)
+            
+            # Search for the heading and track which page it's on
+            for i, line in enumerate(lines):
+                if title in line or re.search(search_pattern, line, re.IGNORECASE):
+                    # Look backwards for the page marker
+                    for j in range(i, max(0, i-20), -1):
+                        page_match = re.search(r'Page\s+(\d+)\s+Text:', lines[j])
+                        if page_match:
+                            page_num = page_match.group(1)
+                            break
+                    if page_num:
+                        break
+            
+            # If no page found, try to infer from pattern
+            if not page_num:
+                # Look for any page number near this heading in the line itself
+                page_search = re.search(r'Page\s+(\d+)', title)
+                if page_search:
+                    page_num = page_search.group(1)
+            
+            # Add to TOC with or without page number
+            toc_entries.append((num, title, page_num or "?"))
     
     return toc_entries
 
