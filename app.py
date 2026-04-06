@@ -1263,6 +1263,133 @@ def parse_extracted_content(content):
     return sections
 
 
+@st.cache_data(show_spinner=False)
+def build_summary_download_assets(file_name, file_bytes):
+    file_name_lower = file_name.lower()
+    image_items = []
+    table_items = []
+
+    try:
+        if file_name_lower.endswith(".pdf"):
+            with pdfplumber.open(BytesIO(file_bytes)) as pdf:
+                for page_index, page in enumerate(pdf.pages, start=1):
+                    for image_index, image_info in enumerate(page.images or [], start=1):
+                        try:
+                            bbox = (
+                                image_info.get("x0", 0),
+                                image_info.get("top", 0),
+                                image_info.get("x1", 0),
+                                image_info.get("bottom", 0)
+                            )
+                            if bbox[0] < bbox[2] and bbox[1] < bbox[3]:
+                                image_items.append({
+                                    "label": f"{file_name} - Page {page_index} Image {image_index}",
+                                    "data": crop_pdf_region_to_png(page, bbox),
+                                    "file_name": f"{os.path.splitext(file_name)[0]}_page_{page_index}_image_{image_index}.png",
+                                    "mime": "image/png"
+                                })
+                        except Exception:
+                            pass
+
+                    for table_index, table in enumerate(page.extract_tables() or [], start=1):
+                        if table and any(any(cell for cell in row) for row in table):
+                            try:
+                                table_items.append({
+                                    "label": f"{file_name} - Page {page_index} Table {table_index}",
+                                    "data": table_to_png_bytes(table, title=f"Page {page_index} Table {table_index}"),
+                                    "file_name": f"{os.path.splitext(file_name)[0]}_page_{page_index}_table_{table_index}.png",
+                                    "mime": "image/png"
+                                })
+                            except Exception:
+                                pass
+
+        elif file_name_lower.endswith(".docx"):
+            doc = docx.Document(BytesIO(file_bytes))
+            image_index = 1
+            for rel in doc.part.rels.values():
+                if "image" in rel.reltype:
+                    try:
+                        image_bytes = rel.target_part.blob
+                        image_items.append({
+                            "label": f"{file_name} - Image {image_index}",
+                            "data": image_bytes_to_png_bytes(image_bytes),
+                            "file_name": f"{os.path.splitext(file_name)[0]}_image_{image_index}.png",
+                            "mime": "image/png"
+                        })
+                        image_index += 1
+                    except Exception:
+                        pass
+
+            for table_index, table in enumerate(doc.tables, start=1):
+                table_data = [[cell.text.strip() for cell in row.cells] for row in table.rows]
+                if table_data:
+                    try:
+                        table_items.append({
+                            "label": f"{file_name} - Table {table_index}",
+                            "data": table_to_png_bytes(table_data, title=f"Table {table_index}"),
+                            "file_name": f"{os.path.splitext(file_name)[0]}_table_{table_index}.png",
+                            "mime": "image/png"
+                        })
+                    except Exception:
+                        pass
+
+        elif file_name_lower.endswith(".pptx"):
+            prs = Presentation(BytesIO(file_bytes))
+            image_index = 1
+            table_index = 1
+            for slide_index, slide in enumerate(prs.slides, start=1):
+                for shape in slide.shapes:
+                    if hasattr(shape, "image"):
+                        try:
+                            image_items.append({
+                                "label": f"{file_name} - Slide {slide_index} Image {image_index}",
+                                "data": image_bytes_to_png_bytes(shape.image.blob),
+                                "file_name": f"{os.path.splitext(file_name)[0]}_slide_{slide_index}_image_{image_index}.png",
+                                "mime": "image/png"
+                            })
+                            image_index += 1
+                        except Exception:
+                            pass
+                    if hasattr(shape, "table"):
+                        try:
+                            table_data = [
+                                [cell.text.strip() for cell in row.cells]
+                                for row in shape.table.rows
+                            ]
+                            table_items.append({
+                                "label": f"{file_name} - Slide {slide_index} Table {table_index}",
+                                "data": table_to_png_bytes(table_data, title=f"Slide {slide_index} Table {table_index}"),
+                                "file_name": f"{os.path.splitext(file_name)[0]}_slide_{slide_index}_table_{table_index}.png",
+                                "mime": "image/png"
+                            })
+                            table_index += 1
+                        except Exception:
+                            pass
+
+        elif file_name_lower.endswith(".xlsx"):
+            data = extract_excel_data(file_name, file_bytes)
+            if data:
+                preview_df = pd.DataFrame(data).head(20)
+                table_items.append({
+                    "label": f"{file_name} - Preview Table",
+                    "data": table_to_png_bytes(dataframe_to_table_rows(preview_df), title=f"{file_name} Preview"),
+                    "file_name": f"{os.path.splitext(file_name)[0]}_preview.png",
+                    "mime": "image/png"
+                })
+
+        elif file_name_lower.endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp")):
+            image_items.append({
+                "label": f"{file_name} - Image",
+                "data": image_bytes_to_png_bytes(file_bytes),
+                "file_name": f"{os.path.splitext(file_name)[0]}.png",
+                "mime": "image/png"
+            })
+    except Exception:
+        return {"images": [], "tables": []}
+
+    return {"images": image_items, "tables": table_items}
+
+
 def render_extracted_assets_preview(file_name, file_entry):
     st.markdown(f"**Preview: {file_name}**")
     assets = build_summary_download_assets(file_name, file_entry["bytes"])
@@ -1689,133 +1816,6 @@ def get_document_asset_counts(file_name, file_bytes, extracted_text):
         image_count = int(image_match.group(1)) if image_match else 0
 
     return page_count, image_count, table_count
-
-
-@st.cache_data(show_spinner=False)
-def build_summary_download_assets(file_name, file_bytes):
-    file_name_lower = file_name.lower()
-    image_items = []
-    table_items = []
-
-    try:
-        if file_name_lower.endswith(".pdf"):
-            with pdfplumber.open(BytesIO(file_bytes)) as pdf:
-                for page_index, page in enumerate(pdf.pages, start=1):
-                    for image_index, image_info in enumerate(page.images or [], start=1):
-                        try:
-                            bbox = (
-                                image_info.get("x0", 0),
-                                image_info.get("top", 0),
-                                image_info.get("x1", 0),
-                                image_info.get("bottom", 0)
-                            )
-                            if bbox[0] < bbox[2] and bbox[1] < bbox[3]:
-                                image_items.append({
-                                    "label": f"{file_name} - Page {page_index} Image {image_index}",
-                                    "data": crop_pdf_region_to_png(page, bbox),
-                                    "file_name": f"{os.path.splitext(file_name)[0]}_page_{page_index}_image_{image_index}.png",
-                                    "mime": "image/png"
-                                })
-                        except Exception:
-                            pass
-
-                    for table_index, table in enumerate(page.extract_tables() or [], start=1):
-                        if table and any(any(cell for cell in row) for row in table):
-                            try:
-                                table_items.append({
-                                    "label": f"{file_name} - Page {page_index} Table {table_index}",
-                                    "data": table_to_png_bytes(table, title=f"Page {page_index} Table {table_index}"),
-                                    "file_name": f"{os.path.splitext(file_name)[0]}_page_{page_index}_table_{table_index}.png",
-                                    "mime": "image/png"
-                                })
-                            except Exception:
-                                pass
-
-        elif file_name_lower.endswith(".docx"):
-            doc = docx.Document(BytesIO(file_bytes))
-            image_index = 1
-            for rel in doc.part.rels.values():
-                if "image" in rel.reltype:
-                    try:
-                        image_bytes = rel.target_part.blob
-                        image_items.append({
-                            "label": f"{file_name} - Image {image_index}",
-                            "data": image_bytes_to_png_bytes(image_bytes),
-                            "file_name": f"{os.path.splitext(file_name)[0]}_image_{image_index}.png",
-                            "mime": "image/png"
-                        })
-                        image_index += 1
-                    except Exception:
-                        pass
-
-            for table_index, table in enumerate(doc.tables, start=1):
-                table_data = [[cell.text.strip() for cell in row.cells] for row in table.rows]
-                if table_data:
-                    try:
-                        table_items.append({
-                            "label": f"{file_name} - Table {table_index}",
-                            "data": table_to_png_bytes(table_data, title=f"Table {table_index}"),
-                            "file_name": f"{os.path.splitext(file_name)[0]}_table_{table_index}.png",
-                            "mime": "image/png"
-                        })
-                    except Exception:
-                        pass
-
-        elif file_name_lower.endswith(".pptx"):
-            prs = Presentation(BytesIO(file_bytes))
-            image_index = 1
-            table_index = 1
-            for slide_index, slide in enumerate(prs.slides, start=1):
-                for shape in slide.shapes:
-                    if hasattr(shape, "image"):
-                        try:
-                            image_items.append({
-                                "label": f"{file_name} - Slide {slide_index} Image {image_index}",
-                                "data": image_bytes_to_png_bytes(shape.image.blob),
-                                "file_name": f"{os.path.splitext(file_name)[0]}_slide_{slide_index}_image_{image_index}.png",
-                                "mime": "image/png"
-                            })
-                            image_index += 1
-                        except Exception:
-                            pass
-                    if hasattr(shape, "table"):
-                        try:
-                            table_data = [
-                                [cell.text.strip() for cell in row.cells]
-                                for row in shape.table.rows
-                            ]
-                            table_items.append({
-                                "label": f"{file_name} - Slide {slide_index} Table {table_index}",
-                                "data": table_to_png_bytes(table_data, title=f"Slide {slide_index} Table {table_index}"),
-                                "file_name": f"{os.path.splitext(file_name)[0]}_slide_{slide_index}_table_{table_index}.png",
-                                "mime": "image/png"
-                            })
-                            table_index += 1
-                        except Exception:
-                            pass
-
-        elif file_name_lower.endswith(".xlsx"):
-            data = extract_excel_data(file_name, file_bytes)
-            if data:
-                preview_df = pd.DataFrame(data).head(20)
-                table_items.append({
-                    "label": f"{file_name} - Preview Table",
-                    "data": table_to_png_bytes(dataframe_to_table_rows(preview_df), title=f"{file_name} Preview"),
-                    "file_name": f"{os.path.splitext(file_name)[0]}_preview.png",
-                    "mime": "image/png"
-                })
-
-        elif file_name_lower.endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp")):
-            image_items.append({
-                "label": f"{file_name} - Image",
-                "data": image_bytes_to_png_bytes(file_bytes),
-                "file_name": f"{os.path.splitext(file_name)[0]}.png",
-                "mime": "image/png"
-            })
-    except Exception:
-        return {"images": [], "tables": []}
-
-    return {"images": image_items, "tables": table_items}
 
 
 def render_chat_summary_downloads():
