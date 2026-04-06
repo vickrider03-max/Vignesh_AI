@@ -1933,18 +1933,35 @@ def extract_page_text(text, page_number=1):
 
 
 def extract_document_headings(text):
+    """Extract numbered headings from document text."""
     headings = []
-    lines = [line.strip() for line in str(text).splitlines() if line.strip()]
+    text = str(text)
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    
     for line in lines:
+        # Skip lines that are too long
         if len(line) > 120:
             continue
-
-        numbered = re.match(r'^(\d+(?:\.\d+)*)(?:[.)]|\s+)\s+(.+)', line)
-        if numbered:
-            title = numbered.group(2).strip()
-            if 3 <= len(title) <= 120 and not title.isupper():
-                headings.append((numbered.group(1), title))
-
+        
+        # Skip metadata, page markers, and special content
+        if (line.isupper() or line.endswith(":") or 
+            "Page" in line or "PDF Metadata" in line or 
+            "Total Pages" in line or "TABLE:" in line):
+            continue
+        
+        # Match numbered headings at start: "1 Overview", "1.1 Introduction", etc.
+        match = re.match(r'^(\d+(?:\.\d+)*)\s+([A-Za-z\s][^.]*?)(?:\s*\.+\s*\d+)?\s*$', line)
+        if match:
+            num = match.group(1)
+            title = match.group(2).strip()
+            
+            # Clean up any trailing dots or page numbers
+            title = re.sub(r'\s*\.+\s*\d*\s*$', '', title).strip()
+            
+            if 3 <= len(title) <= 120:
+                headings.append((num, title))
+    
+    # Remove duplicates while preserving order
     seen = set()
     deduped = []
     for num, title in headings:
@@ -1952,26 +1969,30 @@ def extract_document_headings(text):
         if key not in seen:
             seen.add(key)
             deduped.append((num, title))
+    
     return deduped
 
 
 def extract_toc_with_page_numbers(text):
     """Extract table of contents entries with page numbers from document."""
     toc_entries = []
-    lines = [line.strip() for line in str(text).splitlines() if line.strip()]
+    text = str(text)
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
     
-    # Search in first 200 lines for TOC (usually appears early in document)
-    search_lines = lines[:200]
-    
-    for line in search_lines:
+    # Search throughout the document for TOC entries
+    for i, line in enumerate(lines):
         # Skip lines that are too long or too short
         if len(line) < 5 or len(line) > 150:
             continue
         
-        # Try multiple regex patterns to match various TOC formats
+        # Skip metadata and page markers
+        if "Page" in line and ("Text:" in line or "Table" in line):
+            continue
+        if line.isupper() or "PDF Metadata" in line or "Total Pages" in line:
+            continue
         
-        # Pattern 1: "1 Overview ..................... 3" (with dots separator)
-        match = re.match(r'^(\d+(?:\.\d+)*)\s+(.+?)\s+\.+\s*(\d+)\s*$', line)
+        # Try Pattern 1: "1 Overview ..................... 3" (with dots)
+        match = re.match(r'^(\d+(?:\.\d+)*)\s+(.+?)\s+\.{2,}\s*(\d+)\s*$', line)
         if match:
             num = match.group(1)
             title = match.group(2).strip()
@@ -1980,29 +2001,26 @@ def extract_toc_with_page_numbers(text):
                 toc_entries.append((num, title, page_num))
             continue
         
-        # Pattern 2: "1 Overview    3" (multiple spaces, no dots)
-        # Look for: number, space, text, spaces, number at end
+        # Try Pattern 2: "1 Overview    3" (many spaces between title and page)
         match = re.match(r'^(\d+(?:\.\d+)*)\s+(.+?)\s{3,}(\d+)\s*$', line)
         if match:
             num = match.group(1)
             title = match.group(2).strip()
             page_num = match.group(3)
-            # Validate title doesn't have too many numbers and is reasonable length
             num_count = len(re.findall(r'\d+', title))
             if 3 <= len(title) <= 120 and num_count <= 2:
                 toc_entries.append((num, title, page_num))
             continue
         
-        # Pattern 3: "Overview 3" (simple: title page, no section number)
-        # Only match if no leading number was found
-        match = re.match(r'^([A-Z][^0-9]*?)\s+(\d+)\s*$', line)
-        if match and not re.match(r'^\d', line):
-            title = match.group(1).strip()
-            page_num = match.group(2)
-            if 3 <= len(title) <= 120 and len(title) < 50:
-                # Check if this looks like a TOC entry (not a random line)
-                if any(word in title.lower() for word in ['overview', 'introduction', 'function', 'training', 'contents', 'index', 'chapter', 'section', 'appendix']):
-                    toc_entries.append(('', title, page_num))
+        # Try Pattern 3: "1 Overview" followed by page on next line
+        if re.match(r'^(\d+(?:\.\d+)*)\s+([A-Za-z].+)\s*$', line) and i + 1 < len(lines):
+            next_line = lines[i + 1].strip()
+            if re.match(r'^\d+\s*$', next_line):
+                num = re.match(r'^(\d+(?:\.\d+)*)', line).group(1)
+                title = re.match(r'^(\d+(?:\.\d+)*)\s+(.+)', line).group(2).strip()
+                page_num = next_line.strip()
+                if 3 <= len(title) <= 120:
+                    toc_entries.append((num, title, page_num))
     
     return toc_entries
 
@@ -2010,7 +2028,6 @@ def extract_toc_with_page_numbers(text):
 @st.cache_data(show_spinner=False)
 def build_file_overview(file_name, text):
     text = str(text)
-    page1_text = extract_page_text(text, 1)
     toc_entries = extract_toc_with_page_numbers(text)
     all_headings = extract_document_headings(text)
 
@@ -2019,15 +2036,18 @@ def build_file_overview(file_name, text):
 
     overview_parts = [f"📄 **{file_name}**"]
     
+    # Table of Contents section
     overview_parts.append("### Table of Contents")
     if toc_entries:
         overview_parts.append("| Contents | Page No |")
         overview_parts.append("|----------|---------|")
         for num, title, page_num in toc_entries:
-            overview_parts.append(f"| {num} {title} | {page_num} |")
+            content_str = f"{num} {title}" if num else title
+            overview_parts.append(f"| {content_str} | {page_num} |")
     else:
         overview_parts.append("- No table of contents found with page numbers.")
 
+    # Document Headings section
     overview_parts.append("### Document Headings")
     if all_headings:
         for num, title in all_headings:
@@ -2035,6 +2055,7 @@ def build_file_overview(file_name, text):
     else:
         overview_parts.append("- No document headings were detected.")
 
+    # Document Assets section
     overview_parts.append("### Document Assets")
     overview_parts.append(f"- Images: {image_count}")
     overview_parts.append(f"- Tables: {table_count}")
