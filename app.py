@@ -3231,7 +3231,7 @@ with tab1:
                             else:
                                 response = "⚠️ Specify the search word or phrase in quotes. Example: find('keyword') or search(\"keyword\")"
                         elif "overview" in user_input_lower:
-                            st.subheader("Document Overview")
+                            response_lines = []
                             for f in chat_files:
                                 file_text = st.session_state.file_texts.get(f, "")
                                 if file_text.strip():
@@ -3244,21 +3244,21 @@ with tab1:
                                             content_str = f"{num} {title}" if num else title
                                             preview_link = create_preview_link(f, highlight_term=title)
                                             if preview_link:
-                                                st.markdown(f"- <a href='{preview_link}' target='_blank'>{html.escape(content_str)}</a>", unsafe_allow_html=True)
+                                                response_lines.append(f"- <a href='{preview_link}' target='_blank'>{html.escape(content_str)}</a>")
                                             else:
-                                                st.markdown(f"- {content_str}")
+                                                response_lines.append(f"- {html.escape(content_str)}")
                                     if all_headings:
                                         st.markdown("### Document Headings")
                                         for num, title in all_headings:
                                             content_str = f"{num} {title}" if num else title
                                             preview_link = create_preview_link(f, highlight_term=title)
                                             if preview_link:
-                                                st.markdown(f"- <a href='{preview_link}' target='_blank'>{html.escape(content_str)}</a>", unsafe_allow_html=True)
+                                                response_lines.append(f"- <a href='{preview_link}' target='_blank'>{html.escape(content_str)}</a>")
                                             else:
-                                                st.markdown(f"- {content_str}")
+                                                response_lines.append(f"- {html.escape(content_str)}")
                                 else:
-                                    st.markdown(f"📄 **{f}**\n\nNo readable content found in this document.")
-                            response = "Click on the links above to view highlights in a new tab."
+                                    response_lines.append(f"📄 **{f}**\n\nNo readable content found in this document.")
+                            response = "\n\n".join(response_lines)
                         elif any(term in user_input_lower for term in ["analyze", "summary", "summarize", "summarise"]):
                             result = []
                             summary_image_downloads = []
@@ -4111,3 +4111,4 @@ with tab4:
                                 render_capl_issue_table(issues)
                             except Exception as exc:
                                 st.error(f"AI suggestion failed: {exc}")
+
