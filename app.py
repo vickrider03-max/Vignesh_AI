@@ -1461,11 +1461,16 @@ if "preview_token" in query_params and query_params["preview_token"]:
 
 if preview_file_from_url:
     preview_entry = PREVIEW_STORE.get(preview_token)
-    st.title("📄 Extracted Asset Preview")
+    st.title("📄 Document Preview")
     if preview_entry is not None:
         st.markdown(f"### {preview_entry['name']}")
         st.markdown("---")
-        render_extracted_assets_preview(preview_entry['name'], file_entry=preview_entry)
+        render_document_preview(preview_entry['name'], file_entry=preview_entry)
+        show_assets = st.checkbox("Show extracted asset previews", value=False)
+        if show_assets:
+            st.markdown("---")
+            st.markdown("### Extracted Assets")
+            render_extracted_assets_preview(preview_entry['name'], file_entry=preview_entry)
     else:
         st.error("Preview file not found in the preview store. Please return to the app and click preview again.")
     st.stop()
