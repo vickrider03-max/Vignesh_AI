@@ -1577,6 +1577,120 @@ def get_selection_signature(file_names):
     return f"combined::{digest.hexdigest()}"
 
 
+SUMMARY_STOPWORDS = {
+    "the", "and", "for", "with", "that", "this", "from", "are", "was", "were", "into", "your", "have",
+    "has", "had", "not", "but", "you", "all", "can", "will", "use", "using", "used", "how", "what",
+    "when", "where", "which", "while", "into", "more", "than", "their", "there", "about", "after",
+    "before", "within", "without", "each", "page", "pages", "table", "tables", "image", "images",
+    "document", "content", "metadata", "information", "product", "file", "text"
+}
+
+
+@st.cache_data(show_spinner=False)
+def get_document_asset_counts(file_name, file_bytes, extracted_text):
+    file_name_lower = file_name.lower()
+    page_count = 0
+    table_count = 0
+    image_count = 0
+
+    if file_name_lower.endswith(".pdf"):
+        try:
+            with pdfplumber.open(BytesIO(file_bytes)) as pdf:
+                page_count = len(pdf.pages)
+                for page in pdf.pages:
+                    tables = page.extract_tables() or []
+                    table_count += sum(1 for table in tables if table and any(any(cell for cell in row) for row in table))
+                    image_count += len(getattr(page, "images", []) or [])
+        except Exception:
+            page_match = re.search(r"Total Pages:\s*(\d+)", extracted_text)
+            page_count = int(page_match.group(1)) if page_match else 0
+            table_count = len(re.findall(r"Page \d+ Table \d+:", extracted_text))
+            image_count = len(re.findall(r"\[IMAGE:", extracted_text))
+    elif file_name_lower.endswith(".pptx"):
+        slide_match = re.search(r"Total Slides:\s*(\d+)", extracted_text)
+        page_count = int(slide_match.group(1)) if slide_match else 0
+        table_count = len(re.findall(r"\bTable:\n", extracted_text))
+        image_count = len(re.findall(r"\[EMBEDDED_IMAGE:", extracted_text))
+    elif file_name_lower.endswith(".docx"):
+        table_count = len(re.findall(r"Table \d+:", extracted_text))
+        image_count = len(re.findall(r"\[EMBEDDED_IMAGE:", extracted_text))
+    elif file_name_lower.endswith(".xlsx"):
+        sheet_match = re.search(r"Workbook contains (\d+) sheets", extracted_text)
+        page_count = int(sheet_match.group(1)) if sheet_match else 0
+        table_count = len(re.findall(r"Sheet '.*?':", extracted_text))
+    elif file_name_lower.endswith((".html", ".htm")):
+        image_match = re.search(r"(\d+) images found in HTML", extracted_text)
+        image_count = int(image_match.group(1)) if image_match else 0
+
+    return page_count, image_count, table_count
+
+
+def build_detailed_document_summary(file_name, file_bytes, text):
+    lines = [line.strip() for line in str(text).splitlines() if line.strip()]
+    words = re.findall(r"\w+", str(text))
+    title_match = re.search(r"Title:\s*(.+)", str(text))
+    title = title_match.group(1).strip() if title_match and title_match.group(1).strip() else file_name
+
+    keyword_counts = Counter(
+        word.lower()
+        for word in words
+        if len(word) > 3 and word.lower() not in SUMMARY_STOPWORDS and not word.isdigit()
+    )
+    keywords = ", ".join(word.title() for word, _ in keyword_counts.most_common(6)) or "Not available"
+
+    page_count, image_count, table_count = get_document_asset_counts(file_name, file_bytes, str(text))
+
+    ignored_prefixes = (
+        "pdf metadata:", "document metadata:", "meta tags:", "total pages:", "total slides:",
+        "workbook contains", "error:", "[image:", "[embedded_image:"
+    )
+    key_lines = []
+    seen_lines = set()
+    for line in lines:
+        if line.lower().startswith(ignored_prefixes):
+            continue
+        if len(line) < 4:
+            continue
+        if line in seen_lines:
+            continue
+        seen_lines.add(line)
+        key_lines.append(line)
+        if len(key_lines) == 5:
+            break
+
+    preview_text = " ".join(key_lines[:3] if key_lines else lines[:3])[:500]
+
+    summary_parts = [
+        f"📄 **{file_name}**",
+        "",
+        "**Key Information:**",
+        f"Title: {title}",
+        f"Keywords: {keywords}",
+    ]
+
+    if key_lines:
+        summary_parts.extend(key_lines)
+    else:
+        summary_parts.append("No key content lines could be extracted.")
+
+    summary_parts.extend([
+        "",
+        "**Document Statistics:**",
+        f"Total characters: {len(str(text))}",
+        f"Estimated words: {len(words)}",
+        f"Content lines: {len(lines)}",
+        f"Pages/Sections: {page_count}",
+        f"Images found: {image_count}",
+        f"Tables found: {table_count}",
+        f"Downloadable preview assets: Images {image_count}, Tables {table_count}",
+        "",
+        "**Content Preview:**",
+        f"{preview_text}..." if preview_text else "No readable preview available."
+    ])
+
+    return "\n".join(summary_parts)
+
+
 @st.cache_data(show_spinner=False)
 def build_file_overview(file_name, text):
     lines = [line.strip() for line in str(text).splitlines() if line.strip()]
@@ -2637,72 +2751,14 @@ with tab1:
                                 response = "".join(response_blocks)
                             else:
                                 response = "⚠️ Specify the search word or phrase in quotes. Example: find('keyword') or search(\"keyword\")"
-                        elif any(term in user_input.lower() for term in ["analyze", "summary", "summarize", "overview"]):
+                        elif any(term in user_input.lower() for term in ["analyze", "summary", "summarize", "summarise", "overview"]):
                             result = []
-                            llm = load_llm()
                             for f in chat_files:
                                 file_text = st.session_state.file_texts.get(f, "")
+                                file_entry = get_uploaded_file_entry(f)
                                 if file_text.strip():
-                                    # Try LLM first
-                                    if llm:
-                                        summary_prompt = f"""Please provide a structured summary of the following document. Extract and organize information into these key sections:
-
-1. **Introduction/Overview**: Main purpose and description of the product/system
-2. **Key Features/Advantages**: Main benefits and capabilities
-3. **System Requirements**: Hardware/software requirements mentioned
-4. **Technical Specifications**: Important technical details, versions, or specifications
-5. **Usage Instructions**: How to use or implement the system
-6. **Important Notes/Warnings**: Any critical information, limitations, or warnings
-
-Document: {f}
-Content: {file_text[:8000]}
-
-Please provide a comprehensive summary organized by these sections. If a section is not mentioned in the document, you can omit it or note that it's not available."""
-                                        try:
-                                            summary_response = llm.invoke(summary_prompt)
-                                            summary_text = str(summary_response).strip()
-                                            if summary_text and len(summary_text) > 50 and not summary_text.lower().startswith(f.lower()):
-                                                result.append(f"📄 **{f}**\n\n{summary_text}")
-                                                continue
-                                        except Exception:
-                                            pass
-                                    
-                                    # Fallback: Extract meaningful content manually
-                                    lines = [line.strip() for line in file_text.splitlines() if line.strip() and len(line.strip()) > 10]
-                                    words = re.findall(r'\w+', file_text)
-                                    
-                                    # Look for tables
-                                    table_lines = [line for line in lines if '|' in line or 'TABLE:' in line]
-                                    
-                                    summary_parts = [f"📄 **{f}**"]
-                                    
-                                    if table_lines:
-                                        summary_parts.append("\n**Tables Found:**")
-                                        summary_parts.extend(f"- {line[:200]}" for line in table_lines[:5])
-                                    
-                                    # Extract key sentences (lines with important keywords)
-                                    key_sentences = []
-                                    for line in lines[:20]:  # First 20 lines
-                                        if any(keyword in line.lower() for keyword in ['introduction', 'overview', 'summary', 'key', 'important', 'main', 'product', 'information']):
-                                            key_sentences.append(line)
-                                    
-                                    if key_sentences:
-                                        summary_parts.append("\n**Key Information:**")
-                                        summary_parts.extend(f"- {sent[:200]}" for sent in key_sentences[:5])
-                                    
-                                    # Basic stats
-                                    summary_parts.append(f"\n**Document Statistics:**")
-                                    summary_parts.append(f"- Total characters: {len(file_text)}")
-                                    summary_parts.append(f"- Estimated words: {len(words)}")
-                                    summary_parts.append(f"- Content lines: {len(lines)}")
-                                    
-                                    # Preview of content
-                                    if lines:
-                                        summary_parts.append(f"\n**Content Preview:**")
-                                        preview = ' '.join(lines[:3])[:500]
-                                        summary_parts.append(f"{preview}...")
-                                    
-                                    result.append('\n'.join(summary_parts))
+                                    file_bytes = file_entry["bytes"] if file_entry else b""
+                                    result.append(build_detailed_document_summary(f, file_bytes, file_text))
                                 else:
                                     result.append(f"📄 **{f}**\n\nNo readable content found in this document.")
                             
