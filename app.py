@@ -556,7 +556,10 @@ elif hasattr(st, "get_query_params"):
         query_params = {}
 
 if "preview" in query_params and query_params["preview"]:
-    preview_file_from_url = urllib.parse.unquote_plus(query_params["preview"][0])
+    preview_value = query_params["preview"]
+    if isinstance(preview_value, list):
+        preview_value = preview_value[0] if preview_value else ""
+    preview_file_from_url = urllib.parse.unquote_plus(str(preview_value))
 
 if preview_file_from_url:
     uploaded_names = [f["name"] for f in st.session_state.uploaded_files]
@@ -658,7 +661,7 @@ with st.sidebar:
             with cols[1]:
                 url_safe_name = urllib.parse.quote_plus(file_dict["name"])
                 st.markdown(
-                    f"<a href='?preview={url_safe_name}' target='_blank' style='display:inline-block;padding:6px 10px;border-radius:8px;background:#1f4f91;color:#ffffff;text-decoration:none;'>👁️ Preview</a>",
+                    f"<a href='./?preview={url_safe_name}' target='_blank' style='display:inline-block;padding:6px 10px;border-radius:8px;background:#1f4f91;color:#ffffff;text-decoration:none;'>👁️ Preview</a>",
                     unsafe_allow_html=True,
                 )
             
