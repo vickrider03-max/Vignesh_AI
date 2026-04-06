@@ -210,6 +210,8 @@ if "selected_capl_file" not in st.session_state:
     st.session_state.selected_capl_file = "--Select CAPL file--"
 if "llm_task" not in st.session_state:
     st.session_state.llm_task = None
+if "user_session_start_time" not in st.session_state:
+    st.session_state.user_session_start_time = None
 
 # Load README.txt from file system
 def load_readme_text():
@@ -852,7 +854,7 @@ def render_document_preview(file_name, file_entry=None):
 
                             st.image(image_bytes, caption=f"Page {i+1}", use_container_width=True)
                             download_items.append({
-                                "label": f"Download {section_title} as PNG",
+                                "label": f"Download Page {i+1} as PNG",
                                 "data": image_bytes,
                                 "file_name": f"{os.path.splitext(file_name)[0]}_page_{i+1}.png",
                                 "mime": "image/png",
@@ -1378,6 +1380,7 @@ with st.sidebar:
             st.session_state.is_authenticated = False
             st.session_state.logged_in_username = ""
             st.session_state.user_role = None
+            st.session_state.user_session_start_time = None
             st.rerun()
 
         st.header("Upload Documents")
@@ -1907,6 +1910,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             st.session_state.is_authenticated = True
             st.session_state.logged_in_username = cleaned_username
             st.session_state.user_role = "creator"
+            st.session_state.user_session_start_time = datetime.now().isoformat()
             ist_tz = timezone('Asia/Kolkata')
             ist_time = datetime.now(ist_tz).strftime("%Y-%m-%d %H:%M:%S %Z")
             st.session_state.login_history.append({
@@ -1936,6 +1940,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             st.session_state.is_authenticated = True
             st.session_state.logged_in_username = cleaned_username
             st.session_state.user_role = "user"
+            st.session_state.user_session_start_time = datetime.now().isoformat()
             ist_tz = timezone('Asia/Kolkata')
             ist_time = datetime.now(ist_tz).strftime("%Y-%m-%d %H:%M:%S %Z")
             st.session_state.login_history.append({
@@ -2387,9 +2392,60 @@ def render_status_strip():
     username = st.session_state.get("logged_in_username") or "-"
     login_entries = st.session_state.get("login_history", [])
     last_login = login_entries[-1]["timestamp"] if login_entries else "-"
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     status_label = "Last Login" if role == "creator" else "Usage Time"
-    status_value = last_login if role == "creator" else current_time
+    session_start = st.session_state.get("user_session_start_time")
+
+    if role == "creator":
+        status_value = last_login
+    else:
+        elapsed_seconds = 0
+        if isinstance(session_start, str):
+            try:
+                session_start = datetime.fromisoformat(session_start)
+            except ValueError:
+                session_start = None
+        if isinstance(session_start, datetime):
+            elapsed_seconds = max(0, int((datetime.now() - session_start).total_seconds()))
+
+        hours = elapsed_seconds // 3600
+        minutes = (elapsed_seconds % 3600) // 60
+        seconds = elapsed_seconds % 60
+        status_value = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+    usage_timer_html = ""
+    if role != "creator":
+        usage_timer_html = f"""
+        <script>
+            (() => {{
+                const el = window.parent.document.getElementById("usage-time-value");
+                if (!el) return;
+                let seconds = {elapsed_seconds};
+                const formatTime = (totalSeconds) => {{
+                    const hrs = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
+                    const mins = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
+                    const secs = String(totalSeconds % 60).padStart(2, "0");
+                    return `${{hrs}}:${{mins}}:${{secs}}`;
+                }};
+                el.textContent = formatTime(seconds);
+                if (window.usageTimeInterval) {{
+                    clearInterval(window.usageTimeInterval);
+                }}
+                window.usageTimeInterval = setInterval(() => {{
+                    seconds += 1;
+                    const target = window.parent.document.getElementById("usage-time-value");
+                    if (target) {{
+                        target.textContent = formatTime(seconds);
+                    }}
+                }}, 1000);
+            }})();
+        </script>
+        """
+
+    status_value_html = (
+        f'<div class="status-value" id="usage-time-value">{html.escape(str(status_value))}</div>'
+        if role != "creator"
+        else f'<div class="status-value" style="font-size:14px;">{html.escape(str(status_value))}</div>'
+    )
 
     st.markdown(
         f"""
@@ -2408,9 +2464,10 @@ def render_status_strip():
             </div>
             <div class="status-tile">
                 <div class="status-label">{status_label}</div>
-                <div class="status-value" style="font-size:14px;">{html.escape(str(status_value))}</div>
+                {status_value_html}
             </div>
         </div>
+        {usage_timer_html}
         """,
         unsafe_allow_html=True
     )
