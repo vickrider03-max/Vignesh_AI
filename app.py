@@ -1,4 +1,4 @@
-import html, re, hashlib, os, json, base64
+import html, re, hashlib, os, json, base64, pickle
 import uuid
 import urllib.parse
 from collections import Counter, defaultdict
@@ -24,22 +24,16 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 PREVIEW_TOKENS = {}  # token -> {'file_name': str, 'timestamp': datetime}
 PREVIEW_STORE = {}   # token -> file_dict
 
-PREVIEW_DATA_FILE = "preview_data.json"
+PREVIEW_DATA_FILE = "preview_data.pkl"
 
 def load_preview_data():
     """Load preview data from file"""
     global PREVIEW_TOKENS, PREVIEW_STORE
     if os.path.exists(PREVIEW_DATA_FILE):
         try:
-            with open(PREVIEW_DATA_FILE, "r") as f:
-                data = json.load(f)
-                # Convert timestamp strings back to datetime objects
-                PREVIEW_TOKENS = {}
-                for token, token_data in data.get("tokens", {}).items():
-                    PREVIEW_TOKENS[token] = {
-                        'file_name': token_data['file_name'],
-                        'timestamp': datetime.fromisoformat(token_data['timestamp'])
-                    }
+            with open(PREVIEW_DATA_FILE, "rb") as f:
+                data = pickle.load(f)
+                PREVIEW_TOKENS = data.get("tokens", {})
                 PREVIEW_STORE = data.get("store", {})
         except Exception as e:
             st.warning(f"Could not load preview data: {e}")
@@ -50,16 +44,11 @@ def save_preview_data():
     """Save preview data to file"""
     try:
         data = {
-            "tokens": {},
+            "tokens": PREVIEW_TOKENS,
             "store": PREVIEW_STORE
         }
-        for token, token_data in PREVIEW_TOKENS.items():
-            data["tokens"][token] = {
-                'file_name': token_data['file_name'],
-                'timestamp': token_data['timestamp'].isoformat()
-            }
-        with open(PREVIEW_DATA_FILE, "w") as f:
-            json.dump(data, f)
+        with open(PREVIEW_DATA_FILE, "wb") as f:
+            pickle.dump(data, f)
     except Exception as e:
         st.warning(f"Could not save preview data: {e}")
 
@@ -1710,7 +1699,7 @@ def render_status_strip():
     username = st.session_state.get("logged_in_username") or "-"
     login_entries = st.session_state.get("login_history", [])
     last_login = login_entries[-1]["timestamp"] if login_entries else "-"
-    last_login_display = last_login if role == "creator" else "Creator only"
+    last_login_display = last_login if role == "creator" else "-"
 
     st.markdown(
         f"""
