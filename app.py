@@ -828,7 +828,7 @@ def get_uploaded_file_entry(file_name):
     return None
 
 
-def create_preview_link(file_name, highlight_term=None):
+def create_preview_link(file_name, highlight_term=None, page_num=None):
     file_entry = get_uploaded_file_entry(file_name)
     if not file_entry:
         return None
@@ -836,11 +836,12 @@ def create_preview_link(file_name, highlight_term=None):
     PREVIEW_TOKENS[token] = {'file_name': file_name, 'timestamp': datetime.now()}
     PREVIEW_STORE[token] = file_entry
     save_preview_data()
-    safe_term = urllib.parse.quote_plus(highlight_term) if highlight_term else None
-    url = f"./?preview_token={token}"
-    if safe_term:
-        url += f"&highlight={safe_term}"
-    return url
+    params = [f"preview_token={token}"]
+    if highlight_term:
+        params.append(f"highlight={urllib.parse.quote_plus(highlight_term)}")
+    if page_num is not None:
+        params.append(f"page={urllib.parse.quote_plus(str(page_num))}")
+    return "./?" + "&".join(params)
 
 
 def create_heading_anchor(text):
@@ -885,7 +886,7 @@ def render_text_block(text, highlight_term=None, anchor_id=None):
     return f"<pre style='white-space: pre-wrap; word-break: break-word; background:#f4f7fb; padding:12px; border-radius:8px; font-family: inherit;'>{highlighted}</pre>"
 
 
-def render_document_preview(file_name, file_entry=None, highlight_term=None):
+def render_document_preview(file_name, file_entry=None, highlight_term=None, highlight_page=None):
     st.markdown(f"**Preview: {file_name}**")
     if file_entry is None:
         ensure_file_processed(file_name)
@@ -913,7 +914,12 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None):
                 with pdfplumber.open(pdf_bio) as pdf:
                     st.markdown(f"**PDF Pages: {len(pdf.pages)}**")
                     highlight_found = False
+                    selected_page_index = None
+                    if highlight_page is not None and 1 <= highlight_page <= len(pdf.pages):
+                        selected_page_index = highlight_page - 1
                     for i, page in enumerate(pdf.pages):
+                        if selected_page_index is not None and i != selected_page_index:
+                            continue
                         try:
                             page_text = page.extract_text() or ""
                             page_anchor_id = None
@@ -923,6 +929,8 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None):
                             if page_anchor_id:
                                 st.markdown(f"<div id='{page_anchor_id}'></div>", unsafe_allow_html=True)
 
+                            if selected_page_index is not None:
+                                st.markdown(f"**Showing page {highlight_page} only.**")
                             page_image = page.to_image(resolution=150)
                             image_bytes_io = BytesIO()
                             page_image.original.save(image_bytes_io, format="PNG")
@@ -967,7 +975,7 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None):
                                     st.markdown(render_text_block(page_text, highlight_term, anchor_id=page_anchor_id), unsafe_allow_html=True)
                                 else:
                                     st.code(page_text, language="text")
-                    if highlight_term and not highlight_found:
+                    if highlight_term and not highlight_found and selected_page_index is None:
                         if file_name not in st.session_state.file_texts:
                             st.session_state.file_texts[file_name] = extract_text(file_name, file_entry["bytes"])
                         full_content = st.session_state.file_texts.get(file_name, "")
@@ -996,7 +1004,9 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None):
                                     mime=item["mime"],
                                     key=item["key"]
                                 )
-                    if highlight_term:
+                    if highlight_term and not highlight_found and selected_page_index is None:
+                        if file_name not in st.session_state.file_texts:
+                            st.session_state.file_texts[file_name] = extract_text(file_name, file_entry["bytes"])
                         full_content = st.session_state.file_texts.get(file_name, "")
                         if full_content.strip():
                             anchor_id = create_heading_anchor(highlight_term)
@@ -1559,6 +1569,7 @@ except Exception:
     query_params = {}
 
 highlight_term = None
+preview_page = None
 if "preview_token" in query_params and query_params["preview_token"]:
     preview_value = query_params["preview_token"]
     if isinstance(preview_value, list):
@@ -1571,6 +1582,14 @@ if "preview_token" in query_params and query_params["preview_token"]:
         if isinstance(highlight_value, list):
             highlight_value = highlight_value[0] if highlight_value else ""
         highlight_term = urllib.parse.unquote_plus(str(highlight_value))
+    if "page" in query_params and query_params["page"]:
+        page_value = query_params["page"]
+        if isinstance(page_value, list):
+            page_value = page_value[0] if page_value else ""
+        try:
+            preview_page = int(str(page_value))
+        except ValueError:
+            preview_page = None
 
     # If preview_token is present but not found, show error and stop
     if not token_data:
@@ -1587,7 +1606,7 @@ if preview_file_from_url:
     if preview_entry is not None:
         st.markdown(f"### {preview_entry['name']}")
         st.markdown("---")
-        render_document_preview(preview_entry['name'], file_entry=preview_entry, highlight_term=highlight_term)
+        render_document_preview(preview_entry['name'], file_entry=preview_entry, highlight_term=highlight_term, highlight_page=preview_page)
         show_assets = st.checkbox("Show extracted asset previews", value=False)
         if show_assets:
             st.markdown("---")
@@ -2063,6 +2082,19 @@ def extract_page_text(text, page_number=1):
     return "\n".join(lines[:80])
 
 
+def find_heading_page_number(text, heading):
+    text = str(text)
+    lines = [line for line in text.splitlines()]
+    heading_pattern = re.escape(str(heading).strip())
+    for index, line in enumerate(lines):
+        if re.search(rf"\b{heading_pattern}\b", line, re.IGNORECASE):
+            for j in range(index, -1, -1):
+                page_match = re.search(r'Page\s+(\d+)\s+Text:', lines[j], re.IGNORECASE)
+                if page_match:
+                    return int(page_match.group(1))
+    return None
+
+
 def extract_document_headings(text):
     """Extract numbered headings from document text."""
     headings = []
@@ -2158,7 +2190,11 @@ def build_file_overview(file_name, text):
         overview_parts.append("|----------|---------|")
         for num, title, page_num in toc_entries:
             content_str = f"{num} {title}" if num else title
-            overview_parts.append(f"| {content_str} | {page_num} |")
+            preview_link = create_preview_link(file_name, highlight_term=title, page_num=page_num if page_num != "?" else None)
+            if preview_link:
+                overview_parts.append(f"| <a href='{preview_link}' target='_blank'>{html.escape(content_str)}</a> | {page_num} |")
+            else:
+                overview_parts.append(f"| {content_str} | {page_num} |")
     else:
         overview_parts.append("- No table of contents found with page numbers.")
 
@@ -2168,7 +2204,8 @@ def build_file_overview(file_name, text):
         for num, title in all_headings:
             content_str = f"{num} {title}" if num else title
             anchor_id = create_heading_anchor(title)
-            preview_link = create_preview_link(file_name, highlight_term=title)
+            page_num = find_heading_page_number(text, title)
+            preview_link = create_preview_link(file_name, highlight_term=title, page_num=page_num)
             if preview_link:
                 overview_parts.append(f"- <a href='{preview_link}#{anchor_id}' target='_blank'>{html.escape(content_str)}</a>")
             else:
@@ -3242,7 +3279,8 @@ with tab1:
                                         st.markdown("### Table of Contents")
                                         for num, title, page_num in toc_entries:
                                             content_str = f"{num} {title}" if num else title
-                                            preview_link = create_preview_link(f, highlight_term=title)
+                                            page_param = page_num if page_num != "?" else None
+                                            preview_link = create_preview_link(f, highlight_term=title, page_num=page_param)
                                             if preview_link:
                                                 response_lines.append(f"- <a href='{preview_link}' target='_blank'>{html.escape(content_str)}</a>")
                                             else:
@@ -3251,7 +3289,8 @@ with tab1:
                                         st.markdown("### Document Headings")
                                         for num, title in all_headings:
                                             content_str = f"{num} {title}" if num else title
-                                            preview_link = create_preview_link(f, highlight_term=title)
+                                            page_num = find_heading_page_number(file_text, title)
+                                            preview_link = create_preview_link(f, highlight_term=title, page_num=page_num)
                                             if preview_link:
                                                 response_lines.append(f"- <a href='{preview_link}' target='_blank'>{html.escape(content_str)}</a>")
                                             else:
