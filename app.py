@@ -1587,7 +1587,7 @@ if preview_file_from_url:
     if preview_entry is not None:
         st.markdown(f"### {preview_entry['name']}")
         st.markdown("---")
-        render_document_preview(preview_entry['name'], file_entry=preview_entry, highlight_term=highlight_term)
+        render_document_preview(preview_entry['name'], file_entry=preview_entry, highlight_term=None)
         show_assets = st.checkbox("Show extracted asset previews", value=False)
         if show_assets:
             st.markdown("---")
@@ -3231,15 +3231,30 @@ with tab1:
                             else:
                                 response = "⚠️ Specify the search word or phrase in quotes. Example: find('keyword') or search(\"keyword\")"
                         elif "overview" in user_input_lower:
-                            result = []
+                            st.subheader("Document Overview")
                             for f in chat_files:
                                 file_text = st.session_state.file_texts.get(f, "")
-                                file_entry = get_uploaded_file_entry(f)
                                 if file_text.strip():
-                                    result.append(build_file_overview(f, file_text))
+                                    toc_entries = extract_toc_with_page_numbers(file_text)
+                                    all_headings = extract_document_headings(file_text)
+                                    st.markdown(f"📄 **{f}**")
+                                    if toc_entries:
+                                        st.markdown("### Table of Contents")
+                                        for num, title, page_num in toc_entries:
+                                            content_str = f"{num} {title}" if num else title
+                                            if st.button(f"{content_str} (Page {page_num})", key=f"toc_{f}_{num}_{title}_{page_num}"):
+                                                st.session_state.selected_overview = {"file": f, "type": "toc", "title": title, "page": page_num}
+                                                st.success("Highlight set! Switch to Overview tab to view.")
+                                    if all_headings:
+                                        st.markdown("### Document Headings")
+                                        for num, title in all_headings:
+                                            content_str = f"{num} {title}" if num else title
+                                            if st.button(content_str, key=f"heading_{f}_{num}_{title}"):
+                                                st.session_state.selected_overview = {"file": f, "type": "heading", "title": title}
+                                                st.success("Highlight set! Switch to Overview tab to view.")
                                 else:
-                                    result.append(f"📄 **{f}**\n\nNo readable content found in this document.")
-                            response = "\n\n---\n\n".join(result)
+                                    st.markdown(f"📄 **{f}**\n\nNo readable content found in this document.")
+                            response = "Click on the headings above to view highlights in the Overview tab."
                         elif any(term in user_input_lower for term in ["analyze", "summary", "summarize", "summarise"]):
                             result = []
                             summary_image_downloads = []
