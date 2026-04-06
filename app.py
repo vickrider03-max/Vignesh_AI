@@ -843,6 +843,15 @@ def create_preview_link(file_name, highlight_term=None):
     return url
 
 
+def create_heading_anchor(text):
+    anchor_text = str(text or "").strip().lower()
+    anchor_text = re.sub(r'[^a-z0-9]+', '-', anchor_text)
+    anchor_text = re.sub(r'-{2,}', '-', anchor_text).strip('-')
+    if not anchor_text:
+        anchor_text = 'preview'
+    return f"heading-{anchor_text}"
+
+
 def highlight_for_preview(text, highlight_term=None):
     if not highlight_term:
         return html.escape(text)
@@ -922,6 +931,11 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None):
                             st.warning(f"Could not render page {i+1} as image: {page_err}")
                             page_text = page.extract_text() or ""
                             if page_text.strip():
+                                page_anchor_id = None
+                                if highlight_term and highlight_term.lower() in page_text.lower():
+                                    page_anchor_id = create_heading_anchor(highlight_term)
+                                if page_anchor_id:
+                                    st.markdown(f"<div id='{page_anchor_id}'></div>", unsafe_allow_html=True)
                                 st.markdown(f"#### Page {i+1} Text")
                                 if highlight_term:
                                     st.markdown(render_text_block(page_text, highlight_term), unsafe_allow_html=True)
@@ -1082,6 +1096,8 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None):
                         st.info("No metadata available")
             elif section_type == "TEXT":
                 if section_content.strip():  # Only show if there's actual content
+                    section_anchor_id = create_heading_anchor(section_title)
+                    st.markdown(f"<div id='{section_anchor_id}'></div>", unsafe_allow_html=True)
                     st.markdown(f"### {section_title}")
                     if len(section_content) > 2000:
                         with st.expander("Show text content", expanded=False):
@@ -2097,10 +2113,11 @@ def build_file_overview(file_name, text):
     overview_parts.append("### Document Headings")
     if all_headings:
         for num, title in all_headings:
-            preview_link = create_preview_link(file_name, highlight_term=title)
             content_str = f"{num} {title}" if num else title
+            anchor_id = create_heading_anchor(content_str)
+            preview_link = create_preview_link(file_name, highlight_term=title)
             if preview_link:
-                overview_parts.append(f"- <a href='{preview_link}' target='_blank'>{html.escape(content_str)}</a>")
+                overview_parts.append(f"- <a href='{preview_link}#{anchor_id}' target='_blank'>{html.escape(content_str)}</a>")
             else:
                 overview_parts.append(f"- {content_str}")
     else:
