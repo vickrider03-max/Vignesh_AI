@@ -864,11 +864,25 @@ def highlight_for_preview(text, highlight_term=None):
     return highlighted
 
 
-def render_text_block(text, highlight_term=None):
-    if highlight_term:
-        highlighted = highlight_for_preview(text, highlight_term)
-        return f"<pre style='white-space: pre-wrap; word-break: break-word; background:#f4f7fb; padding:12px; border-radius:8px; font-family: inherit;'>{highlighted}</pre>"
-    return None
+def render_text_block(text, highlight_term=None, anchor_id=None):
+    if not highlight_term:
+        return None
+
+    escaped = html.escape(text)
+    pattern = re.compile(re.escape(highlight_term), re.IGNORECASE)
+    first_match = True
+
+    def replace_match(match):
+        nonlocal first_match
+        content = html.escape(match.group(0))
+        if first_match and anchor_id:
+            first_match = False
+            return f"<span id='{anchor_id}'></span><mark style='background:#fff3a3; padding:0 2px;'>{content}</mark>"
+        first_match = False
+        return f"<mark style='background:#fff3a3; padding:0 2px;'>{content}</mark>"
+
+    highlighted = pattern.sub(replace_match, escaped)
+    return f"<pre style='white-space: pre-wrap; word-break: break-word; background:#f4f7fb; padding:12px; border-radius:8px; font-family: inherit;'>{highlighted}</pre>"
 
 
 def render_document_preview(file_name, file_entry=None, highlight_term=None):
@@ -938,7 +952,7 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None):
                                     st.markdown(f"<div id='{page_anchor_id}'></div>", unsafe_allow_html=True)
                                 st.markdown(f"#### Page {i+1} Text")
                                 if highlight_term:
-                                    st.markdown(render_text_block(page_text, highlight_term), unsafe_allow_html=True)
+                                    st.markdown(render_text_block(page_text, highlight_term, anchor_id=page_anchor_id), unsafe_allow_html=True)
                                 else:
                                     st.code(page_text, language="text")
                     if image_download_items:
@@ -961,6 +975,13 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None):
                                     mime=item["mime"],
                                     key=item["key"]
                                 )
+                    if highlight_term:
+                        full_content = st.session_state.file_texts.get(file_name, "")
+                        if full_content.strip():
+                            anchor_id = create_heading_anchor(highlight_term)
+                            st.markdown(f"<div id='{anchor_id}'></div>", unsafe_allow_html=True)
+                            st.markdown("### Highlighted Text")
+                            st.markdown(render_text_block(full_content, highlight_term, anchor_id=anchor_id), unsafe_allow_html=True)
                     return
             except Exception as e:
                 st.error(f"Could not render PDF preview: {e}")
@@ -1068,17 +1089,19 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None):
             if not has_meaningful_text:
                 # Fall back to showing raw content
                 st.markdown("### Document Content")
+                anchor_id = create_heading_anchor(highlight_term) if highlight_term else None
                 with st.expander("Show extracted text", expanded=True):
                     if highlight_term:
-                        st.markdown(render_text_block(full_content.strip(), highlight_term), unsafe_allow_html=True)
+                        st.markdown(render_text_block(full_content.strip(), highlight_term, anchor_id=anchor_id), unsafe_allow_html=True)
                     else:
                         st.code(full_content.strip(), language="text")
                 return
         
         if not sections:
             st.warning("Content was extracted but could not be parsed into displayable sections.")
+            anchor_id = create_heading_anchor(highlight_term) if highlight_term else None
             if highlight_term:
-                st.markdown(render_text_block(full_content[:1000] + ("..." if len(full_content) > 1000 else ""), highlight_term), unsafe_allow_html=True)
+                st.markdown(render_text_block(full_content[:1000] + ("..." if len(full_content) > 1000 else ""), highlight_term, anchor_id=anchor_id), unsafe_allow_html=True)
             else:
                 st.code(full_content[:1000] + ("..." if len(full_content) > 1000 else ""), language="text")
             return
@@ -1102,12 +1125,12 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None):
                     if len(section_content) > 2000:
                         with st.expander("Show text content", expanded=False):
                             if highlight_term:
-                                st.markdown(render_text_block(section_content, highlight_term), unsafe_allow_html=True)
+                                st.markdown(render_text_block(section_content, highlight_term, anchor_id=None), unsafe_allow_html=True)
                             else:
                                 st.code(section_content, language="text")
                     else:
                         if highlight_term:
-                            st.markdown(render_text_block(section_content, highlight_term), unsafe_allow_html=True)
+                            st.markdown(render_text_block(section_content, highlight_term, anchor_id=None), unsafe_allow_html=True)
                         else:
                             st.code(section_content, language="text")
             elif section_type == "TABLE":
@@ -1671,10 +1694,17 @@ with st.sidebar:
         if new_files:
             with st.spinner("Loading uploaded files..."):
                 existing_names = {f["name"] for f in st.session_state.uploaded_files}
+                uploaded_new_file = False
                 for file in new_files:
                     if file.name not in existing_names:
                         file_bytes = file.read()
                         st.session_state.uploaded_files.append({"name": file.name, "bytes": file_bytes})
+                        uploaded_new_file = True
+                if uploaded_new_file:
+                    st.session_state.messages = []
+                    st.session_state.chat_summary_downloads = {"images": [], "tables": []}
+                    st.session_state.chat_file_selection = []
+                    st.success("✅ New files uploaded. Chat history has been cleared.")
 
         st.markdown("---")
         st.markdown("### Uploaded files")
@@ -1728,6 +1758,8 @@ with st.sidebar:
             for key in ["uploaded_files", "selected_files", "file_texts", "excel_data_by_file", "vector_stores",
                         "messages"]:
                 st.session_state[key].clear()
+            st.session_state.chat_summary_downloads = {"images": [], "tables": []}
+            st.session_state.chat_file_selection = []
             st.session_state.capl_last_analyzed_file = None
             st.session_state.capl_last_issues = None
             st.session_state.file_uploader_key += 1
@@ -2114,7 +2146,7 @@ def build_file_overview(file_name, text):
     if all_headings:
         for num, title in all_headings:
             content_str = f"{num} {title}" if num else title
-            anchor_id = create_heading_anchor(content_str)
+            anchor_id = create_heading_anchor(title)
             preview_link = create_preview_link(file_name, highlight_term=title)
             if preview_link:
                 overview_parts.append(f"- <a href='{preview_link}#{anchor_id}' target='_blank'>{html.escape(content_str)}</a>")
@@ -3120,6 +3152,8 @@ with tab1:
         if st.button("🔄 Reset", key="reset_chat_selection", use_container_width=True):
             st.session_state.chat_file_selection = []
             st.session_state.chat_summary_downloads = {"images": [], "tables": []}
+            st.session_state.messages = []
+            st.success("✅ Chat reset!")
             st.rerun()
 
     st.info(
