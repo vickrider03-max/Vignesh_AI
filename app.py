@@ -1587,7 +1587,7 @@ if preview_file_from_url:
     if preview_entry is not None:
         st.markdown(f"### {preview_entry['name']}")
         st.markdown("---")
-        render_document_preview(preview_entry['name'], file_entry=preview_entry, highlight_term=None)
+        render_document_preview(preview_entry['name'], file_entry=preview_entry, highlight_term=highlight_term)
         show_assets = st.checkbox("Show extracted asset previews", value=False)
         if show_assets:
             st.markdown("---")
@@ -3242,19 +3242,23 @@ with tab1:
                                         st.markdown("### Table of Contents")
                                         for num, title, page_num in toc_entries:
                                             content_str = f"{num} {title}" if num else title
-                                            if st.button(f"{content_str} (Page {page_num})", key=f"toc_{f}_{num}_{title}_{page_num}"):
-                                                st.session_state.selected_overview = {"file": f, "type": "toc", "title": title, "page": page_num}
-                                                st.success("Highlight set! Switch to Overview tab to view.")
+                                            preview_link = create_preview_link(f, highlight_term=title)
+                                            if preview_link:
+                                                st.markdown(f"- <a href='{preview_link}' target='_blank'>{html.escape(content_str)}</a>", unsafe_allow_html=True)
+                                            else:
+                                                st.markdown(f"- {content_str}")
                                     if all_headings:
                                         st.markdown("### Document Headings")
                                         for num, title in all_headings:
                                             content_str = f"{num} {title}" if num else title
-                                            if st.button(content_str, key=f"heading_{f}_{num}_{title}"):
-                                                st.session_state.selected_overview = {"file": f, "type": "heading", "title": title}
-                                                st.success("Highlight set! Switch to Overview tab to view.")
+                                            preview_link = create_preview_link(f, highlight_term=title)
+                                            if preview_link:
+                                                st.markdown(f"- <a href='{preview_link}' target='_blank'>{html.escape(content_str)}</a>", unsafe_allow_html=True)
+                                            else:
+                                                st.markdown(f"- {content_str}")
                                 else:
                                     st.markdown(f"📄 **{f}**\n\nNo readable content found in this document.")
-                            response = "Click on the headings above to view highlights in the Overview tab."
+                            response = "Click on the links above to view highlights in a new tab."
                         elif any(term in user_input_lower for term in ["analyze", "summary", "summarize", "summarise"]):
                             result = []
                             summary_image_downloads = []
