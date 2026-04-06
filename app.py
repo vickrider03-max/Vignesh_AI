@@ -370,6 +370,184 @@ For support or feedback, contact vigneshs075@gmail.com.
 README_TEXT = load_readme_text()
 
 # -------------------------------
+# DOCUMENT PREVIEW FUNCTION
+# -------------------------------
+def ensure_file_processed(file_name):
+    file_info = get_uploaded_file_entry(file_name)
+    if not file_info:
+        return
+    file_name_lower = file_name.lower()
+
+    if file_name not in st.session_state.file_texts:
+        st.session_state.file_texts[file_name] = extract_text(file_name, file_info["bytes"])
+
+    if file_name_lower.endswith(".xlsx") and file_name not in st.session_state.excel_data_by_file:
+        st.session_state.excel_data_by_file[file_name] = extract_excel_data(file_name, file_info["bytes"])
+
+
+def extract_text(file_name, file_bytes):
+    text = ""
+    bio = BytesIO(file_bytes)
+    file_name_lower = file_name.lower()
+    try:
+        if file_name_lower.endswith(".pdf"):
+            with pdfplumber.open(bio) as pdf:
+                text_parts = []
+                for page in pdf.pages:
+                    page_text = page.extract_text() or ""
+                    text_parts.append(page_text)
+                    
+                    # Extract tables from this page
+                    tables = page.extract_tables()
+                    for table in tables:
+                        if table:
+                            # Convert table to text representation
+                            table_text = "\n".join([" | ".join(str(cell) if cell else "" for cell in row) for row in table])
+                            text_parts.append(f"\nTABLE:\n{table_text}\n")
+                
+                text = "\n".join(text_parts)
+        elif file_name_lower.endswith(".txt"):
+            text = bio.read().decode("utf-8", errors="ignore")
+        elif file_name_lower.endswith(".can"):
+            text = bio.read().decode("utf-8", errors="ignore")
+        elif file_name_lower.endswith(".docx"):
+            doc = docx.Document(bio)
+            text = "\n".join([p.text for p in doc.paragraphs])
+        elif file_name_lower.endswith(".pptx"):
+            prs = Presentation(bio)
+            text = "\n".join(shape.text for slide in prs.slides for shape in slide.shapes if hasattr(shape, "text"))
+        elif file_name_lower.endswith((".html", ".htm")):
+            soup = BeautifulSoup(bio.read(), "html.parser")
+            text = soup.get_text(separator="\n")
+        elif file_name_lower.endswith(".xlsx"):
+            wb = openpyxl.load_workbook(bio, data_only=True)
+            text = "\n".join(" ".join(str(c) for c in row if c) for sh in wb for row in sh.iter_rows(values_only=True))
+    except Exception:
+        text = ""
+    return text
+
+
+def get_uploaded_file_entry(file_name):
+    for file_info in st.session_state.uploaded_files:
+        if file_info["name"] == file_name:
+            return file_info
+    return None
+
+
+def extract_docx_preview(file_bytes):
+    try:
+        document = docx.Document(BytesIO(file_bytes))
+        paragraphs = [paragraph.text.strip() for paragraph in document.paragraphs if paragraph.text.strip()]
+        return paragraphs[:25]
+    except Exception:
+        return []
+
+
+def extract_pptx_preview(file_bytes):
+    try:
+        presentation = Presentation(BytesIO(file_bytes))
+        slides_content = []
+        for i, slide in enumerate(presentation.slides):
+            slide_title = f"Slide {i+1}"
+            slide_text = []
+            for shape in slide.shapes:
+                if hasattr(shape, "text") and shape.text.strip():
+                    slide_text.append(shape.text.strip())
+            if slide_text:
+                slides_content.append({"title": slide_title, "content": slide_text})
+        return slides_content[:10]
+    except Exception:
+        return []
+
+
+def render_document_preview(file_name):
+    col1, col2 = st.columns([1, 9])
+    with col1:
+        if st.button("❌", key=f"close_preview_{file_name}"):
+            st.session_state.sidebar_file_preview = None
+            st.rerun()
+    with col2:
+        st.markdown(f"**Preview: {file_name}**")
+
+    ensure_file_processed(file_name)
+    file_entry = get_uploaded_file_entry(file_name)
+    if not file_entry:
+        st.warning("File preview is unavailable.")
+        return
+
+    file_name_lower = file_name.lower()
+
+    if file_name_lower.endswith(".xlsx"):
+        with st.spinner("Loading preview..."):
+            data = st.session_state.excel_data_by_file.get(file_name, [])
+            if data:
+                st.dataframe(pd.DataFrame(data).head(20), use_container_width=True, hide_index=True)
+            else:
+                st.info("No preview data available for this spreadsheet.")
+    elif file_name_lower.endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp")):
+        with st.spinner("Loading preview..."):
+            st.image(file_entry["bytes"], caption=file_name, use_container_width=True)
+    elif file_name_lower.endswith(".pdf"):
+        with st.spinner("Loading preview..."):
+            preview_text = st.session_state.file_texts.get(file_name, "")
+            st.markdown("### PDF Preview")
+            st.warning(
+                "Browser PDF embeds may be blocked. Use the download button below to open the file in your local PDF viewer. "
+                "A text preview is shown when available."
+            )
+            st.download_button(
+                "Download PDF",
+                file_entry["bytes"],
+                file_name=file_name,
+                mime="application/pdf"
+            )
+            if preview_text:
+                st.text_area(
+                    "Extracted PDF Text Preview",
+                    value=preview_text[:4000],
+                    height=420,
+                    disabled=True,
+                    key=f"preview_{file_name}"
+                )
+            else:
+                st.info("No extracted text is available for this PDF.")
+    elif file_name_lower.endswith((".html", ".htm")):
+        with st.spinner("Loading preview..."):
+            html_content = file_entry["bytes"].decode("utf-8", errors="ignore")
+            st.components.v1.html(html_content, height=500, scrolling=True)
+    elif file_name_lower.endswith(".docx"):
+        with st.spinner("Loading preview..."):
+            paragraphs = extract_docx_preview(file_entry["bytes"])
+            if paragraphs:
+                st.markdown("### DOCX Preview")
+                for paragraph in paragraphs:
+                    st.write(paragraph)
+            else:
+                st.info("No preview content available for this Word document.")
+    elif file_name_lower.endswith(".pptx"):
+        with st.spinner("Loading preview..."):
+            slides_content = extract_pptx_preview(file_entry["bytes"])
+            if slides_content:
+                st.markdown("### PPTX Preview")
+                for slide in slides_content:
+                    with st.expander(slide["title"], expanded=False):
+                        for item in slide["content"]:
+                            st.write(item)
+            else:
+                st.info("No preview content available for this PowerPoint file.")
+    else:
+        with st.spinner("Loading preview..."):
+            preview_text = st.session_state.file_texts.get(file_name, "")
+            st.text_area(
+                "Document Preview",
+                value=preview_text[:4000] if preview_text else "No readable preview available for this file.",
+                height=260,
+                disabled=True,
+                key=f"preview_{file_name}"
+            )
+
+
+# -------------------------------
 # FILE UPLOAD & MANAGEMENT (SIDEBAR)
 # -------------------------------
 with st.sidebar:
@@ -458,6 +636,7 @@ with st.sidebar:
                 # Preview icon button
                 if st.button("👁️", key=f"preview_btn_{idx}", help=f"Preview {file_dict['name']}"):
                     st.session_state.sidebar_file_preview = file_dict["name"]
+                    st.rerun()
             
             with cols[2]:
                 # Delete button
@@ -478,21 +657,13 @@ with st.sidebar:
                     st.rerun()
         st.markdown("*Selected files above are available across all tabs.*")
 
-        # Show preview panel if a file is selected for preview
+        # Show preview dialog if a file is selected for preview
         if st.session_state.sidebar_file_preview:
-            st.markdown("---")
-            st.markdown("### 📄 Document Preview")
-            
-            # Close button
-            preview_cols = st.columns([10, 1])
-            with preview_cols[1]:
-                if st.button("✕", key="close_preview", help="Close preview"):
-                    st.session_state.sidebar_file_preview = None
-                    st.rerun()
-            
-            # Display preview
-            with st.expander(f"Preview: {st.session_state.sidebar_file_preview}", expanded=True):
+            @st.dialog(f"📄 Preview: {st.session_state.sidebar_file_preview}")
+            def show_preview_dialog():
                 render_document_preview(st.session_state.sidebar_file_preview) # type: ignore
+            
+            show_preview_dialog()
 
         st.markdown("---")
         if st.button("Clear All Files"):
@@ -546,35 +717,6 @@ with st.sidebar:
 # TEXT EXTRACTION
 # -------------------------------
 @st.cache_data(show_spinner=False)
-def extract_text(file_name, file_bytes):
-    text = ""
-    bio = BytesIO(file_bytes)
-    file_name_lower = file_name.lower()
-    try:
-        if file_name_lower.endswith(".pdf"):
-            with pdfplumber.open(bio) as pdf:
-                text = "\n".join(p.extract_text() or "" for p in pdf.pages)
-        elif file_name_lower.endswith(".txt"):
-            text = bio.read().decode("utf-8", errors="ignore")
-        elif file_name_lower.endswith(".can"):
-            text = bio.read().decode("utf-8", errors="ignore")
-        elif file_name_lower.endswith(".docx"):
-            doc = docx.Document(bio)
-            text = "\n".join([p.text for p in doc.paragraphs])
-        elif file_name_lower.endswith(".pptx"):
-            prs = Presentation(bio)
-            text = "\n".join(shape.text for slide in prs.slides for shape in slide.shapes if hasattr(shape, "text"))
-        elif file_name_lower.endswith((".html", ".htm")):
-            soup = BeautifulSoup(bio.read(), "html.parser")
-            text = soup.get_text(separator="\n")
-        elif file_name_lower.endswith(".xlsx"):
-            wb = openpyxl.load_workbook(bio, data_only=True)
-            text = "\n".join(" ".join(str(c) for c in row if c) for sh in wb for row in sh.iter_rows(values_only=True))
-    except Exception:
-        text = ""
-    return text
-
-
 @st.cache_data(show_spinner=False)
 def extract_excel_data(file_name, file_bytes):
     data = []
@@ -633,93 +775,6 @@ def load_llm():
         st.session_state.llm_task = None
 
     return None
-
-
-def get_uploaded_file_entry(file_name):
-    for file_info in st.session_state.uploaded_files:
-        if file_info["name"] == file_name:
-            return file_info
-    return None
-
-
-def render_document_preview(file_name):
-    ensure_file_processed(file_name)
-    file_entry = get_uploaded_file_entry(file_name)
-    if not file_entry:
-        st.warning("File preview is unavailable.")
-        return
-
-    file_name_lower = file_name.lower()
-
-    if file_name_lower.endswith(".xlsx"):
-        with st.spinner("Loading preview..."):
-            data = st.session_state.excel_data_by_file.get(file_name, [])
-            if data:
-                st.dataframe(pd.DataFrame(data).head(20), use_container_width=True, hide_index=True)
-            else:
-                st.info("No preview data available for this spreadsheet.")
-    elif file_name_lower.endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp")):
-        with st.spinner("Loading preview..."):
-            st.image(file_entry["bytes"], caption=file_name, use_container_width=True)
-    elif file_name_lower.endswith(".pdf"):
-        with st.spinner("Loading preview..."):
-            pdf_base64 = base64.b64encode(file_entry["bytes"]).decode("utf-8")
-            pdf_html = f"""
-            <iframe
-                src="data:application/pdf;base64,{pdf_base64}"
-                width="100%"
-                height="600"
-                style="border:1px solid #d7e3f4; border-radius:10px;"
-            ></iframe>
-            """
-            st.components.v1.html(pdf_html, height=620, scrolling=True)
-    elif file_name_lower.endswith((".html", ".htm")):
-        with st.spinner("Loading preview..."):
-            html_content = file_entry["bytes"].decode("utf-8", errors="ignore")
-            st.components.v1.html(html_content, height=500, scrolling=True)
-    elif file_name_lower.endswith(".docx"):
-        with st.spinner("Loading preview..."):
-            paragraphs = extract_docx_preview(file_entry["bytes"])
-            if paragraphs:
-                st.markdown("### DOCX Preview")
-                for paragraph in paragraphs:
-                    st.write(paragraph)
-            else:
-                st.info("No preview content available for this Word document.")
-    elif file_name_lower.endswith(".pptx"):
-        with st.spinner("Loading preview..."):
-            slides_content = extract_pptx_preview(file_entry["bytes"])
-            if slides_content:
-                st.markdown("### PPTX Preview")
-                for slide in slides_content:
-                    with st.expander(slide["title"], expanded=False):
-                        for item in slide["content"]:
-                            st.write(item)
-            else:
-                st.info("No preview content available for this PowerPoint file.")
-    else:
-        with st.spinner("Loading preview..."):
-            preview_text = st.session_state.file_texts.get(file_name, "")
-            st.text_area(
-                "Document Preview",
-                value=preview_text[:4000] if preview_text else "No readable preview available for this file.",
-                height=260,
-                disabled=True,
-                key=f"preview_{file_name}"
-            )
-
-
-def ensure_file_processed(file_name):
-    file_info = get_uploaded_file_entry(file_name)
-    if not file_info:
-        return
-    file_name_lower = file_name.lower()
-
-    if file_name not in st.session_state.file_texts:
-        st.session_state.file_texts[file_name] = extract_text(file_name, file_info["bytes"])
-
-    if file_name_lower.endswith(".xlsx") and file_name not in st.session_state.excel_data_by_file:
-        st.session_state.excel_data_by_file[file_name] = extract_excel_data(file_name, file_info["bytes"])
 
 
 def ensure_files_processed(file_names):
@@ -800,32 +855,6 @@ def build_highlighted_search_results(file_name, text, query):
 
 
 @st.cache_data(show_spinner=False)
-def extract_docx_preview(file_bytes):
-    try:
-        document = docx.Document(BytesIO(file_bytes))
-        paragraphs = [paragraph.text.strip() for paragraph in document.paragraphs if paragraph.text.strip()]
-        return paragraphs[:25]
-    except Exception:
-        return []
-
-
-@st.cache_data(show_spinner=False)
-def extract_pptx_preview(file_bytes):
-    slides_content = []
-    try:
-        presentation = Presentation(BytesIO(file_bytes))
-        for slide_index, slide in enumerate(presentation.slides, 1):
-            texts = [shape.text.strip() for shape in slide.shapes if hasattr(shape, "text") and shape.text.strip()]
-            if texts:
-                slides_content.append({
-                    "title": f"Slide {slide_index}",
-                    "content": texts[:10]
-                })
-        return slides_content[:15]
-    except Exception:
-        return []
-
-
 @st.cache_data(show_spinner=False)
 def extract_login_name_from_html(file_bytes):
     soup = BeautifulSoup(BytesIO(file_bytes), "html.parser")
@@ -1700,18 +1729,6 @@ def show_help_popup(tab_name, selected_files):
     )
 
 
-with st.sidebar:
-    if st.session_state.get("is_authenticated"):
-        st.markdown("---")
-        with st.expander("Preview Uploaded Document", expanded=False):
-            preview_options = ["--Select File--"] + [file_info["name"] for file_info in st.session_state.get("uploaded_files", [])]
-            selected_preview_file = st.selectbox("Choose a file to preview", preview_options, key="sidebar_preview_file")
-            if selected_preview_file != "--Select File--":
-                render_document_preview(selected_preview_file)
-            else:
-                st.info("Choose a file to preview.")
-
-
 # -------------------------------
 # TABS
 # -------------------------------
@@ -1787,25 +1804,70 @@ with tab1:
                             llm = load_llm()
                             for f in chat_files:
                                 file_text = st.session_state.file_texts.get(f, "")
-                                if llm and file_text:
-                                    # Use LLM for actual summarization
-                                    summary_prompt = f"""Please provide a concise but comprehensive summary of the following document. 
-Include the main topics, key points, and important information:
+                                if file_text.strip():
+                                    # Try LLM first
+                                    if llm:
+                                        summary_prompt = f"""Please provide a structured summary of the following document. Extract and organize information into these key sections:
+
+1. **Introduction/Overview**: Main purpose and description of the product/system
+2. **Key Features/Advantages**: Main benefits and capabilities
+3. **System Requirements**: Hardware/software requirements mentioned
+4. **Technical Specifications**: Important technical details, versions, or specifications
+5. **Usage Instructions**: How to use or implement the system
+6. **Important Notes/Warnings**: Any critical information, limitations, or warnings
 
 Document: {f}
-Content:
-{file_text[:5000]}
+Content: {file_text[:8000]}
 
-Summary:"""
-                                    try:
-                                        summary = llm.invoke(summary_prompt)
-                                        result.append(f"📄 **{f}**\n\n{summary}")
-                                    except Exception:
-                                        overview = build_file_overview(f, file_text)
-                                        result.append(overview)
+Please provide a comprehensive summary organized by these sections. If a section is not mentioned in the document, you can omit it or note that it's not available."""
+                                        try:
+                                            summary_response = llm.invoke(summary_prompt)
+                                            summary_text = str(summary_response).strip()
+                                            if summary_text and len(summary_text) > 50 and not summary_text.lower().startswith(f.lower()):
+                                                result.append(f"📄 **{f}**\n\n{summary_text}")
+                                                continue
+                                        except Exception:
+                                            pass
+                                    
+                                    # Fallback: Extract meaningful content manually
+                                    lines = [line.strip() for line in file_text.splitlines() if line.strip() and len(line.strip()) > 10]
+                                    words = re.findall(r'\w+', file_text)
+                                    
+                                    # Look for tables
+                                    table_lines = [line for line in lines if '|' in line or 'TABLE:' in line]
+                                    
+                                    summary_parts = [f"📄 **{f}**"]
+                                    
+                                    if table_lines:
+                                        summary_parts.append("\n**Tables Found:**")
+                                        summary_parts.extend(f"- {line[:200]}" for line in table_lines[:5])
+                                    
+                                    # Extract key sentences (lines with important keywords)
+                                    key_sentences = []
+                                    for line in lines[:20]:  # First 20 lines
+                                        if any(keyword in line.lower() for keyword in ['introduction', 'overview', 'summary', 'key', 'important', 'main', 'product', 'information']):
+                                            key_sentences.append(line)
+                                    
+                                    if key_sentences:
+                                        summary_parts.append("\n**Key Information:**")
+                                        summary_parts.extend(f"- {sent[:200]}" for sent in key_sentences[:5])
+                                    
+                                    # Basic stats
+                                    summary_parts.append(f"\n**Document Statistics:**")
+                                    summary_parts.append(f"- Total characters: {len(file_text)}")
+                                    summary_parts.append(f"- Estimated words: {len(words)}")
+                                    summary_parts.append(f"- Content lines: {len(lines)}")
+                                    
+                                    # Preview of content
+                                    if lines:
+                                        summary_parts.append(f"\n**Content Preview:**")
+                                        preview = ' '.join(lines[:3])[:500]
+                                        summary_parts.append(f"{preview}...")
+                                    
+                                    result.append('\n'.join(summary_parts))
                                 else:
-                                    overview = build_file_overview(f, file_text)
-                                    result.append(overview)
+                                    result.append(f"📄 **{f}**\n\nNo readable content found in this document.")
+                            
                             response = "\n\n---\n\n".join(result)
                         elif "compare" in user_input.lower():
                             if len(chat_files) >= 2:
