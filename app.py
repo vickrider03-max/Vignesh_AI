@@ -1,4 +1,4 @@
-import difflib, html, re, hashlib, os, json
+import html, re, hashlib, os, json, base64
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from io import BytesIO
@@ -137,8 +137,6 @@ if "login_history" not in st.session_state:
     st.session_state.login_history = []
 if "file_uploader_key" not in st.session_state:
     st.session_state.file_uploader_key = 0
-if "show_help_popup_chat" not in st.session_state:
-    st.session_state.show_help_popup_chat = False
 if "compare_result_html" not in st.session_state:
     st.session_state.compare_result_html = None
 if "compare_result_excel_bytes" not in st.session_state:
@@ -153,15 +151,223 @@ if "file_dropdown" not in st.session_state:
     st.session_state.file_dropdown = "--Select File--"
 if "selected_capl_file" not in st.session_state:
     st.session_state.selected_capl_file = "--Select CAPL file--"
+if "sidebar_file_preview" not in st.session_state:
+    st.session_state.sidebar_file_preview = None
+if "llm_task" not in st.session_state:
+    st.session_state.llm_task = None
 
-
-@st.cache_data(show_spinner=False)
+# Load README.txt from file system
 def load_readme_text():
-    try:
-        with open("README.txt", "r", encoding="utf-8") as readme_file:
-            return readme_file.read()
-    except Exception:
-        return "README.txt could not be loaded."
+    """Load README from file if it exists, otherwise use default"""
+    readme_path = "README.txt"
+    if os.path.exists(readme_path):
+        try:
+            with open(readme_path, "r", encoding="utf-8", errors="ignore") as f:
+                return f.read()
+        except Exception as e:
+            st.warning(f"Could not load README.txt: {e}")
+    # Return default README if file not found
+    return """README.txt
+==========
+
+Multi-Utility File & CAPL Analyzer Tool
+=======================================
+
+Overview
+--------
+This Streamlit-based application helps manage, analyze, and compare files, with special support for CAPL scripts. It combines file dashboards, comparisons, CAPL analysis, and AI-assisted code fixing in a single platform.
+
+---
+
+App Layout & Workflow
+---------------------
+
++----------------------+
+| Sidebar              |
+|----------------------|
+| Upload Files         |
+| Select Files         |
+| Filter CAPL (.can)   |
++----------------------+
+          |
+          v
++------------------------------------------+
+| Main Tabs:                               |
+|------------------------------------------|
+| [ Chat ] [ Dashboard ] [ Compare ] [ CAPL ] |
++------------------------------------------+
+
+Tab Workflow:
+-------------
+
+1. Chat Tab
+   +-----------------------------+
+   | Ask questions about files   |
+   | Semantic / AI answers       |
+   +-----------------------------+
+          |
+          v
+   (Uses uploaded files & AI backend)
+
+2. Dashboard Tab
+   +------------------------------+
+   | Select a file from sidebar   |
+   | Visualize trends (Excel/CSV) |
+   | Aggregated stats             |
+   +------------------------------+
+          |
+          v
+   (Optional download of analyzed results)
+
+3. Compare Tab
+   +--------------------------------+
+   | Multi-file selection           |
+   | Inline word-level differences  |
+   | Download comparison Excel      |
+   +--------------------------------+
+          |
+          v
+   (At least 2 files required)
+
+4. CAPL Tab
+   +-------------------------------------------+
+   | Select existing CAPL file or create new   |
+   | Compile & analyze code                    |
+   | View issues / suggestions                 |
+   | AI-assisted fix / Apply fix / Save file   |
+   +-------------------------------------------+
+          |
+          v
+   (Updates session state & file texts)
+
+---
+
+Feature Summary
+---------------
+
+1. Chat / RAG Interface
+   - Ask questions about selected files.
+   - Context-aware AI responses.
+
+2. File Dashboard
+   - Test report analysis and visualization.
+   - Downloadable Excel summaries.
+
+3. Compare Files
+   - Multi-file comparison.
+   - Inline word-level differences.
+   - Downloadable Excel comparison.
+
+4. CAPL Compiler & Analyzer
+   - Upload or create CAPL scripts (.can/.txt).
+   - Syntax highlighting & code analysis.
+   - AI-assisted code fixes.
+   - Save new or corrected CAPL files.
+
+5. Interactive UI
+   - Tabs for workflows.
+   - Reset buttons for selections and results.
+   - Expandable live editor for CAPL scripts.
+
+6. AI Integration
+   - Auto-correct CAPL code.
+   - Chat-based file analysis.
+
+7. Session Management
+   - Tracks uploaded files and selected files per tab.
+   - Maintains last analyzed CAPL file and issues.
+
+---
+
+How to Use
+----------
+
+1. Setup
+   - Python >= 3.10
+   - Install dependencies:
+     pip install streamlit openai pandas plotly
+   - Configure AI backend / API keys if using AI features.
+
+2. Run
+   - streamlit run app.py
+
+3. Sidebar
+   - Upload files.
+   - Select files to be available in tabs.
+   - Optionally filter CAPL scripts.
+
+4. Tabs
+   - Chat: Ask questions about uploaded files.
+   - Dashboard: Visualize file content, trends, and statistics.
+   - Compare: Choose 2+ files and see word-level differences.
+   - CAPL: Edit, compile, analyze CAPL scripts, AI fixes, save.
+
+5. CAPL AI Fix
+   - Click "Suggest Fix" -> review AI suggestion -> click "Use Suggested Fix".
+
+6. Reset Buttons
+   - Clear selections and results in each tab.
+
+---
+
+Tips & Notes
+------------
+
+- Limit comparisons to <2000 lines for performance.
+- CAPL files must end with .can.
+- AI features require backend availability.
+- Use "Include all .txt files as CAPL" cautiously.
+
+---
+
+ASCII Workflow Example
+----------------------
+
+Sidebar:
+--------
++----------------------+
+| Upload Files         |
+| Select Files         |
+| Filter CAPL (.can)   |
++----------------------+
+
+Tabs:
+-----
+[ Chat ] -> AI Q&A using uploaded files
+[ Dashboard ] -> File stats & trends -> Excel download
+[ Compare ] -> Multi-file diff -> HTML + Excel
+[ CAPL ] -> Edit/Compile/Analyze -> AI Fix -> Save
+
+CAPL AI Flow:
+-------------
+Create/Edit CAPL
+    |
+    v
+Compile & Analyze
+    |
+    v
+AI Suggest Fix? -- Yes --> Review & Apply --> Update Editor
+    |
+    No
+    v
+Save CAPL Script
+
+---
+
+Credits
+-------
+- Built with Streamlit, Pandas, Plotly, OpenAI API
+- CAPL analysis inspired by automotive testing
+- AI auto-fix powered by LLMs
+
+---
+
+Contact
+-------
+For support or feedback, contact vigneshs075@gmail.com.
+"""
+
+README_TEXT = load_readme_text()
 
 # -------------------------------
 # FILE UPLOAD & MANAGEMENT (SIDEBAR)
@@ -213,23 +419,29 @@ with st.sidebar:
         st.header("Upload Documents")
         st.info("1) Upload files. 2) Check the files you need. 3) Switch tabs and work with selected files.")
         new_files = st.file_uploader(
-            "Upload PDF, DOCX, TXT, PPTX, XLSX, HTML,CAPL",
-            type=["pdf", "docx", "txt", "pptx", "xlsx", "html", "htm", "capl", "can"],
+            "Upload PDF, DOCX, TXT, PPTX, XLSX, HTML, CAPL, Images",
+            type=["pdf", "docx", "txt", "pptx", "xlsx", "html", "htm", "capl", "can", "png", "jpg", "jpeg", "gif", "bmp", "webp"],
             accept_multiple_files=True,
             key=f"file_uploader_{st.session_state.file_uploader_key}"
         )
 
         if new_files:
-            existing_names = {f["name"] for f in st.session_state.uploaded_files}
-            for file in new_files:
-                if file.name not in existing_names:
-                    file_bytes = file.read()
-                    st.session_state.uploaded_files.append({"name": file.name, "bytes": file_bytes})
+            with st.spinner("Loading uploaded files..."):
+                existing_names = {f["name"] for f in st.session_state.uploaded_files}
+                for file in new_files:
+                    if file.name not in existing_names:
+                        file_bytes = file.read()
+                        st.session_state.uploaded_files.append({"name": file.name, "bytes": file_bytes})
 
         st.markdown("---")
         st.markdown("### Uploaded files")
+        
+        # Add preview state container
+        if "sidebar_file_preview" not in st.session_state:
+            st.session_state.sidebar_file_preview = None
+        
         for idx, file_dict in enumerate(st.session_state.uploaded_files[:]):
-            cols = st.columns([0.70, 0.25, 0.05], vertical_alignment="center")
+            cols = st.columns([0.50, 0.20, 0.15, 0.15], vertical_alignment="center")
             with cols[0]:
                 checked = file_dict["name"] in st.session_state.selected_files
                 new_checked = st.checkbox(
@@ -241,8 +453,15 @@ with st.sidebar:
                 st.session_state.selected_files.append(file_dict["name"])
             elif not new_checked and file_dict["name"] in st.session_state.selected_files:
                 st.session_state.selected_files.remove(file_dict["name"])
+            
+            with cols[1]:
+                # Preview icon button
+                if st.button("👁️", key=f"preview_btn_{idx}", help=f"Preview {file_dict['name']}"):
+                    st.session_state.sidebar_file_preview = file_dict["name"]
+            
             with cols[2]:
-                if st.button("X", key=f"del_file_{idx}", help=f"Delete {file_dict['name']}", type="tertiary"):
+                # Delete button
+                if st.button("🗑️", key=f"del_file_{idx}", help=f"Delete {file_dict['name']}", use_container_width=True):
                     deleted_name = file_dict["name"]
                     st.session_state.uploaded_files = [f for f in st.session_state.uploaded_files if
                                                        f["name"] != deleted_name]
@@ -258,6 +477,22 @@ with st.sidebar:
                         st.session_state.capl_last_issues = None
                     st.rerun()
         st.markdown("*Selected files above are available across all tabs.*")
+
+        # Show preview panel if a file is selected for preview
+        if st.session_state.sidebar_file_preview:
+            st.markdown("---")
+            st.markdown("### 📄 Document Preview")
+            
+            # Close button
+            preview_cols = st.columns([10, 1])
+            with preview_cols[1]:
+                if st.button("✕", key="close_preview", help="Close preview"):
+                    st.session_state.sidebar_file_preview = None
+                    st.rerun()
+            
+            # Display preview
+            with st.expander(f"Preview: {st.session_state.sidebar_file_preview}", expanded=True):
+                render_document_preview(st.session_state.sidebar_file_preview) # type: ignore
 
         st.markdown("---")
         if st.button("Clear All Files"):
@@ -335,7 +570,7 @@ def extract_text(file_name, file_bytes):
         elif file_name_lower.endswith(".xlsx"):
             wb = openpyxl.load_workbook(bio, data_only=True)
             text = "\n".join(" ".join(str(c) for c in row if c) for sh in wb for row in sh.iter_rows(values_only=True))
-    except:
+    except Exception:
         text = ""
     return text
 
@@ -356,7 +591,7 @@ def extract_excel_data(file_name, file_bytes):
                     else:
                         if row and any(cell is not None for cell in row):
                             data.append(dict(zip(headers, row)))
-    except:
+    except Exception:
         data = []
     return data
 
@@ -395,7 +630,6 @@ def load_llm():
     # Only show a single warning if no task could be initialized
     if task_errors:
         st.warning("LLM initialization failed for all candidate tasks; AI features are unavailable.")
-        st.session_state.llm_task_errors = task_errors
         st.session_state.llm_task = None
 
     return None
@@ -406,6 +640,73 @@ def get_uploaded_file_entry(file_name):
         if file_info["name"] == file_name:
             return file_info
     return None
+
+
+def render_document_preview(file_name):
+    ensure_file_processed(file_name)
+    file_entry = get_uploaded_file_entry(file_name)
+    if not file_entry:
+        st.warning("File preview is unavailable.")
+        return
+
+    file_name_lower = file_name.lower()
+
+    if file_name_lower.endswith(".xlsx"):
+        with st.spinner("Loading preview..."):
+            data = st.session_state.excel_data_by_file.get(file_name, [])
+            if data:
+                st.dataframe(pd.DataFrame(data).head(20), use_container_width=True, hide_index=True)
+            else:
+                st.info("No preview data available for this spreadsheet.")
+    elif file_name_lower.endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp")):
+        with st.spinner("Loading preview..."):
+            st.image(file_entry["bytes"], caption=file_name, use_container_width=True)
+    elif file_name_lower.endswith(".pdf"):
+        with st.spinner("Loading preview..."):
+            pdf_base64 = base64.b64encode(file_entry["bytes"]).decode("utf-8")
+            pdf_html = f"""
+            <iframe
+                src="data:application/pdf;base64,{pdf_base64}"
+                width="100%"
+                height="600"
+                style="border:1px solid #d7e3f4; border-radius:10px;"
+            ></iframe>
+            """
+            st.components.v1.html(pdf_html, height=620, scrolling=True)
+    elif file_name_lower.endswith((".html", ".htm")):
+        with st.spinner("Loading preview..."):
+            html_content = file_entry["bytes"].decode("utf-8", errors="ignore")
+            st.components.v1.html(html_content, height=500, scrolling=True)
+    elif file_name_lower.endswith(".docx"):
+        with st.spinner("Loading preview..."):
+            paragraphs = extract_docx_preview(file_entry["bytes"])
+            if paragraphs:
+                st.markdown("### DOCX Preview")
+                for paragraph in paragraphs:
+                    st.write(paragraph)
+            else:
+                st.info("No preview content available for this Word document.")
+    elif file_name_lower.endswith(".pptx"):
+        with st.spinner("Loading preview..."):
+            slides_content = extract_pptx_preview(file_entry["bytes"])
+            if slides_content:
+                st.markdown("### PPTX Preview")
+                for slide in slides_content:
+                    with st.expander(slide["title"], expanded=False):
+                        for item in slide["content"]:
+                            st.write(item)
+            else:
+                st.info("No preview content available for this PowerPoint file.")
+    else:
+        with st.spinner("Loading preview..."):
+            preview_text = st.session_state.file_texts.get(file_name, "")
+            st.text_area(
+                "Document Preview",
+                value=preview_text[:4000] if preview_text else "No readable preview available for this file.",
+                height=260,
+                disabled=True,
+                key=f"preview_{file_name}"
+            )
 
 
 def ensure_file_processed(file_name):
@@ -437,6 +738,92 @@ def get_selection_signature(file_names):
         digest.update(file_name.encode("utf-8"))
         digest.update(st.session_state.file_texts.get(file_name, "").encode("utf-8"))
     return f"combined::{digest.hexdigest()}"
+
+
+@st.cache_data(show_spinner=False)
+def build_file_overview(file_name, text):
+    lines = [line.strip() for line in str(text).splitlines() if line.strip()]
+    words = re.findall(r"\w+", str(text))
+    top_terms = Counter(word.lower() for word in words if len(word) > 2).most_common(8)
+    preview_lines = lines[:5]
+
+    summary_parts = [
+        f"📄 **{file_name}**",
+        f"- Characters: {len(str(text))}",
+        f"- Lines: {len(str(text).splitlines())}",
+        f"- Words: {len(words)}",
+        f"- Non-empty lines: {len(lines)}",
+    ]
+
+    if top_terms:
+        summary_parts.append(
+            "- Top keywords: " + ", ".join(f"{word} ({count})" for word, count in top_terms)
+        )
+
+    if preview_lines:
+        summary_parts.append("- Preview:")
+        summary_parts.extend(f"  {line[:180]}" for line in preview_lines)
+    else:
+        summary_parts.append("- No readable text could be extracted from this file.")
+
+    return "\n".join(summary_parts)
+
+
+@st.cache_data(show_spinner=False)
+def build_highlighted_search_results(file_name, text, query):
+    if not query:
+        return ""
+
+    pattern = re.compile(re.escape(query), re.IGNORECASE)
+    matches = []
+
+    for line_no, raw_line in enumerate(str(text).splitlines(), 1):
+        if pattern.search(raw_line):
+            escaped_line = html.escape(raw_line)
+            highlighted_line = pattern.sub(
+                lambda match: f"<mark style='background:#fff3a3; padding:0 2px;'>{html.escape(match.group(0))}</mark>",
+                escaped_line
+            )
+            matches.append(
+                f"<div style='margin:0 0 8px 0;'><b>Line {line_no}</b>: {highlighted_line}</div>"
+            )
+
+    if not matches:
+        return f"<div><b>{html.escape(file_name)}</b><br>No matches found for <code>{html.escape(query)}</code>.</div>"
+
+    return (
+        f"<div style='margin-bottom:14px;'>"
+        f"<h4 style='margin:0 0 8px 0; color:#1f4f91;'>{html.escape(file_name)} ({len(matches)} matches)</h4>"
+        f"{''.join(matches)}"
+        f"</div>"
+    )
+
+
+@st.cache_data(show_spinner=False)
+def extract_docx_preview(file_bytes):
+    try:
+        document = docx.Document(BytesIO(file_bytes))
+        paragraphs = [paragraph.text.strip() for paragraph in document.paragraphs if paragraph.text.strip()]
+        return paragraphs[:25]
+    except Exception:
+        return []
+
+
+@st.cache_data(show_spinner=False)
+def extract_pptx_preview(file_bytes):
+    slides_content = []
+    try:
+        presentation = Presentation(BytesIO(file_bytes))
+        for slide_index, slide in enumerate(presentation.slides, 1):
+            texts = [shape.text.strip() for shape in slide.shapes if hasattr(shape, "text") and shape.text.strip()]
+            if texts:
+                slides_content.append({
+                    "title": f"Slide {slide_index}",
+                    "content": texts[:10]
+                })
+        return slides_content[:15]
+    except Exception:
+        return []
 
 
 @st.cache_data(show_spinner=False)
@@ -693,12 +1080,12 @@ CREATOR_PASSWORD = "Rider@100"
 
 if not st.session_state.is_authenticated:
     st.subheader("Login")
-    st.markdown("### Read Me First")
-    st.text_area("README", value=load_readme_text(), height=360, disabled=True)
-    has_read_readme = st.checkbox("I have read the README and want to continue")
     login_username = st.text_input("Username")
     login_password = st.text_input("Password", type="password")
     st.info("Note: For users, leave the password field blank (empty).")
+    has_read_readme = st.checkbox("I have read the README and want to continue")
+    st.markdown("### Read Me First")
+    st.text_area("README", value=README_TEXT, height=360, disabled=True)
 
     if st.button("Access"):
         if not has_read_readme:
@@ -821,15 +1208,15 @@ def highlight_multi_file_differences_cached(file_items):
         th, td { border: 1px solid black; padding: 4px; vertical-align: top; white-space: pre-wrap; }
         th { background-color: #f0f0f0; }
         td.line-number { background-color: #f0f0f0; font-weight: bold; text-align: center; }
-        .missing { background-color: #ffcccc; }
-        .extra { background-color: #ccffcc; }
+        .match { background-color: #ccffcc; }
+        .mismatch { background-color: #ffcccc; }
         .scrollable { overflow:auto; max-height:800px; }
         p.legend span { display:inline-block; width:20px; height:20px; margin-right:5px; vertical-align:middle; }
     </style>
     """
     html_parts = [
         "<html><head>", css, "</head><body><div class='scrollable'>",
-        "<p class='legend'><b>Legend:</b> <span class='missing'></span> Missing, <span class='extra'></span> Extra</p>",
+        "<p class='legend'><b>Legend:</b> <span class='match'></span> Exact match, <span class='mismatch'></span> Missing or mismatch</p>",
         "<table><tr><th>Line #</th>",
         "".join(f"<th>{html.escape(fname)}</th>" for fname in files),
         "</tr>",
@@ -862,12 +1249,10 @@ def highlight_multi_file_differences_cached(file_items):
             highlighted = []
             for word in ordered_words:
                 escaped_word = html.escape(word)
-                if word in words and word_presence[word] < len(files):
-                    highlighted.append(f"<span class='extra'>{escaped_word}</span>")
-                elif word not in words:
-                    highlighted.append(f"<span class='missing'>{escaped_word}</span>")
+                if word in words and word_presence[word] == len(files):
+                    highlighted.append(f"<span class='match'>{escaped_word}</span>")
                 else:
-                    highlighted.append(f"<span>{escaped_word}</span>")
+                    highlighted.append(f"<span class='mismatch'>{escaped_word}</span>")
             html_parts.append(f"<td>{' '.join(highlighted) if highlighted else '&nbsp;'}</td>")
 
         html_parts.append("</tr>")
@@ -909,7 +1294,7 @@ def generate_word_level_comparison_excel_cached(file_items):
                 row_values.append(word)
             ws.append(row_values)
 
-            # Highlight differences
+            # Highlight exact matches in green and missing/mismatched content in red
             all_words_set = set()
             for f in files:
                 if i < len(file_lines[f]):
@@ -919,10 +1304,13 @@ def generate_word_level_comparison_excel_cached(file_items):
                 line_words = file_lines[f][i] if i < len(file_lines[f]) else []
                 if w_idx >= len(line_words):
                     cell.fill = red_fill
-                elif line_words[w_idx] not in all_words_set - set(line_words):
-                    continue
-                else:
+                elif all(word == line_words[w_idx] for other_file in files
+                         for word in ([file_lines[other_file][i][w_idx]]
+                                      if i < len(file_lines[other_file]) and w_idx < len(file_lines[other_file][i])
+                                      else ["__missing__"])):
                     cell.fill = green_fill
+                else:
+                    cell.fill = red_fill
 
     excel_io = BytesIO()
     wb.save(excel_io)
@@ -1312,6 +1700,18 @@ def show_help_popup(tab_name, selected_files):
     )
 
 
+with st.sidebar:
+    if st.session_state.get("is_authenticated"):
+        st.markdown("---")
+        with st.expander("Preview Uploaded Document", expanded=False):
+            preview_options = ["--Select File--"] + [file_info["name"] for file_info in st.session_state.get("uploaded_files", [])]
+            selected_preview_file = st.selectbox("Choose a file to preview", preview_options, key="sidebar_preview_file")
+            if selected_preview_file != "--Select File--":
+                render_document_preview(selected_preview_file)
+            else:
+                st.info("Choose a file to preview.")
+
+
 # -------------------------------
 # TABS
 # -------------------------------
@@ -1349,17 +1749,18 @@ with tab1:
         if not chat_files:
             st.info("Choose one or more files in this tab to start chatting.")
         else:
-            ensure_files_processed(chat_files)
+            with st.spinner("Loading selected files..."):
+                ensure_files_processed(chat_files)
             combined_text = "\n".join([st.session_state.file_texts.get(f, "") for f in chat_files])
     
-            user_input = st.chat_input("Ask something... (type 'clear' to reset chat)")
+            user_input = st.chat_input("Ask something... (type 'clear' to reset chat). Try: 'summarize', 'find:', 'count:', or 'overview'")
             if user_input:
                 if user_input.strip().lower() == "clear":
                     st.session_state.messages = []
                     st.success("✅ Chat cleared!")
                 else:
                     st.session_state.messages.append({"role": "user", "content": user_input})
-                    with st.spinner("Thinking..."):
+                    with st.spinner("Processing your request..."):
                         # Word count queries
                         if any(t in user_input.lower() for t in ["how many", "count", "number of", "occurrences"]):
                             match = re.search(r"'(.*?)'|\"(.*?)\"", user_input)
@@ -1367,26 +1768,58 @@ with tab1:
                                 word = match.group(1) or match.group(2)
                                 count = len(
                                     re.findall(rf'(?<![\w-]){re.escape(word)}(?![\w-])', combined_text, re.IGNORECASE))
-                                response = f"🔢 The word/phrase '{word}' appears {count} times."
+                                response = f"🔢 The word/phrase '{word}' appears {count} times in the selected documents."
                             else:
-                                response = "⚠️ Specify the word/phrase in quotes."
-                        elif "analyze" in user_input.lower() or "summary" in user_input.lower():
-                            result = ""
+                                response = "⚠️ Specify the word/phrase in quotes. Example: count('keyword') or count(\"keyword\")"
+                        elif any(term in user_input.lower() for term in ["find", "search", "locate"]) or "highlight" in user_input.lower():
+                            match = re.search(r"'(.*?)'|\"(.*?)\"", user_input)
+                            if match:
+                                query = match.group(1) or match.group(2)
+                                response_blocks = []
+                                for f in chat_files:
+                                    file_text = st.session_state.file_texts.get(f, "")
+                                    response_blocks.append(build_highlighted_search_results(f, file_text, query))
+                                response = "".join(response_blocks)
+                            else:
+                                response = "⚠️ Specify the search word or phrase in quotes. Example: find('keyword') or search(\"keyword\")"
+                        elif any(term in user_input.lower() for term in ["analyze", "summary", "summarize", "overview"]):
+                            result = []
+                            llm = load_llm()
                             for f in chat_files:
-                                words = re.findall(r'\w+', st.session_state.file_texts[f].lower())
-                                most_common = Counter(words).most_common(10)
-                                result += f"📄 **{f}**: Total words {len(words)}, Unique {len(set(words))}, Top {most_common}\n\n"
-                            response = result
+                                file_text = st.session_state.file_texts.get(f, "")
+                                if llm and file_text:
+                                    # Use LLM for actual summarization
+                                    summary_prompt = f"""Please provide a concise but comprehensive summary of the following document. 
+Include the main topics, key points, and important information:
+
+Document: {f}
+Content:
+{file_text[:5000]}
+
+Summary:"""
+                                    try:
+                                        summary = llm.invoke(summary_prompt)
+                                        result.append(f"📄 **{f}**\n\n{summary}")
+                                    except Exception:
+                                        overview = build_file_overview(f, file_text)
+                                        result.append(overview)
+                                else:
+                                    overview = build_file_overview(f, file_text)
+                                    result.append(overview)
+                            response = "\n\n---\n\n".join(result)
                         elif "compare" in user_input.lower():
-                            selected_texts = {f: st.session_state.file_texts[f] for f in chat_files}
-                            response = highlight_multi_file_differences(selected_texts)
+                            if len(chat_files) >= 2:
+                                selected_texts = {f: st.session_state.file_texts[f] for f in chat_files}
+                                response = highlight_multi_file_differences(selected_texts)
+                            else:
+                                response = "⚠️ Please select at least 2 files to compare documents."
                         else:
                             combined_vs = get_combined_vector_store(chat_files)
                             retriever = combined_vs.as_retriever(search_kwargs={"k": 3})
                             llm = load_llm()
                             prompt = ChatPromptTemplate.from_messages([
                                 ("system",
-                                 "You are an intelligent document assistant. Answer ONLY using context.\nIf not found, say 'Not available in documents.'\nContext:\n{context}"),
+                                 "You are an intelligent document assistant. Answer ONLY using context from the provided documents.\nIf information is not found in the documents, say 'This information is not available in the uploaded documents.'\nContext:\n{context}"),
                                 ("human", "{question}")
                             ])
                             chain = None
@@ -1401,7 +1834,7 @@ with tab1:
                             if chain is not None:
                                 response = str(chain.invoke(user_input))
                             else:
-                                response = "⚠️ AI model is unavailable. Use direct extraction questions such as 'how many', 'analyze', or 'compare'."
+                                response = "⚠️ AI model is unavailable. Use direct extraction questions such as 'count(\"keyword\")', 'find(\"phrase\")', 'summarize', or 'overview'."
                         st.session_state.messages.append({"role": "assistant", "content": response})
 
         for msg in st.session_state.messages:
@@ -1744,7 +2177,8 @@ with tab2:
         file_dropdown = st.selectbox("Select a dashboard file", dashboard_options, key="file_dropdown")
 
         if file_dropdown != "--Select File--":
-            ensure_file_processed(file_dropdown)
+            with st.spinner("Loading dashboard file..."):
+                ensure_file_processed(file_dropdown)
             file_entry = get_uploaded_file_entry(file_dropdown)
             file_bytes = file_entry["bytes"] if file_entry else b""
             chart_type = st.radio("Chart type", ["Bar Chart", "Pie Chart"])
@@ -1979,15 +2413,17 @@ with tab3:
 
     if compare_clicked:
         if len(selected_files_for_comparison) >= 2:
-            ensure_files_processed(selected_files_for_comparison)
+            with st.spinner("Loading files for comparison..."):
+                ensure_files_processed(selected_files_for_comparison)
 
             selected_texts = {}
             for f in selected_files_for_comparison:
                 raw_text = st.session_state.file_texts.get(f, "")
                 selected_texts[f] = raw_text if isinstance(raw_text, str) else str(raw_text)
 
-            html_diff = highlight_multi_file_differences(selected_texts)
-            excel_io = generate_word_level_comparison_excel(selected_texts)
+            with st.spinner("Loading comparison results..."):
+                html_diff = highlight_multi_file_differences(selected_texts)
+                excel_io = generate_word_level_comparison_excel(selected_texts)
 
             st.session_state.compare_result_html = html_diff
             st.session_state.compare_result_excel_bytes = excel_io.getvalue()
@@ -2110,7 +2546,8 @@ with tab4:
                 st.success(f"Saved {new_file_name} and added it to the selected files.")
 
     use_all_txt = st.checkbox("Include all .txt files as CAPL")
-    ensure_files_processed(capl_selectable_files)
+    with st.spinner("Loading CAPL files..."):
+        ensure_files_processed(capl_selectable_files)
 
     if use_all_txt:
         capl_files = [
