@@ -1974,71 +1974,42 @@ def extract_document_headings(text):
 
 
 def extract_toc_with_page_numbers(text):
-    """Extract table of contents entries with page numbers from document.
-    Tries to find explicit TOC first, then builds one from detected headings with their page numbers."""
+    """Extract table of contents entries with page numbers from document."""
     toc_entries = []
     text = str(text)
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     
-    # First, try to find explicit TOC entries
-    for i, line in enumerate(lines):
-        if len(line) < 5 or len(line) > 150:
-            continue
-        
-        if ("Page" in line and ("Text:" in line or "Table" in line)) or line.isupper() or "PDF Metadata" in line:
-            continue
-        
-        # Pattern 1: "1 Overview ..................... 3"
-        match = re.match(r'^(\d+(?:\.\d+)*)\s+(.+?)\s+\.{2,}\s*(\d+)\s*$', line)
-        if match:
-            num, title, page_num = match.group(1), match.group(2).strip(), match.group(3)
-            if 3 <= len(title) <= 120:
-                toc_entries.append((num, title, page_num))
-            continue
-        
-        # Pattern 2: "1 Overview    3"
-        match = re.match(r'^(\d+(?:\.\d+)*)\s+(.+?)\s{3,}(\d+)\s*$', line)
-        if match:
-            num, title, page_num = match.group(1), match.group(2).strip(), match.group(3)
+    # First, try explicit TOC patterns on full text
+    for regex in [
+        r'(?m)^\s*(\d+(?:\.\d+)*)\s+(.+?)\s+\.{2,}\s*(\d+)\s*$',
+        r'(?m)^\s*(\d+(?:\.\d+)*)\s+(.+?)\s{3,}(\d+)\s*$',
+        r'(?m)^\s*(\d+(?:\.\d+)*)\s+(.+?)\s+(\d+)\s*$'
+    ]:
+        for match in re.finditer(regex, text):
+            num = match.group(1)
+            title = match.group(2).strip()
+            page_num = match.group(3)
             if 3 <= len(title) <= 120 and len(re.findall(r'\d+', title)) <= 2:
                 toc_entries.append((num, title, page_num))
-            continue
-    
-    # If explicit TOC found, return it
-    if toc_entries:
-        return toc_entries
-    
-    # Fallback: Build TOC from detected headings and their page positions
+        if toc_entries:
+            return toc_entries
+
+    # Fallback: build TOC from detected headings and page markers
     headings = extract_document_headings(text)
     if headings:
         for num, title in headings:
-            # Find which page this heading appears on
-            # Look for "Page X Text:" that comes before this heading in the text
             page_num = None
             search_pattern = re.escape(title)
-            
-            # Search for the heading and track which page it's on
             for i, line in enumerate(lines):
                 if title in line or re.search(search_pattern, line, re.IGNORECASE):
-                    # Look backwards for the page marker
-                    for j in range(i, max(0, i-20), -1):
+                    for j in range(i, max(0, i - 20), -1):
                         page_match = re.search(r'Page\s+(\d+)\s+Text:', lines[j])
                         if page_match:
                             page_num = page_match.group(1)
                             break
                     if page_num:
                         break
-            
-            # If no page found, try to infer from pattern
-            if not page_num:
-                # Look for any page number near this heading in the line itself
-                page_search = re.search(r'Page\s+(\d+)', title)
-                if page_search:
-                    page_num = page_search.group(1)
-            
-            # Add to TOC with or without page number
             toc_entries.append((num, title, page_num or "?"))
-    
     return toc_entries
 
 
@@ -2047,9 +2018,6 @@ def build_file_overview(file_name, text):
     text = str(text)
     toc_entries = extract_toc_with_page_numbers(text)
     all_headings = extract_document_headings(text)
-
-    image_count = len(re.findall(r"\[IMAGE:|\[EMBEDDED_IMAGE:|Embedded Image|Slide Image", text, re.IGNORECASE))
-    table_count = len(re.findall(r"Page \d+ Table \d+:|Table \d+:|Sheet \'[^\']+\':|Table:\n", text, re.IGNORECASE))
 
     overview_parts = [f"📄 **{file_name}**"]
     
@@ -2071,11 +2039,6 @@ def build_file_overview(file_name, text):
             overview_parts.append(f"- {title}")
     else:
         overview_parts.append("- No document headings were detected.")
-
-    # Document Assets section
-    overview_parts.append("### Document Assets")
-    overview_parts.append(f"- Images: {image_count}")
-    overview_parts.append(f"- Tables: {table_count}")
 
     return "\n".join(overview_parts)
 
