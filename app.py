@@ -775,6 +775,34 @@ def render_document_preview(file_name, file_entry=None):
 
     file_name_lower = file_name.lower()
 
+    # Special handling for PDF files: render actual page images for a true preview
+    if file_name_lower.endswith(".pdf"):
+        with st.spinner("Rendering PDF preview..."):
+            try:
+                pdf_bio = BytesIO(file_entry["bytes"])
+                with pdfplumber.open(pdf_bio) as pdf:
+                    st.markdown(f"**PDF Pages: {len(pdf.pages)}**")
+                    for i, page in enumerate(pdf.pages):
+                        try:
+                            page_image = page.to_image(resolution=150)
+                            st.image(page_image.original, caption=f"Page {i+1}", use_container_width=True)
+                        except Exception as page_err:
+                            st.warning(f"Could not render page {i+1} as image: {page_err}")
+                            page_text = page.extract_text() or ""
+                            if page_text.strip():
+                                st.markdown(f"#### Page {i+1} Text")
+                                st.text_area(
+                                    f"Page {i+1}",
+                                    value=page_text,
+                                    height=300,
+                                    disabled=True,
+                                    key=f"pdf_text_page_{file_name}_{i}"
+                                )
+                    return
+            except Exception as e:
+                st.error(f"Could not render PDF preview: {e}")
+                st.info("Falling back to text-based document preview.")
+
     # Special handling for images
     if file_name_lower.endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp")):
         with st.spinner("Loading preview..."):
