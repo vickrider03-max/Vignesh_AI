@@ -912,14 +912,26 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None):
                 pdf_bio = BytesIO(file_entry["bytes"])
                 with pdfplumber.open(pdf_bio) as pdf:
                     st.markdown(f"**PDF Pages: {len(pdf.pages)}**")
+                    highlight_found = False
                     for i, page in enumerate(pdf.pages):
                         try:
+                            page_text = page.extract_text() or ""
+                            page_anchor_id = None
+                            if highlight_term and highlight_term.lower() in page_text.lower():
+                                page_anchor_id = create_heading_anchor(highlight_term)
+                                highlight_found = True
+                            if page_anchor_id:
+                                st.markdown(f"<div id='{page_anchor_id}'></div>", unsafe_allow_html=True)
+
                             page_image = page.to_image(resolution=150)
                             image_bytes_io = BytesIO()
                             page_image.original.save(image_bytes_io, format="PNG")
                             image_bytes = image_bytes_io.getvalue()
 
                             st.image(image_bytes, caption=f"Page {i+1}", use_container_width=True)
+                            if page_anchor_id and highlight_term:
+                                with st.expander(f"Highlighted text on page {i+1}", expanded=False):
+                                    st.markdown(render_text_block(page_text, highlight_term, anchor_id=None), unsafe_allow_html=True)
                             image_download_items.append({
                                 "label": f"Download Page {i+1} as PNG",
                                 "data": image_bytes,
@@ -955,6 +967,15 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None):
                                     st.markdown(render_text_block(page_text, highlight_term, anchor_id=page_anchor_id), unsafe_allow_html=True)
                                 else:
                                     st.code(page_text, language="text")
+                    if highlight_term and not highlight_found:
+                        if file_name not in st.session_state.file_texts:
+                            st.session_state.file_texts[file_name] = extract_text(file_name, file_entry["bytes"])
+                        full_content = st.session_state.file_texts.get(file_name, "")
+                        anchor_id = create_heading_anchor(highlight_term)
+                        st.markdown(f"<div id='{anchor_id}'></div>", unsafe_allow_html=True)
+                        st.markdown("### Highlighted Text")
+                        st.markdown(render_text_block(full_content, highlight_term, anchor_id=None), unsafe_allow_html=True)
+
                     if image_download_items:
                         with st.expander("🖼️ Image Downloads", expanded=False):
                             for item in image_download_items:
@@ -3291,6 +3312,10 @@ with tab2:
             st.rerun()
 
     show_current_sidebar_selection()
+    show_help_popup('dashboard', [
+        f for f in st.session_state.selected_files
+        if f.lower().endswith((".html", ".htm", ".xlsx"))
+    ])
 
     # Filter selected files for dashboard-compatible formats
     dashboard_files = [
@@ -3830,6 +3855,7 @@ with tab3:
 
     st.info("Select files in the sidebar to make them available here, then choose only the files you want to compare in this tab.")
     show_current_sidebar_selection()
+    show_help_popup('compare', st.session_state.selected_files)
     render_file_context_card("Compare File Context", st.session_state.selected_files, st.session_state.compare_file_selection)
 
     # Use selected files in multiselect (user must choose from selected_files independently)
@@ -3899,6 +3925,7 @@ with tab4:
     st.info(
         "Use sidebar selection to make CAPL source files available here. Then choose the CAPL file you want only in this tab.")
     show_current_sidebar_selection()
+    show_help_popup('capl', [f for f in st.session_state.selected_files if f.lower().endswith((".can", ".txt"))])
 
     # Filter selected files for CAPL analysis
     capl_selectable_files = [f for f in st.session_state.selected_files if f.lower().endswith((".can", ".txt"))]
