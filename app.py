@@ -1,4 +1,5 @@
 import html, re, hashlib, os, json, base64
+import uuid
 import urllib.parse
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
@@ -20,10 +21,30 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+PREVIEW_TOKENS = {}  # token -> {'file_name': str, 'timestamp': datetime}
+PREVIEW_STORE = {}   # token -> file_dict
+
+def cleanup_expired_preview_tokens():
+    """Remove preview tokens older than 1 hour to prevent memory accumulation."""
+    now = datetime.now()
+    expired_tokens = []
+    for token, data in PREVIEW_TOKENS.items():
+        if now - data['timestamp'] > timedelta(hours=1):
+            expired_tokens.append(token)
+    
+    for token in expired_tokens:
+        del PREVIEW_TOKENS[token]
+        if token in PREVIEW_STORE:
+            del PREVIEW_STORE[token]
+
 # -------------------------------
 # STREAMLIT PAGE CONFIG
 # -------------------------------
 st.set_page_config(page_title="Vignesh_AI", layout="wide")
+
+# Clean up expired preview tokens on app start
+cleanup_expired_preview_tokens()
+
 st.title("🤖 Vignesh_AI")
 st.markdown(
     """
@@ -459,10 +480,11 @@ def extract_pptx_preview(file_bytes):
         return []
 
 
-def render_document_preview(file_name):
+def render_document_preview(file_name, file_entry=None):
     st.markdown(f"**Preview: {file_name}**")
-    ensure_file_processed(file_name)
-    file_entry = get_uploaded_file_entry(file_name)
+    if file_entry is None:
+        ensure_file_processed(file_name)
+        file_entry = get_uploaded_file_entry(file_name)
     if not file_entry:
         st.warning("File preview is unavailable.")
         return
@@ -555,25 +577,27 @@ elif hasattr(st, "get_query_params"):
     except Exception:
         query_params = {}
 
-if "preview" in query_params and query_params["preview"]:
-    preview_value = query_params["preview"]
+if "preview_token" in query_params and query_params["preview_token"]:
+    preview_value = query_params["preview_token"]
     if isinstance(preview_value, list):
         preview_value = preview_value[0] if preview_value else ""
-    preview_file_from_url = urllib.parse.unquote_plus(str(preview_value))
+    preview_token = str(preview_value)
+    token_data = PREVIEW_TOKENS.get(preview_token)
+    preview_file_from_url = token_data['file_name'] if token_data else None
 
 if preview_file_from_url:
-    uploaded_names = [f["name"] for f in st.session_state.uploaded_files]
+    preview_entry = PREVIEW_STORE.get(preview_token)
     st.title("📄 File Preview")
-    if preview_file_from_url in uploaded_names:
+    if preview_entry is not None:
         st.markdown(
             "<a href='/' style='display:inline-block;padding:10px 18px;border-radius:8px;background:#1f4f91;color:#ffffff;text-decoration:none;'>← Back to app</a>",
             unsafe_allow_html=True,
         )
-        st.markdown(f"### {preview_file_from_url}")
+        st.markdown(f"### {preview_entry['name']}")
         st.markdown("---")
-        render_document_preview(preview_file_from_url)
+        render_document_preview(preview_entry['name'], file_entry=preview_entry)
     else:
-        st.error("Preview file not found in uploaded files. Please return to the app and select a file first.")
+        st.error("Preview file not found in the preview store. Please return to the app and click preview again.")
     st.stop()
 
 
@@ -659,9 +683,11 @@ with st.sidebar:
                 st.session_state.selected_files.remove(file_dict["name"])
             
             with cols[1]:
-                url_safe_name = urllib.parse.quote_plus(file_dict["name"])
+                token = str(uuid.uuid4())
+                PREVIEW_TOKENS[token] = {'file_name': file_dict["name"], 'timestamp': datetime.now()}
+                PREVIEW_STORE[token] = file_dict
                 st.markdown(
-                    f"<a href='./?preview={url_safe_name}' target='_blank' style='display:inline-block;padding:6px 10px;border-radius:8px;background:#1f4f91;color:#ffffff;text-decoration:none;'>👁️ Preview</a>",
+                    f"<a href='./?preview_token={token}' target='_blank' style='display:inline-block;padding:6px 10px;border-radius:8px;background:#1f4f91;color:#ffffff;text-decoration:none;'>👁️ Preview</a>",
                     unsafe_allow_html=True,
                 )
             
