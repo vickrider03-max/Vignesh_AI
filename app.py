@@ -11,6 +11,7 @@ import pandas as pd
 from openpyxl.styles import PatternFill
 from pptx import Presentation
 from bs4 import BeautifulSoup
+from PIL import Image, ImageDraw, ImageFont
 import plotly.express as px
 import plotly.graph_objects as go
 
@@ -533,6 +534,49 @@ def extract_pdf_content(bio):
     return content
 
 
+def table_to_png_bytes(table_data, title=None):
+    """Render table rows as a PNG image and return the bytes."""
+    try:
+        font = ImageFont.load_default()
+    except Exception:
+        font = None
+
+    padding = 10
+    row_height = 22
+    col_padding = 18
+
+    # Normalize table data
+    normalized_table = [[str(cell) for cell in row] for row in table_data]
+    col_widths = []
+    for col_idx in range(len(normalized_table[0])):
+        col_width = max(len(row[col_idx]) for row in normalized_table) * 7 + col_padding
+        col_widths.append(col_width)
+
+    width = sum(col_widths) + padding * 2
+    height = row_height * len(normalized_table) + padding * 2
+    if title:
+        height += row_height
+
+    image = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(image)
+    y = padding
+
+    if title:
+        draw.text((padding, y), title, fill="black", font=font)
+        y += row_height
+
+    for row in normalized_table:
+        x = padding
+        for col_idx, cell in enumerate(row):
+            draw.text((x, y), cell, fill="black", font=font)
+            x += col_widths[col_idx]
+        y += row_height
+
+    output = BytesIO()
+    image.save(output, format="PNG")
+    return output.getvalue()
+
+
 def extract_docx_content(bio):
     """Extract text, tables, and images from DOCX."""
     content = []
@@ -774,6 +818,7 @@ def render_document_preview(file_name, file_entry=None):
         return
 
     file_name_lower = file_name.lower()
+    download_items = []
 
     # Special handling for PDF files: render actual page images for a true preview
     if file_name_lower.endswith(".pdf"):
@@ -785,18 +830,47 @@ def render_document_preview(file_name, file_entry=None):
                     for i, page in enumerate(pdf.pages):
                         try:
                             page_image = page.to_image(resolution=150)
-                            st.image(page_image.original, caption=f"Page {i+1}", use_container_width=True)
+                            image_bytes_io = BytesIO()
+                            page_image.original.save(image_bytes_io, format="PNG")
+                            image_bytes = image_bytes_io.getvalue()
+
+                            st.image(image_bytes, caption=f"Page {i+1}", use_container_width=True)
+                            download_items.append({
+                                "label": f"📥 Download Page {i+1} as PNG",
+                                "data": image_bytes,
+                                "file_name": f"{os.path.splitext(file_name)[0]}_page_{i+1}.png",
+                                "mime": "image/png",
+                                "key": f"download_pdf_page_{file_name}_{i}"
+                            })
+
+                            tables = page.extract_tables()
+                            if tables:
+                                for j, table in enumerate(tables):
+                                    if table and any(any(cell for cell in row) for row in table):
+                                        table_png = table_to_png_bytes(table, title=f"Page {i+1} Table {j+1}")
+                                        st.image(table_png, caption=f"Page {i+1} Table {j+1}", use_container_width=True)
+                                        download_items.append({
+                                            "label": f"📥 Download Table {j+1} as PNG",
+                                            "data": table_png,
+                                            "file_name": f"{os.path.splitext(file_name)[0]}_page_{i+1}_table_{j+1}.png",
+                                            "mime": "image/png",
+                                            "key": f"download_pdf_table_{file_name}_{i}_{j}"
+                                        })
                         except Exception as page_err:
                             st.warning(f"Could not render page {i+1} as image: {page_err}")
                             page_text = page.extract_text() or ""
                             if page_text.strip():
                                 st.markdown(f"#### Page {i+1} Text")
-                                st.text_area(
-                                    f"Page {i+1}",
-                                    value=page_text,
-                                    height=300,
-                                    disabled=True,
-                                    key=f"pdf_text_page_{file_name}_{i}"
+                                st.code(page_text, language="text")
+                    if download_items:
+                        with st.expander("📦 Preview Downloads", expanded=False):
+                            for item in download_items:
+                                st.download_button(
+                                    label=item["label"],
+                                    data=item["data"],
+                                    file_name=item["file_name"],
+                                    mime=item["mime"],
+                                    key=item["key"]
                                 )
                     return
             except Exception as e:
@@ -874,13 +948,8 @@ def render_document_preview(file_name, file_entry=None):
             if not has_meaningful_text:
                 # Fall back to showing raw content
                 st.markdown("### Document Content")
-                st.text_area(
-                    "Extracted Text",
-                    value=full_content.strip(),
-                    height=600,
-                    disabled=True,
-                    key=f"raw_content_{file_name}"
-                )
+                with st.expander("Show extracted text", expanded=True):
+                    st.code(full_content.strip(), language="text")
                 return
         
         if not sections:
@@ -899,31 +968,11 @@ def render_document_preview(file_name, file_entry=None):
             elif section_type == "TEXT":
                 if section_content.strip():  # Only show if there's actual content
                     st.markdown(f"### {section_title}")
-                    # Show first 10,000 characters, with option to expand
-                    if len(section_content) > 10000:
-                        st.text_area(
-                            f"{section_title} (truncated)",
-                            value=section_content[:10000] + "\n\n[... content truncated ...]",
-                            height=400,
-                            disabled=True,
-                            key=f"preview_text_{file_name}_{section_title}"
-                        )
-                        with st.expander("Show full content"):
-                            st.text_area(
-                                f"Full {section_title}",
-                                value=section_content,
-                                height=600,
-                                disabled=True,
-                                key=f"preview_full_text_{file_name}_{section_title}"
-                            )
+                    if len(section_content) > 2000:
+                        with st.expander("Show text content", expanded=False):
+                            st.code(section_content, language="text")
                     else:
-                        st.text_area(
-                            section_title,
-                            value=section_content,
-                            height=400,
-                            disabled=True,
-                            key=f"preview_text_{file_name}_{section_title}"
-                        )
+                        st.code(section_content, language="text")
             elif section_type == "TABLE":
                 with st.expander(f"📊 {section_title}", expanded=True):
                     # Try to parse table and display as dataframe
@@ -951,6 +1000,17 @@ def render_document_preview(file_name, file_entry=None):
                                     mime="text/csv",
                                     key=f"download_table_{file_name}_{section_title}"
                                 )
+                                try:
+                                    table_png = table_to_png_bytes(table_data, title=section_title)
+                                    download_items.append({
+                                        "label": f"📥 Download {section_title} as PNG",
+                                        "data": table_png,
+                                        "file_name": f"{section_title.replace(' ', '_')}.png",
+                                        "mime": "image/png",
+                                        "key": f"download_table_png_{file_name}_{section_title}"
+                                    })
+                                except Exception:
+                                    pass
                             else:
                                 st.code(section_content, language="text")
                     except Exception:
@@ -983,6 +1043,17 @@ def render_document_preview(file_name, file_entry=None):
                 st.error(f"❌ {section_content}")
             elif section_type == "UNSUPPORTED":
                 st.warning(f"⚠️ {section_content}")
+
+        if download_items:
+            with st.expander("📦 Preview Downloads", expanded=False):
+                for item in download_items:
+                    st.download_button(
+                        label=item["label"],
+                        data=item["data"],
+                        file_name=item["file_name"],
+                        mime=item["mime"],
+                        key=item["key"]
+                    )
 
 
 def parse_extracted_content(content):
@@ -1171,6 +1242,31 @@ with st.sidebar:
                 [data-testid="stSidebar"] div[data-testid="column"] > div {
                     width: 100%;
                 }
+                .file-box {
+                    background: #f8fbff;
+                    border: 1px solid #d7e3f4;
+                    border-radius: 12px;
+                    padding: 12px 14px;
+                    margin-bottom: 8px;
+                    color: #173152;
+                    font-size: 14px;
+                    overflow-wrap: anywhere;
+                }
+                .file-icon-button {
+                    display: inline-flex;
+                    justify-content: center;
+                    align-items: center;
+                    width: 38px;
+                    height: 38px;
+                    border-radius: 12px;
+                    background: #1f4f91;
+                    color: #ffffff;
+                    text-decoration: none;
+                    font-size: 18px;
+                }
+                .file-icon-button:hover {
+                    background: #163b6f;
+                }
             </style>
             """,
             unsafe_allow_html=True
@@ -1215,31 +1311,22 @@ with st.sidebar:
         st.markdown("### Uploaded files")
         
         for idx, file_dict in enumerate(st.session_state.uploaded_files[:]):
-            cols = st.columns([0.50, 0.20, 0.15, 0.15], vertical_alignment="center")
+            cols = st.columns([0.65, 0.18, 0.17], vertical_alignment="center")
             with cols[0]:
-                checked = file_dict["name"] in st.session_state.selected_files
-                new_checked = st.checkbox(
-                    file_dict["name"],
-                    value=checked,
-                    key=f"select_file_{idx}"
+                st.markdown(
+                    f"<div class='file-box'>{html.escape(file_dict['name'])}</div>",
+                    unsafe_allow_html=True,
                 )
-            if new_checked and file_dict["name"] not in st.session_state.selected_files:
-                st.session_state.selected_files.append(file_dict["name"])
-            elif not new_checked and file_dict["name"] in st.session_state.selected_files:
-                st.session_state.selected_files.remove(file_dict["name"])
-            
             with cols[1]:
                 token = str(uuid.uuid4())
                 PREVIEW_TOKENS[token] = {'file_name': file_dict["name"], 'timestamp': datetime.now()}
                 PREVIEW_STORE[token] = file_dict
-                save_preview_data()  # Save to file so preview tab can access it
+                save_preview_data()
                 st.markdown(
-                    f"<a href='./?preview_token={token}' target='_blank' style='display:inline-block;padding:6px 10px;border-radius:8px;background:#1f4f91;color:#ffffff;text-decoration:none;font-size:16px;'>👁️</a>",
+                    f"<a href='./?preview_token={token}' target='_blank' class='file-icon-button' title='Preview {html.escape(file_dict['name'])}'>👁️</a>",
                     unsafe_allow_html=True,
                 )
-            
             with cols[2]:
-                # Delete button
                 if st.button("🗑️", key=f"del_file_{idx}", help=f"Delete {file_dict['name']}", use_container_width=True):
                     deleted_name = file_dict["name"]
                     st.session_state.uploaded_files = [f for f in st.session_state.uploaded_files if
@@ -2199,7 +2286,9 @@ def render_status_strip():
     username = st.session_state.get("logged_in_username") or "-"
     login_entries = st.session_state.get("login_history", [])
     last_login = login_entries[-1]["timestamp"] if login_entries else "-"
-    last_login_display = last_login if role == "creator" else "Active Session"
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    status_label = "Last Login" if role == "creator" else "Usage Time"
+    status_value = last_login if role == "creator" else current_time
 
     st.markdown(
         f"""
@@ -2217,8 +2306,8 @@ def render_status_strip():
                 <div class="status-value">{len(available_files)}</div>
             </div>
             <div class="status-tile">
-                <div class="status-label">{ "Last Login" if role == "creator" else "Session Status" }</div>
-                <div class="status-value" style="font-size:14px;">{html.escape(str(last_login_display))}</div>
+                <div class="status-label">{status_label}</div>
+                <div class="status-value" style="font-size:14px;">{html.escape(str(status_value))}</div>
             </div>
         </div>
         """,
