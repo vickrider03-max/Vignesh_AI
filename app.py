@@ -2190,11 +2190,12 @@ def build_file_overview(file_name, text):
         overview_parts.append("|----------|---------|")
         for num, title, page_num in toc_entries:
             content_str = f"{num} {title}" if num else title
+            display_text = f"{content_str} (Page {page_num})" if page_num and page_num != "?" else content_str
             preview_link = create_preview_link(file_name, highlight_term=title, page_num=page_num if page_num != "?" else None)
             if preview_link:
-                overview_parts.append(f"| <a href='{preview_link}' target='_blank'>{html.escape(content_str)}</a> | {page_num} |")
+                overview_parts.append(f"| <a href='{preview_link}' target='_blank'>{html.escape(display_text)}</a> | {page_num} |")
             else:
-                overview_parts.append(f"| {content_str} | {page_num} |")
+                overview_parts.append(f"| {html.escape(display_text)} | {page_num} |")
     else:
         overview_parts.append("- No table of contents found with page numbers.")
 
@@ -3279,22 +3280,24 @@ with tab1:
                                         st.markdown("### Table of Contents")
                                         for num, title, page_num in toc_entries:
                                             content_str = f"{num} {title}" if num else title
+                                            display_text = f"{content_str} (Page {page_num})" if page_num and page_num != "?" else content_str
                                             page_param = page_num if page_num != "?" else None
                                             preview_link = create_preview_link(f, highlight_term=title, page_num=page_param)
                                             if preview_link:
-                                                response_lines.append(f"- <a href='{preview_link}' target='_blank'>{html.escape(content_str)}</a>")
+                                                response_lines.append(f"- <a href='{preview_link}' target='_blank'>{html.escape(display_text)}</a>")
                                             else:
-                                                response_lines.append(f"- {html.escape(content_str)}")
+                                                response_lines.append(f"- {html.escape(display_text)}")
                                     if all_headings:
                                         st.markdown("### Document Headings")
                                         for num, title in all_headings:
                                             content_str = f"{num} {title}" if num else title
                                             page_num = find_heading_page_number(file_text, title)
+                                            display_text = f"{content_str} (Page {page_num})" if page_num else content_str
                                             preview_link = create_preview_link(f, highlight_term=title, page_num=page_num)
                                             if preview_link:
-                                                response_lines.append(f"- <a href='{preview_link}' target='_blank'>{html.escape(content_str)}</a>")
+                                                response_lines.append(f"- <a href='{preview_link}' target='_blank'>{html.escape(display_text)}</a>")
                                             else:
-                                                response_lines.append(f"- {html.escape(content_str)}")
+                                                response_lines.append(f"- {html.escape(display_text)}")
                                 else:
                                     response_lines.append(f"📄 **{f}**\n\nNo readable content found in this document.")
                             response = "\n\n".join(response_lines)
