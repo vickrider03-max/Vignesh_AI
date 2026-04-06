@@ -597,6 +597,15 @@ def dataframe_to_table_rows(df):
     return rows
 
 
+def crop_pdf_region_to_png(page, bbox, resolution=150):
+    """Crop a rectangular region from a PDF page and return it as PNG bytes."""
+    cropped_page = page.crop(bbox)
+    cropped_image = cropped_page.to_image(resolution=resolution)
+    output = BytesIO()
+    cropped_image.original.save(output, format="PNG")
+    return output.getvalue()
+
+
 def extract_docx_content(bio):
     """Extract text, tables, and images from DOCX."""
     content = []
@@ -1254,6 +1263,41 @@ def parse_extracted_content(content):
     return sections
 
 
+def render_extracted_assets_preview(file_name, file_entry):
+    st.markdown(f"**Preview: {file_name}**")
+    assets = build_summary_download_assets(file_name, file_entry["bytes"])
+    image_items = assets.get("images", [])
+    table_items = assets.get("tables", [])
+
+    if not image_items and not table_items:
+        st.info("No extractable images or tables were found in this file.")
+        return
+
+    if image_items:
+        st.markdown("### Extracted Images")
+        for index, item in enumerate(image_items):
+            st.image(item["data"], caption=item["label"], use_container_width=True)
+            st.download_button(
+                label=f"Download {item['label']} as PNG",
+                data=item["data"],
+                file_name=item["file_name"],
+                mime=item["mime"],
+                key=f"preview_image_download_{index}_{item['file_name']}"
+            )
+
+    if table_items:
+        st.markdown("### Extracted Tables")
+        for index, item in enumerate(table_items):
+            st.image(item["data"], caption=item["label"], use_container_width=True)
+            st.download_button(
+                label=f"Download {item['label']} as PNG",
+                data=item["data"],
+                file_name=item["file_name"],
+                mime=item["mime"],
+                key=f"preview_table_download_{index}_{item['file_name']}"
+            )
+
+
 # Handle browser tab preview links
 preview_file_from_url = None
 query_params = {}
@@ -1290,12 +1334,11 @@ if "preview_token" in query_params and query_params["preview_token"]:
 
 if preview_file_from_url:
     preview_entry = PREVIEW_STORE.get(preview_token)
-    st.title("📄 File Preview")
+    st.title("📄 Extracted Asset Preview")
     if preview_entry is not None:
-        # Removed "Back to app" link as requested
         st.markdown(f"### {preview_entry['name']}")
         st.markdown("---")
-        render_document_preview(preview_entry['name'], file_entry=preview_entry)
+        render_extracted_assets_preview(preview_entry['name'], file_entry=preview_entry)
     else:
         st.error("Preview file not found in the preview store. Please return to the app and click preview again.")
     st.stop()
@@ -1658,18 +1701,23 @@ def build_summary_download_assets(file_name, file_bytes):
         if file_name_lower.endswith(".pdf"):
             with pdfplumber.open(BytesIO(file_bytes)) as pdf:
                 for page_index, page in enumerate(pdf.pages, start=1):
-                    try:
-                        page_image = page.to_image(resolution=150)
-                        image_buffer = BytesIO()
-                        page_image.original.save(image_buffer, format="PNG")
-                        image_items.append({
-                            "label": f"{file_name} - Page {page_index}",
-                            "data": image_buffer.getvalue(),
-                            "file_name": f"{os.path.splitext(file_name)[0]}_page_{page_index}.png",
-                            "mime": "image/png"
-                        })
-                    except Exception:
-                        pass
+                    for image_index, image_info in enumerate(page.images or [], start=1):
+                        try:
+                            bbox = (
+                                image_info.get("x0", 0),
+                                image_info.get("top", 0),
+                                image_info.get("x1", 0),
+                                image_info.get("bottom", 0)
+                            )
+                            if bbox[0] < bbox[2] and bbox[1] < bbox[3]:
+                                image_items.append({
+                                    "label": f"{file_name} - Page {page_index} Image {image_index}",
+                                    "data": crop_pdf_region_to_png(page, bbox),
+                                    "file_name": f"{os.path.splitext(file_name)[0]}_page_{page_index}_image_{image_index}.png",
+                                    "mime": "image/png"
+                                })
+                        except Exception:
+                            pass
 
                     for table_index, table in enumerate(page.extract_tables() or [], start=1):
                         if table and any(any(cell for cell in row) for row in table):
@@ -2702,66 +2750,80 @@ def render_status_strip():
         minutes = (elapsed_seconds % 3600) // 60
         seconds = elapsed_seconds % 60
         status_value = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+    status_cols = st.columns(4)
 
-    usage_timer_html = ""
-    if role != "creator":
-        usage_timer_html = f"""
-        <script>
-            (() => {{
-                const el = window.parent.document.getElementById("usage-time-value");
-                if (!el) return;
-                let seconds = {elapsed_seconds};
-                const formatTime = (totalSeconds) => {{
-                    const hrs = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
-                    const mins = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
-                    const secs = String(totalSeconds % 60).padStart(2, "0");
-                    return `${{hrs}}:${{mins}}:${{secs}}`;
-                }};
-                el.textContent = formatTime(seconds);
-                if (window.usageTimeInterval) {{
-                    clearInterval(window.usageTimeInterval);
-                }}
-                window.usageTimeInterval = setInterval(() => {{
-                    seconds += 1;
-                    const target = window.parent.document.getElementById("usage-time-value");
-                    if (target) {{
-                        target.textContent = formatTime(seconds);
-                    }}
-                }}, 1000);
-            }})();
-        </script>
-        """
-
-    status_value_html = (
-        f'<div class="status-value" id="usage-time-value">{html.escape(str(status_value))}</div>'
-        if role != "creator"
-        else f'<div class="status-value" style="font-size:14px;">{html.escape(str(status_value))}</div>'
-    )
-
-    st.markdown(
-        f"""
-        <div class="status-strip">
+    with status_cols[0]:
+        st.markdown(
+            f"""
             <div class="status-tile">
                 <div class="status-label">User</div>
                 <div class="status-value">{html.escape(username)}</div>
             </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    with status_cols[1]:
+        st.markdown(
+            f"""
             <div class="status-tile">
                 <div class="status-label">Role</div>
                 <div class="status-value">{html.escape(str(role).title())}</div>
             </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    with status_cols[2]:
+        st.markdown(
+            f"""
             <div class="status-tile">
                 <div class="status-label">Available Files</div>
                 <div class="status-value">{len(available_files)}</div>
             </div>
-            <div class="status-tile">
-                <div class="status-label">{status_label}</div>
-                {status_value_html}
-            </div>
-        </div>
-        {usage_timer_html}
-        """,
-        unsafe_allow_html=True
-    )
+            """,
+            unsafe_allow_html=True
+        )
+
+    with status_cols[3]:
+        if role == "creator":
+            st.markdown(
+                f"""
+                <div class="status-tile">
+                    <div class="status-label">{status_label}</div>
+                    <div class="status-value" style="font-size:14px;">{html.escape(str(status_value))}</div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        else:
+            st.components.v1.html(
+                f"""
+                <div class="status-tile" style="background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%); border: 1px solid #d7e3f4; border-radius: 14px; padding: 12px 14px; height: 92px; box-sizing: border-box;">
+                    <div class="status-label" style="color:#51627a; font-size:12px; margin-bottom:4px;">{html.escape(status_label)}</div>
+                    <div id="usage-time-value" class="status-value" style="color:#173152; font-size:18px; font-weight:600;">{html.escape(str(status_value))}</div>
+                </div>
+                <script>
+                    const timerEl = document.getElementById("usage-time-value");
+                    let elapsedSeconds = {elapsed_seconds};
+                    const formatTime = (totalSeconds) => {{
+                        const hrs = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
+                        const mins = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
+                        const secs = String(totalSeconds % 60).padStart(2, "0");
+                        return `${{hrs}}:${{mins}}:${{secs}}`;
+                    }};
+                    timerEl.textContent = formatTime(elapsedSeconds);
+                    if (window.usageTimeInterval) {{
+                        clearInterval(window.usageTimeInterval);
+                    }}
+                    window.usageTimeInterval = setInterval(() => {{
+                        elapsedSeconds += 1;
+                        timerEl.textContent = formatTime(elapsedSeconds);
+                    }}, 1000);
+                </script>
+                """,
+                height=92
+            )
 
 
 def render_file_context_card(title, available_files, active_files=None):
