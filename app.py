@@ -930,8 +930,8 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None):
 
                             st.image(image_bytes, caption=f"Page {i+1}", use_container_width=True)
                             if page_anchor_id and highlight_term:
-                                with st.expander(f"Highlighted text on page {i+1}", expanded=False):
-                                    st.markdown(render_text_block(page_text, highlight_term, anchor_id=None), unsafe_allow_html=True)
+                                st.markdown("### Highlighted page text", unsafe_allow_html=True)
+                                st.markdown(render_text_block(page_text, highlight_term, anchor_id=None), unsafe_allow_html=True)
                             image_download_items.append({
                                 "label": f"Download Page {i+1} as PNG",
                                 "data": image_bytes,
