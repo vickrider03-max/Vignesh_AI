@@ -202,6 +202,8 @@ if "compare_result_files" not in st.session_state:
     st.session_state.compare_result_files = []
 if "chat_file_selection" not in st.session_state:
     st.session_state.chat_file_selection = []
+if "chat_summary_downloads" not in st.session_state:
+    st.session_state.chat_summary_downloads = {"images": [], "tables": []}
 if "compare_file_selection" not in st.session_state:
     st.session_state.compare_file_selection = []
 if "file_dropdown" not in st.session_state:
@@ -836,7 +838,8 @@ def render_document_preview(file_name, file_entry=None):
         return
 
     file_name_lower = file_name.lower()
-    download_items = []
+    image_download_items = []
+    table_download_items = []
 
     # Special handling for PDF files: render actual page images for a true preview
     if file_name_lower.endswith(".pdf"):
@@ -853,7 +856,7 @@ def render_document_preview(file_name, file_entry=None):
                             image_bytes = image_bytes_io.getvalue()
 
                             st.image(image_bytes, caption=f"Page {i+1}", use_container_width=True)
-                            download_items.append({
+                            image_download_items.append({
                                 "label": f"Download Page {i+1} as PNG",
                                 "data": image_bytes,
                                 "file_name": f"{os.path.splitext(file_name)[0]}_page_{i+1}.png",
@@ -867,7 +870,7 @@ def render_document_preview(file_name, file_entry=None):
                                     if table and any(any(cell for cell in row) for row in table):
                                         table_png = table_to_png_bytes(table, title=f"Page {i+1} Table {j+1}")
                                         st.image(table_png, caption=f"Page {i+1} Table {j+1}", use_container_width=True)
-                                        download_items.append({
+                                        table_download_items.append({
                                             "label": f"📥 Download Table {j+1} as PNG",
                                             "data": table_png,
                                             "file_name": f"{os.path.splitext(file_name)[0]}_page_{i+1}_table_{j+1}.png",
@@ -880,9 +883,19 @@ def render_document_preview(file_name, file_entry=None):
                             if page_text.strip():
                                 st.markdown(f"#### Page {i+1} Text")
                                 st.code(page_text, language="text")
-                    if download_items:
-                        with st.expander("📦 Preview Downloads", expanded=False):
-                            for item in download_items:
+                    if image_download_items:
+                        with st.expander("🖼️ Image Downloads", expanded=False):
+                            for item in image_download_items:
+                                st.download_button(
+                                    label=item["label"],
+                                    data=item["data"],
+                                    file_name=item["file_name"],
+                                    mime=item["mime"],
+                                    key=item["key"]
+                                )
+                    if table_download_items:
+                        with st.expander("📊 Table Downloads", expanded=False):
+                            for item in table_download_items:
                                 st.download_button(
                                     label=item["label"],
                                     data=item["data"],
@@ -1051,7 +1064,7 @@ def render_document_preview(file_name, file_entry=None):
                                 )
                                 try:
                                     table_png = table_to_png_bytes(table_data, title=section_title)
-                                    download_items.append({
+                                    table_download_items.append({
                                         "label": f"Download {section_title} as PNG",
                                         "data": table_png,
                                         "file_name": f"{section_title.replace(' ', '_')}.png",
@@ -1104,9 +1117,19 @@ def render_document_preview(file_name, file_entry=None):
             elif section_type == "UNSUPPORTED":
                 st.warning(f"⚠️ {section_content}")
 
-        if download_items:
-            with st.expander("📦 Preview Downloads", expanded=False):
-                for item in download_items:
+        if image_download_items:
+            with st.expander("🖼️ Image Downloads", expanded=False):
+                for item in image_download_items:
+                    st.download_button(
+                        label=item["label"],
+                        data=item["data"],
+                        file_name=item["file_name"],
+                        mime=item["mime"],
+                        key=item["key"]
+                    )
+        if table_download_items:
+            with st.expander("📊 Table Downloads", expanded=False):
+                for item in table_download_items:
                     st.download_button(
                         label=item["label"],
                         data=item["data"],
@@ -1625,6 +1648,161 @@ def get_document_asset_counts(file_name, file_bytes, extracted_text):
     return page_count, image_count, table_count
 
 
+@st.cache_data(show_spinner=False)
+def build_summary_download_assets(file_name, file_bytes):
+    file_name_lower = file_name.lower()
+    image_items = []
+    table_items = []
+
+    try:
+        if file_name_lower.endswith(".pdf"):
+            with pdfplumber.open(BytesIO(file_bytes)) as pdf:
+                for page_index, page in enumerate(pdf.pages, start=1):
+                    try:
+                        page_image = page.to_image(resolution=150)
+                        image_buffer = BytesIO()
+                        page_image.original.save(image_buffer, format="PNG")
+                        image_items.append({
+                            "label": f"{file_name} - Page {page_index}",
+                            "data": image_buffer.getvalue(),
+                            "file_name": f"{os.path.splitext(file_name)[0]}_page_{page_index}.png",
+                            "mime": "image/png"
+                        })
+                    except Exception:
+                        pass
+
+                    for table_index, table in enumerate(page.extract_tables() or [], start=1):
+                        if table and any(any(cell for cell in row) for row in table):
+                            try:
+                                table_items.append({
+                                    "label": f"{file_name} - Page {page_index} Table {table_index}",
+                                    "data": table_to_png_bytes(table, title=f"Page {page_index} Table {table_index}"),
+                                    "file_name": f"{os.path.splitext(file_name)[0]}_page_{page_index}_table_{table_index}.png",
+                                    "mime": "image/png"
+                                })
+                            except Exception:
+                                pass
+
+        elif file_name_lower.endswith(".docx"):
+            doc = docx.Document(BytesIO(file_bytes))
+            image_index = 1
+            for rel in doc.part.rels.values():
+                if "image" in rel.reltype:
+                    try:
+                        image_bytes = rel.target_part.blob
+                        image_items.append({
+                            "label": f"{file_name} - Image {image_index}",
+                            "data": image_bytes_to_png_bytes(image_bytes),
+                            "file_name": f"{os.path.splitext(file_name)[0]}_image_{image_index}.png",
+                            "mime": "image/png"
+                        })
+                        image_index += 1
+                    except Exception:
+                        pass
+
+            for table_index, table in enumerate(doc.tables, start=1):
+                table_data = [[cell.text.strip() for cell in row.cells] for row in table.rows]
+                if table_data:
+                    try:
+                        table_items.append({
+                            "label": f"{file_name} - Table {table_index}",
+                            "data": table_to_png_bytes(table_data, title=f"Table {table_index}"),
+                            "file_name": f"{os.path.splitext(file_name)[0]}_table_{table_index}.png",
+                            "mime": "image/png"
+                        })
+                    except Exception:
+                        pass
+
+        elif file_name_lower.endswith(".pptx"):
+            prs = Presentation(BytesIO(file_bytes))
+            image_index = 1
+            table_index = 1
+            for slide_index, slide in enumerate(prs.slides, start=1):
+                for shape in slide.shapes:
+                    if hasattr(shape, "image"):
+                        try:
+                            image_items.append({
+                                "label": f"{file_name} - Slide {slide_index} Image {image_index}",
+                                "data": image_bytes_to_png_bytes(shape.image.blob),
+                                "file_name": f"{os.path.splitext(file_name)[0]}_slide_{slide_index}_image_{image_index}.png",
+                                "mime": "image/png"
+                            })
+                            image_index += 1
+                        except Exception:
+                            pass
+                    if hasattr(shape, "table"):
+                        try:
+                            table_data = [
+                                [cell.text.strip() for cell in row.cells]
+                                for row in shape.table.rows
+                            ]
+                            table_items.append({
+                                "label": f"{file_name} - Slide {slide_index} Table {table_index}",
+                                "data": table_to_png_bytes(table_data, title=f"Slide {slide_index} Table {table_index}"),
+                                "file_name": f"{os.path.splitext(file_name)[0]}_slide_{slide_index}_table_{table_index}.png",
+                                "mime": "image/png"
+                            })
+                            table_index += 1
+                        except Exception:
+                            pass
+
+        elif file_name_lower.endswith(".xlsx"):
+            data = extract_excel_data(file_name, file_bytes)
+            if data:
+                preview_df = pd.DataFrame(data).head(20)
+                table_items.append({
+                    "label": f"{file_name} - Preview Table",
+                    "data": table_to_png_bytes(dataframe_to_table_rows(preview_df), title=f"{file_name} Preview"),
+                    "file_name": f"{os.path.splitext(file_name)[0]}_preview.png",
+                    "mime": "image/png"
+                })
+
+        elif file_name_lower.endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp")):
+            image_items.append({
+                "label": f"{file_name} - Image",
+                "data": image_bytes_to_png_bytes(file_bytes),
+                "file_name": f"{os.path.splitext(file_name)[0]}.png",
+                "mime": "image/png"
+            })
+    except Exception:
+        return {"images": [], "tables": []}
+
+    return {"images": image_items, "tables": table_items}
+
+
+def render_chat_summary_downloads():
+    downloads = st.session_state.get("chat_summary_downloads", {"images": [], "tables": []})
+    image_items = downloads.get("images", [])
+    table_items = downloads.get("tables", [])
+
+    if not image_items and not table_items:
+        return
+
+    st.markdown("### Summary Downloads")
+
+    if image_items:
+        with st.expander("🖼️ Image PNG Downloads", expanded=False):
+            for index, item in enumerate(image_items):
+                st.download_button(
+                    label=item["label"],
+                    data=item["data"],
+                    file_name=item["file_name"],
+                    mime=item["mime"],
+                    key=f"chat_summary_image_{index}_{item['file_name']}"
+                )
+
+    if table_items:
+        with st.expander("📊 Table PNG Downloads", expanded=False):
+            for index, item in enumerate(table_items):
+                st.download_button(
+                    label=item["label"],
+                    data=item["data"],
+                    file_name=item["file_name"],
+                    mime=item["mime"],
+                    key=f"chat_summary_table_{index}_{item['file_name']}"
+                )
+
+
 def build_detailed_document_summary(file_name, file_bytes, text):
     lines = [line.strip() for line in str(text).splitlines() if line.strip()]
     words = re.findall(r"\w+", str(text))
@@ -1660,35 +1838,34 @@ def build_detailed_document_summary(file_name, file_bytes, text):
 
     preview_text = " ".join(key_lines[:3] if key_lines else lines[:3])[:500]
 
-    summary_parts = [
-        f"📄 **{file_name}**",
-        "",
-        "**Key Information:**",
-        f"Title: {title}",
-        f"Keywords: {keywords}",
-    ]
+    escaped_file_name = html.escape(file_name)
+    escaped_title = html.escape(title)
+    escaped_keywords = html.escape(keywords)
+    key_lines_html = "".join(
+        f"<div>{html.escape(line)}</div>"
+        for line in key_lines
+    ) if key_lines else "<div>No key content lines could be extracted.</div>"
+    preview_html = html.escape(f"{preview_text}..." if preview_text else "No readable preview available.")
 
-    if key_lines:
-        summary_parts.extend(key_lines)
-    else:
-        summary_parts.append("No key content lines could be extracted.")
-
-    summary_parts.extend([
-        "",
-        "**Document Statistics:**",
-        f"Total characters: {len(str(text))}",
-        f"Estimated words: {len(words)}",
-        f"Content lines: {len(lines)}",
-        f"Pages/Sections: {page_count}",
-        f"Images found: {image_count}",
-        f"Tables found: {table_count}",
-        f"Downloadable preview assets: Images {image_count}, Tables {table_count}",
-        "",
-        "**Content Preview:**",
-        f"{preview_text}..." if preview_text else "No readable preview available."
-    ])
-
-    return "\n".join(summary_parts)
+    return f"""
+    <div style="margin-bottom:16px;">
+        <div style="font-weight:600; color:#173152; margin-bottom:8px;">📄 {escaped_file_name}</div>
+        <div style="font-weight:600; margin:10px 0 6px 0;">Key Information:</div>
+        <div>Title: {escaped_title}</div>
+        <div>Keywords: {escaped_keywords}</div>
+        {key_lines_html}
+        <div style="font-weight:600; margin:12px 0 6px 0;">Document Statistics:</div>
+        <div>Total characters: {len(str(text))}</div>
+        <div>Estimated words: {len(words)}</div>
+        <div>Content lines: {len(lines)}</div>
+        <div>Pages/Sections: {page_count}</div>
+        <div>Images found: {image_count}</div>
+        <div>Tables found: {table_count}</div>
+        <div>Downloadable preview assets: Images {image_count}, Tables {table_count}</div>
+        <div style="font-weight:600; margin:12px 0 6px 0;">Content Preview:</div>
+        <div>{preview_html}</div>
+    </div>
+    """
 
 
 @st.cache_data(show_spinner=False)
@@ -2699,6 +2876,7 @@ with tab1:
     with chat_reset_col:
         if st.button("🔄 Reset", key="reset_chat_selection", use_container_width=True):
             st.session_state.chat_file_selection = []
+            st.session_state.chat_summary_downloads = {"images": [], "tables": []}
             st.rerun()
 
     st.info(
@@ -2726,10 +2904,12 @@ with tab1:
             if user_input:
                 if user_input.strip().lower() == "clear":
                     st.session_state.messages = []
+                    st.session_state.chat_summary_downloads = {"images": [], "tables": []}
                     st.success("✅ Chat cleared!")
                 else:
                     st.session_state.messages.append({"role": "user", "content": user_input})
                     with st.spinner("Processing your request..."):
+                        st.session_state.chat_summary_downloads = {"images": [], "tables": []}
                         # Word count queries
                         if any(t in user_input.lower() for t in ["how many", "count", "number of", "occurrences"]):
                             match = re.search(r"'(.*?)'|\"(.*?)\"", user_input)
@@ -2753,15 +2933,24 @@ with tab1:
                                 response = "⚠️ Specify the search word or phrase in quotes. Example: find('keyword') or search(\"keyword\")"
                         elif any(term in user_input.lower() for term in ["analyze", "summary", "summarize", "summarise", "overview"]):
                             result = []
+                            summary_image_downloads = []
+                            summary_table_downloads = []
                             for f in chat_files:
                                 file_text = st.session_state.file_texts.get(f, "")
                                 file_entry = get_uploaded_file_entry(f)
                                 if file_text.strip():
                                     file_bytes = file_entry["bytes"] if file_entry else b""
                                     result.append(build_detailed_document_summary(f, file_bytes, file_text))
+                                    summary_assets = build_summary_download_assets(f, file_bytes)
+                                    summary_image_downloads.extend(summary_assets.get("images", []))
+                                    summary_table_downloads.extend(summary_assets.get("tables", []))
                                 else:
                                     result.append(f"📄 **{f}**\n\nNo readable content found in this document.")
-                            
+
+                            st.session_state.chat_summary_downloads = {
+                                "images": summary_image_downloads,
+                                "tables": summary_table_downloads
+                            }
                             response = "\n\n---\n\n".join(result)
                         elif "compare" in user_input.lower():
                             if len(chat_files) >= 2:
@@ -2796,6 +2985,8 @@ with tab1:
         for msg in st.session_state.messages:
             role = "🧑" if msg["role"] == "user" else "🤖"
             st.markdown(f"{role} {msg['content']}", unsafe_allow_html=True)
+
+        render_chat_summary_downloads()
     else:
         st.info("Select files from the sidebar to start chatting.")
 
