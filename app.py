@@ -1,4 +1,5 @@
 import html, re, hashlib, os, json, base64
+import urllib.parse
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from io import BytesIO
@@ -151,8 +152,6 @@ if "file_dropdown" not in st.session_state:
     st.session_state.file_dropdown = "--Select File--"
 if "selected_capl_file" not in st.session_state:
     st.session_state.selected_capl_file = "--Select CAPL file--"
-if "sidebar_file_preview" not in st.session_state:
-    st.session_state.sidebar_file_preview = None
 if "llm_task" not in st.session_state:
     st.session_state.llm_task = None
 
@@ -461,26 +460,7 @@ def extract_pptx_preview(file_bytes):
 
 
 def render_document_preview(file_name):
-    st.markdown(
-        """
-        <style>
-            section[data-testid="stDialog"] { max-width: 50vw !important; width: 50vw !important; }
-            div[role="dialog"] { max-height: 70vh !important; }
-            div[role="dialog"] .stTextArea textarea { min-height: 220px !important; }
-            div[role="dialog"] .stDataFrame { max-height: 42vh !important; overflow:auto; }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    col1, col2 = st.columns([1, 9])
-    with col1:
-        if st.button("❌", key=f"close_preview_{file_name}"):
-            st.session_state.sidebar_file_preview = None
-            st.rerun()
-    with col2:
-        st.markdown(f"**Preview: {file_name}**")
-
+    st.markdown(f"**Preview: {file_name}**")
     ensure_file_processed(file_name)
     file_entry = get_uploaded_file_entry(file_name)
     if not file_entry:
@@ -493,12 +473,7 @@ def render_document_preview(file_name):
         with st.spinner("Loading preview..."):
             data = st.session_state.excel_data_by_file.get(file_name, [])
             if data:
-                st.download_button(
-                    "Download Excel",
-                    file_entry["bytes"],
-                    file_name=file_name,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
+                st.markdown("### XLSX Preview")
                 st.dataframe(pd.DataFrame(data).head(20), use_container_width=True, hide_index=True)
             else:
                 st.info("No preview data available for this spreadsheet.")
@@ -509,21 +484,12 @@ def render_document_preview(file_name):
         with st.spinner("Loading preview..."):
             preview_text = st.session_state.file_texts.get(file_name, "")
             st.markdown("### PDF Preview")
-            st.warning(
-                "PDF rendering is disabled in the popup for browser compatibility. "
-                "Use the download button to open the PDF locally."
-            )
-            st.download_button(
-                "Download PDF",
-                file_entry["bytes"],
-                file_name=file_name,
-                mime="application/pdf"
-            )
+            st.info("PDF preview is shown as extracted text because browser embeds are blocked in the popup.")
             if preview_text:
                 st.text_area(
-                    "Extracted PDF Text Preview",
-                    value=preview_text[:4000],
-                    height=300,
+                    "PDF Text Preview",
+                    value=preview_text[:8000],
+                    height=420,
                     disabled=True,
                     key=f"preview_{file_name}"
                 )
@@ -533,21 +499,12 @@ def render_document_preview(file_name):
         with st.spinner("Loading preview..."):
             preview_text = st.session_state.file_texts.get(file_name, "")
             st.markdown("### HTML/Text Preview")
-            st.warning(
-                "Rendered HTML is disabled in this preview popup for browser compatibility. "
-                "Use the download button to inspect the original HTML file."
-            )
-            st.download_button(
-                "Download HTML",
-                file_entry["bytes"],
-                file_name=file_name,
-                mime="text/html"
-            )
+            st.info("HTML preview is shown as extracted text because browser rendering is disabled in this popup.")
             if preview_text:
                 st.text_area(
-                    "Extracted HTML Text Preview",
-                    value=preview_text[:4000],
-                    height=300,
+                    "HTML Text Preview",
+                    value=preview_text[:8000],
+                    height=420,
                     disabled=True,
                     key=f"preview_{file_name}"
                 )
@@ -578,11 +535,32 @@ def render_document_preview(file_name):
             preview_text = st.session_state.file_texts.get(file_name, "")
             st.text_area(
                 "Document Preview",
-                value=preview_text[:4000] if preview_text else "No readable preview available for this file.",
-                height=300,
+                value=preview_text[:8000] if preview_text else "No readable preview available for this file.",
+                height=420,
                 disabled=True,
                 key=f"preview_{file_name}"
             )
+
+# Handle browser tab preview links
+query_params = st.experimental_get_query_params()
+preview_file_from_url = None
+if "preview" in query_params and query_params["preview"]:
+    preview_file_from_url = urllib.parse.unquote_plus(query_params["preview"][0])
+
+if preview_file_from_url:
+    uploaded_names = [f["name"] for f in st.session_state.uploaded_files]
+    st.title("📄 File Preview")
+    if preview_file_from_url in uploaded_names:
+        st.markdown(
+            "<a href='/' style='display:inline-block;padding:10px 18px;border-radius:8px;background:#1f4f91;color:#ffffff;text-decoration:none;'>← Back to app</a>",
+            unsafe_allow_html=True,
+        )
+        st.markdown(f"### {preview_file_from_url}")
+        st.markdown("---")
+        render_document_preview(preview_file_from_url)
+    else:
+        st.error("Preview file not found in uploaded files. Please return to the app and select a file first.")
+    st.stop()
 
 
 # -------------------------------
@@ -652,10 +630,6 @@ with st.sidebar:
         st.markdown("---")
         st.markdown("### Uploaded files")
         
-        # Add preview state container
-        if "sidebar_file_preview" not in st.session_state:
-            st.session_state.sidebar_file_preview = None
-        
         for idx, file_dict in enumerate(st.session_state.uploaded_files[:]):
             cols = st.columns([0.50, 0.20, 0.15, 0.15], vertical_alignment="center")
             with cols[0]:
@@ -671,10 +645,11 @@ with st.sidebar:
                 st.session_state.selected_files.remove(file_dict["name"])
             
             with cols[1]:
-                # Preview icon button
-                if st.button("👁️", key=f"preview_btn_{idx}", help=f"Preview {file_dict['name']}"):
-                    st.session_state.sidebar_file_preview = file_dict["name"]
-                    st.rerun()
+                url_safe_name = urllib.parse.quote_plus(file_dict["name"])
+                st.markdown(
+                    f"<a href='?preview={url_safe_name}' target='_blank' style='display:inline-block;padding:6px 10px;border-radius:8px;background:#1f4f91;color:#ffffff;text-decoration:none;'>👁️ Preview</a>",
+                    unsafe_allow_html=True,
+                )
             
             with cols[2]:
                 # Delete button
@@ -694,15 +669,6 @@ with st.sidebar:
                         st.session_state.capl_last_issues = None
                     st.rerun()
         st.markdown("*Selected files above are available across all tabs.*")
-
-        # Show preview dialog if a file is selected for preview
-        if st.session_state.sidebar_file_preview:
-            @st.dialog(f"📄 Preview: {st.session_state.sidebar_file_preview}")
-            def show_preview_dialog():
-                render_document_preview(st.session_state.sidebar_file_preview) # type: ignore
-            
-            show_preview_dialog()
-
         st.markdown("---")
         if st.button("Clear All Files"):
             for key in ["uploaded_files", "selected_files", "file_texts", "excel_data_by_file", "vector_stores",
