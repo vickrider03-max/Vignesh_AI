@@ -160,7 +160,7 @@ st.markdown(
 # SESSION STATE INITIALIZATION
 # -------------------------------
 for key in ["uploaded_files", "selected_files", "file_texts", "excel_data_by_file", "vector_stores", "messages",
-            "ask_messages"]:
+            "ask_messages", "extracted_images"]:
     if key not in st.session_state:
         st.session_state[key] = [] if key in ["uploaded_files", "selected_files", "messages", "ask_messages"] else {}
 
@@ -475,6 +475,8 @@ def extract_text(file_name, file_bytes):
             combined_text += f"\nTABLE:\n{content}\n"
         elif content_type == "IMAGE":
             combined_text += f"\n[IMAGE: {content}]\n"
+        elif content_type == "EMBEDDED_IMAGE":
+            combined_text += f"\n[EMBEDDED_IMAGE: {content}]\n"
         elif content_type == "METADATA":
             combined_text += f"\n{content}\n"
         elif content_type == "ERROR":
@@ -549,13 +551,36 @@ def extract_docx_content(bio):
         if metadata:
             content.append(("METADATA", "Document Metadata:\n" + "\n".join(metadata)))
         
-        # Count images
+        # Extract and display images
         image_count = 0
         for rel in doc.part.rels.values():
             if "image" in rel.reltype:
-                image_count += 1
+                try:
+                    image_part = rel.target_part
+                    image_bytes = image_part.blob
+                    image_ext = image_part.content_type.split('/')[-1]
+                    if image_ext == 'jpeg':
+                        image_ext = 'jpg'
+                    
+                    # Create a unique key for the image
+                    image_key = f"docx_image_{image_count}"
+                    
+                    # Store image data for display
+                    if 'extracted_images' not in st.session_state:
+                        st.session_state.extracted_images = {}
+                    st.session_state.extracted_images[image_key] = {
+                        'bytes': image_bytes,
+                        'ext': image_ext,
+                        'filename': f"image_{image_count}.{image_ext}"
+                    }
+                    
+                    content.append(("EMBEDDED_IMAGE", f"Embedded Image {image_count + 1}: {image_key}"))
+                    image_count += 1
+                except Exception as e:
+                    content.append(("ERROR", f"Could not extract image {image_count + 1}: {e}"))
+        
         if image_count > 0:
-            content.append(("IMAGE", f"{image_count} images found in document"))
+            content.append(("METADATA", f"Total Images: {image_count}"))
         
         # Extract paragraphs
         paragraphs = []
@@ -594,14 +619,36 @@ def extract_pptx_content(bio):
         
         content.append(("METADATA", f"Total Slides: {len(prs.slides)}"))
         
-        # Count images across all slides
+        # Extract and display images
         image_count = 0
         for slide in prs.slides:
             for shape in slide.shapes:
                 if hasattr(shape, 'image'):
-                    image_count += 1
+                    try:
+                        image_bytes = shape.image.blob
+                        image_ext = shape.image.content_type.split('/')[-1]
+                        if image_ext == 'jpeg':
+                            image_ext = 'jpg'
+                        
+                        # Create a unique key for the image
+                        image_key = f"pptx_image_{image_count}"
+                        
+                        # Store image data for display
+                        if 'extracted_images' not in st.session_state:
+                            st.session_state.extracted_images = {}
+                        st.session_state.extracted_images[image_key] = {
+                            'bytes': image_bytes,
+                            'ext': image_ext,
+                            'filename': f"slide_image_{image_count}.{image_ext}"
+                        }
+                        
+                        content.append(("EMBEDDED_IMAGE", f"Slide Image {image_count + 1}: {image_key}"))
+                        image_count += 1
+                    except Exception as e:
+                        content.append(("ERROR", f"Could not extract slide image {image_count + 1}: {e}"))
+        
         if image_count > 0:
-            content.append(("IMAGE", f"{image_count} images found in presentation"))
+            content.append(("METADATA", f"Total Images: {image_count}"))
         
         # Extract text and tables from each slide
         for i, slide in enumerate(prs.slides):
@@ -772,14 +819,27 @@ def render_document_preview(file_name, file_entry=None):
 
     # For all other files, show comprehensive extracted content
     with st.spinner("Loading preview..."):
+        # Ensure text extraction has run
+        if file_name not in st.session_state.file_texts:
+            st.session_state.file_texts[file_name] = extract_text(file_name, file_entry["bytes"])
+        
         full_content = st.session_state.file_texts.get(file_name, "")
         
         if not full_content.strip():
-            st.info("No content could be extracted from this file.")
+            st.warning("No content could be extracted from this file. This might indicate an issue with the file format or content extraction.")
+            # Try to show basic file info
+            file_size = len(file_entry["bytes"])
+            st.info(f"File size: {file_size} bytes")
+            st.info(f"File type: {file_name.split('.')[-1].upper()}")
             return
 
         # Parse the content into sections
         sections = parse_extracted_content(full_content)
+        
+        if not sections:
+            st.warning("Content was extracted but could not be parsed into displayable sections.")
+            st.code(full_content[:1000] + ("..." if len(full_content) > 1000 else ""), language="text")
+            return
         
         # Display each section
         for section_type, section_title, section_content in sections:
@@ -844,6 +904,28 @@ def render_document_preview(file_name, file_entry=None):
                                 st.code(section_content, language="text")
                     except Exception:
                         st.code(section_content, language="text")
+            elif section_type == "EMBEDDED_IMAGE":
+                # Display embedded image
+                image_key = section_content.split(": ")[-1] if ": " in section_content else section_content
+                if 'extracted_images' in st.session_state and image_key in st.session_state.extracted_images:
+                    image_data = st.session_state.extracted_images[image_key]
+                    try:
+                        st.image(image_data['bytes'], caption=image_data['filename'], use_container_width=True)
+                        # Add download button
+                        mime_type = f"image/{image_data['ext']}"
+                        if image_data['ext'] == "jpg":
+                            mime_type = "image/jpeg"
+                        st.download_button(
+                            label="📥 Download Image",
+                            data=image_data['bytes'],
+                            file_name=image_data['filename'],
+                            mime=mime_type,
+                            key=f"download_embedded_{image_key}"
+                        )
+                    except Exception as e:
+                        st.error(f"Could not display image: {e}")
+                else:
+                    st.info(f"🖼️ {section_content}")
             elif section_type == "IMAGE":
                 st.info(f"🖼️ {section_content}")
             elif section_type == "ERROR":
@@ -881,6 +963,17 @@ def parse_extracted_content(content):
             
             # Add image info
             sections.append(("IMAGE", "Images", line))
+            current_section = None
+            current_content = []
+            
+        elif line.startswith('[EMBEDDED_IMAGE:'):
+            # Save previous section
+            if current_section and current_content:
+                sections.append(current_section)
+            
+            # Add embedded image info
+            image_info = line.replace('[EMBEDDED_IMAGE: ', '').replace(']', '')
+            sections.append(("EMBEDDED_IMAGE", "Embedded Image", image_info))
             current_section = None
             current_content = []
             
