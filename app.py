@@ -731,7 +731,32 @@ def render_document_preview(file_name, file_entry=None):
     # Special handling for images
     if file_name_lower.endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp")):
         with st.spinner("Loading preview..."):
-            st.image(file_entry["bytes"], caption=file_name, use_container_width=True)
+            try:
+                st.image(file_entry["bytes"], caption=file_name, use_container_width=True)
+                # Determine MIME type
+                ext = file_name_lower.split('.')[-1]
+                mime_type = f"image/{ext}"
+                if ext == "jpg":
+                    mime_type = "image/jpeg"
+                elif ext == "svg":
+                    mime_type = "image/svg+xml"
+                
+                st.download_button(
+                    label="📥 Download Image",
+                    data=file_entry["bytes"],
+                    file_name=file_name,
+                    mime=mime_type,
+                    key=f"download_image_{file_name}"
+                )
+            except Exception as e:
+                st.error(f"Could not display image: {e}")
+                st.download_button(
+                    label="📥 Download Image File",
+                    data=file_entry["bytes"],
+                    file_name=file_name,
+                    mime=mime_type,
+                    key=f"download_image_fallback_{file_name}"
+                )
         return
 
     # Special handling for Excel files (show as table)
@@ -805,6 +830,16 @@ def render_document_preview(file_name, file_entry=None):
                                 df = pd.DataFrame(table_data[1:] if len(table_data) > 1 else table_data, 
                                                 columns=table_data[0] if len(table_data) > 1 else None)
                                 st.dataframe(df, use_container_width=True, hide_index=True)
+                                
+                                # Add download button for table as CSV
+                                csv_data = df.to_csv(index=False)
+                                st.download_button(
+                                    label="📥 Download as CSV",
+                                    data=csv_data,
+                                    file_name=f"{section_title.replace(' ', '_')}.csv",
+                                    mime="text/csv",
+                                    key=f"download_table_{file_name}_{section_title}"
+                                )
                             else:
                                 st.code(section_content, language="text")
                     except Exception:
@@ -1058,7 +1093,7 @@ with st.sidebar:
                 PREVIEW_STORE[token] = file_dict
                 save_preview_data()  # Save to file so preview tab can access it
                 st.markdown(
-                    f"<a href='./?preview_token={token}' target='_blank' style='display:inline-block;padding:6px 10px;border-radius:8px;background:#1f4f91;color:#ffffff;text-decoration:none;'>👁️ Preview</a>",
+                    f"<a href='./?preview_token={token}' target='_blank' style='display:inline-block;padding:6px 10px;border-radius:8px;background:#1f4f91;color:#ffffff;text-decoration:none;font-size:16px;'>👁️</a>",
                     unsafe_allow_html=True,
                 )
             
@@ -2023,7 +2058,7 @@ def render_status_strip():
     username = st.session_state.get("logged_in_username") or "-"
     login_entries = st.session_state.get("login_history", [])
     last_login = login_entries[-1]["timestamp"] if login_entries else "-"
-    last_login_display = last_login if role == "creator" else "-"
+    last_login_display = last_login if role == "creator" else "Active Session"
 
     st.markdown(
         f"""
@@ -2041,7 +2076,7 @@ def render_status_strip():
                 <div class="status-value">{len(available_files)}</div>
             </div>
             <div class="status-tile">
-                <div class="status-label">Last Login</div>
+                <div class="status-label">{ "Last Login" if role == "creator" else "Session Status" }</div>
                 <div class="status-value" style="font-size:14px;">{html.escape(str(last_login_display))}</div>
             </div>
         </div>
