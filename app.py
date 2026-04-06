@@ -460,6 +460,9 @@ def extract_text(file_name, file_bytes):
                             text_parts.append(f"\nTABLE:\n{table_text}\n")
                 
                 text = "\n".join(text_parts)
+                # Debug: show extraction result
+                if not text.strip():
+                    st.warning(f"No text could be extracted from PDF. Pages: {len(pdf.pages)}")
         elif file_name_lower.endswith(".txt"):
             text = bio.read().decode("utf-8", errors="ignore")
         elif file_name_lower.endswith(".can"):
@@ -475,7 +478,7 @@ def extract_text(file_name, file_bytes):
             text = soup.get_text(separator="\n")
         elif file_name_lower.endswith(".xlsx"):
             wb = openpyxl.load_workbook(bio, data_only=True)
-            text = "\n".join(" ".join(str(c) for c in row if c) for sh in wb for row in sh.iter_rows(values_only=True))
+            text = "\n".join(" ".join(str(c) for c in row if c) for sh in wb for row in wb[sh.title].iter_rows(values_only=True))
     except Exception:
         text = ""
     return text
@@ -519,6 +522,13 @@ def render_document_preview(file_name, file_entry=None):
     if file_entry is None:
         ensure_file_processed(file_name)
         file_entry = get_uploaded_file_entry(file_name)
+    else:
+        # Even if file_entry is provided, ensure text is extracted
+        if file_name not in st.session_state.file_texts:
+            st.session_state.file_texts[file_name] = extract_text(file_name, file_entry["bytes"])
+        if file_name.lower().endswith(".xlsx") and file_name not in st.session_state.excel_data_by_file:
+            st.session_state.excel_data_by_file[file_name] = extract_excel_data(file_name, file_entry["bytes"])
+    
     if not file_entry:
         st.warning("File preview is unavailable.")
         return
@@ -540,17 +550,25 @@ def render_document_preview(file_name, file_entry=None):
         with st.spinner("Loading preview..."):
             preview_text = st.session_state.file_texts.get(file_name, "")
             st.markdown("### PDF Preview")
-            st.info("PDF preview is shown as extracted text because browser embeds are blocked in the popup.")
             if preview_text:
                 st.text_area(
                     "PDF Text Preview",
-                    value=preview_text[:8000],
-                    height=420,
+                    value=preview_text[:15000],  # Increased limit
+                    height=500,
                     disabled=True,
                     key=f"preview_{file_name}"
                 )
+                if len(preview_text) > 15000:
+                    st.info(f"Showing first 15,000 characters of {len(preview_text)} total characters. Full text is available for chat.")
             else:
-                st.info("No extracted text is available for this PDF.")
+                st.info("No extracted text is available for this PDF. The PDF may contain only images or use non-standard fonts.")
+                # Try to show basic PDF info
+                try:
+                    bio = BytesIO(file_entry["bytes"])
+                    with pdfplumber.open(bio) as pdf:
+                        st.info(f"PDF has {len(pdf.pages)} pages but no extractable text was found.")
+                except Exception as e:
+                    st.error(f"Could not read PDF: {e}")
     elif file_name_lower.endswith((".html", ".htm")):
         with st.spinner("Loading preview..."):
             preview_text = st.session_state.file_texts.get(file_name, "")
