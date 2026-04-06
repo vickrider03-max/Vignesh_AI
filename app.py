@@ -24,6 +24,45 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 PREVIEW_TOKENS = {}  # token -> {'file_name': str, 'timestamp': datetime}
 PREVIEW_STORE = {}   # token -> file_dict
 
+PREVIEW_DATA_FILE = "preview_data.json"
+
+def load_preview_data():
+    """Load preview data from file"""
+    global PREVIEW_TOKENS, PREVIEW_STORE
+    if os.path.exists(PREVIEW_DATA_FILE):
+        try:
+            with open(PREVIEW_DATA_FILE, "r") as f:
+                data = json.load(f)
+                # Convert timestamp strings back to datetime objects
+                PREVIEW_TOKENS = {}
+                for token, token_data in data.get("tokens", {}).items():
+                    PREVIEW_TOKENS[token] = {
+                        'file_name': token_data['file_name'],
+                        'timestamp': datetime.fromisoformat(token_data['timestamp'])
+                    }
+                PREVIEW_STORE = data.get("store", {})
+        except Exception as e:
+            st.warning(f"Could not load preview data: {e}")
+            PREVIEW_TOKENS = {}
+            PREVIEW_STORE = {}
+
+def save_preview_data():
+    """Save preview data to file"""
+    try:
+        data = {
+            "tokens": {},
+            "store": PREVIEW_STORE
+        }
+        for token, token_data in PREVIEW_TOKENS.items():
+            data["tokens"][token] = {
+                'file_name': token_data['file_name'],
+                'timestamp': token_data['timestamp'].isoformat()
+            }
+        with open(PREVIEW_DATA_FILE, "w") as f:
+            json.dump(data, f)
+    except Exception as e:
+        st.warning(f"Could not save preview data: {e}")
+
 def cleanup_expired_preview_tokens():
     """Remove preview tokens older than 1 hour to prevent memory accumulation."""
     now = datetime.now()
@@ -36,11 +75,17 @@ def cleanup_expired_preview_tokens():
         del PREVIEW_TOKENS[token]
         if token in PREVIEW_STORE:
             del PREVIEW_STORE[token]
+    
+    # Save updated data
+    save_preview_data()
 
 # -------------------------------
 # STREAMLIT PAGE CONFIG
 # -------------------------------
 st.set_page_config(page_title="Vignesh_AI", layout="wide")
+
+# Load preview data from file
+load_preview_data()
 
 # Clean up expired preview tokens on app start
 cleanup_expired_preview_tokens()
@@ -566,16 +611,19 @@ def render_document_preview(file_name, file_entry=None):
 # Handle browser tab preview links
 preview_file_from_url = None
 query_params = {}
-if hasattr(st, "experimental_get_query_params"):
-    try:
+
+# Try different methods to get query params (for compatibility across Streamlit versions)
+try:
+    if hasattr(st, "query_params"):
+        query_params = st.query_params
+    elif hasattr(st, "experimental_get_query_params"):
         query_params = st.experimental_get_query_params() or {}
-    except Exception:
-        query_params = {}
-elif hasattr(st, "get_query_params"):
-    try:
+    elif hasattr(st, "get_query_params"):
         query_params = st.get_query_params() or {}
-    except Exception:
+    else:
         query_params = {}
+except Exception:
+    query_params = {}
 
 if "preview_token" in query_params and query_params["preview_token"]:
     preview_value = query_params["preview_token"]
@@ -584,6 +632,15 @@ if "preview_token" in query_params and query_params["preview_token"]:
     preview_token = str(preview_value)
     token_data = PREVIEW_TOKENS.get(preview_token)
     preview_file_from_url = token_data['file_name'] if token_data else None
+
+    # If preview_token is present but not found, show error and stop
+    if not token_data:
+        st.title("Preview Error")
+        st.error(f"Preview token '{preview_token}' not found or expired.")
+        st.write("Debug info:")
+        st.write(f"Available tokens: {list(PREVIEW_TOKENS.keys())}")
+        st.write(f"Query params: {query_params}")
+        st.stop()
 
 if preview_file_from_url:
     preview_entry = PREVIEW_STORE.get(preview_token)
@@ -686,6 +743,7 @@ with st.sidebar:
                 token = str(uuid.uuid4())
                 PREVIEW_TOKENS[token] = {'file_name': file_dict["name"], 'timestamp': datetime.now()}
                 PREVIEW_STORE[token] = file_dict
+                save_preview_data()  # Save to file so preview tab can access it
                 st.markdown(
                     f"<a href='./?preview_token={token}' target='_blank' style='display:inline-block;padding:6px 10px;border-radius:8px;background:#1f4f91;color:#ffffff;text-decoration:none;'>👁️ Preview</a>",
                     unsafe_allow_html=True,
@@ -1151,7 +1209,7 @@ def extract_test_results_grouped_from_html(file_bytes):
 CREATOR_USERNAME = "Vignesh"
 CREATOR_PASSWORD = "Rider@100"
 
-if not st.session_state.is_authenticated:
+if not st.session_state.is_authenticated and "preview_token" not in query_params:
     st.subheader("Login")
     login_username = st.text_input("Username")
     login_password = st.text_input("Password", type="password")
