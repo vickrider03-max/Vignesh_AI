@@ -461,6 +461,18 @@ def extract_pptx_preview(file_bytes):
 
 
 def render_document_preview(file_name):
+    st.markdown(
+        """
+        <style>
+            section[data-testid="stDialog"] { max-width: 50vw !important; width: 50vw !important; }
+            div[role="dialog"] { max-height: 70vh !important; }
+            div[role="dialog"] .stTextArea textarea { min-height: 220px !important; }
+            div[role="dialog"] .stDataFrame { max-height: 42vh !important; overflow:auto; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     col1, col2 = st.columns([1, 9])
     with col1:
         if st.button("❌", key=f"close_preview_{file_name}"):
@@ -481,6 +493,12 @@ def render_document_preview(file_name):
         with st.spinner("Loading preview..."):
             data = st.session_state.excel_data_by_file.get(file_name, [])
             if data:
+                st.download_button(
+                    "Download Excel",
+                    file_entry["bytes"],
+                    file_name=file_name,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
                 st.dataframe(pd.DataFrame(data).head(20), use_container_width=True, hide_index=True)
             else:
                 st.info("No preview data available for this spreadsheet.")
@@ -492,8 +510,8 @@ def render_document_preview(file_name):
             preview_text = st.session_state.file_texts.get(file_name, "")
             st.markdown("### PDF Preview")
             st.warning(
-                "Browser PDF embeds may be blocked. Use the download button below to open the file in your local PDF viewer. "
-                "A text preview is shown when available."
+                "PDF rendering is disabled in the popup for browser compatibility. "
+                "Use the download button to open the PDF locally."
             )
             st.download_button(
                 "Download PDF",
@@ -505,7 +523,7 @@ def render_document_preview(file_name):
                 st.text_area(
                     "Extracted PDF Text Preview",
                     value=preview_text[:4000],
-                    height=420,
+                    height=300,
                     disabled=True,
                     key=f"preview_{file_name}"
                 )
@@ -513,8 +531,28 @@ def render_document_preview(file_name):
                 st.info("No extracted text is available for this PDF.")
     elif file_name_lower.endswith((".html", ".htm")):
         with st.spinner("Loading preview..."):
-            html_content = file_entry["bytes"].decode("utf-8", errors="ignore")
-            st.components.v1.html(html_content, height=500, scrolling=True)
+            preview_text = st.session_state.file_texts.get(file_name, "")
+            st.markdown("### HTML/Text Preview")
+            st.warning(
+                "Rendered HTML is disabled in this preview popup for browser compatibility. "
+                "Use the download button to inspect the original HTML file."
+            )
+            st.download_button(
+                "Download HTML",
+                file_entry["bytes"],
+                file_name=file_name,
+                mime="text/html"
+            )
+            if preview_text:
+                st.text_area(
+                    "Extracted HTML Text Preview",
+                    value=preview_text[:4000],
+                    height=300,
+                    disabled=True,
+                    key=f"preview_{file_name}"
+                )
+            else:
+                st.info("No extracted text is available for this HTML file.")
     elif file_name_lower.endswith(".docx"):
         with st.spinner("Loading preview..."):
             paragraphs = extract_docx_preview(file_entry["bytes"])
@@ -541,7 +579,7 @@ def render_document_preview(file_name):
             st.text_area(
                 "Document Preview",
                 value=preview_text[:4000] if preview_text else "No readable preview available for this file.",
-                height=260,
+                height=300,
                 disabled=True,
                 key=f"preview_{file_name}"
             )
