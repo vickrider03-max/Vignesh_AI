@@ -3273,22 +3273,10 @@ with tab1:
                             for f in chat_files:
                                 file_text = st.session_state.file_texts.get(f, "")
                                 if file_text.strip():
-                                    toc_entries = extract_toc_with_page_numbers(file_text)
                                     all_headings = extract_document_headings(file_text)
-                                    st.markdown(f"📄 **{f}**")
-                                    if toc_entries:
-                                        st.markdown("### Table of Contents")
-                                        for num, title, page_num in toc_entries:
-                                            content_str = f"{num} {title}" if num else title
-                                            display_text = f"{content_str} (Page {page_num})" if page_num and page_num != "?" else content_str
-                                            page_param = page_num if page_num != "?" else None
-                                            preview_link = create_preview_link(f, highlight_term=title, page_num=page_param)
-                                            if preview_link:
-                                                response_lines.append(f"- <a href='{preview_link}' target='_blank'>{html.escape(display_text)}</a>")
-                                            else:
-                                                response_lines.append(f"- {html.escape(display_text)}")
                                     if all_headings:
-                                        st.markdown("### Document Headings")
+                                        response_lines.append(f"📄 **{f}**")
+                                        response_lines.append("### Document Headings")
                                         for num, title in all_headings:
                                             content_str = f"{num} {title}" if num else title
                                             page_num = find_heading_page_number(file_text, title)
@@ -3298,6 +3286,8 @@ with tab1:
                                                 response_lines.append(f"- <a href='{preview_link}' target='_blank'>{html.escape(display_text)}</a>")
                                             else:
                                                 response_lines.append(f"- {html.escape(display_text)}")
+                                    else:
+                                        response_lines.append(f"📄 **{f}**\n\nNo document headings were detected.")
                                 else:
                                     response_lines.append(f"📄 **{f}**\n\nNo readable content found in this document.")
                             response = "\n\n".join(response_lines)
