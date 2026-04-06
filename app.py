@@ -204,8 +204,6 @@ if "chat_file_selection" not in st.session_state:
     st.session_state.chat_file_selection = []
 if "chat_summary_downloads" not in st.session_state:
     st.session_state.chat_summary_downloads = {"images": [], "tables": []}
-if "chat_overview_downloads" not in st.session_state:
-    st.session_state.chat_overview_downloads = []
 if "compare_file_selection" not in st.session_state:
     st.session_state.compare_file_selection = []
 if "file_dropdown" not in st.session_state:
@@ -1858,23 +1856,6 @@ def render_chat_summary_downloads():
                 )
 
 
-def render_chat_overview_downloads():
-    downloads = st.session_state.get("chat_overview_downloads", [])
-    if not downloads:
-        return
-
-    st.markdown("### Overview Downloads")
-    with st.expander("Download generated overview files", expanded=False):
-        for index, item in enumerate(downloads):
-            st.download_button(
-                label=item["label"],
-                data=item["data"],
-                file_name=item["file_name"],
-                mime=item["mime"],
-                key=f"chat_overview_{index}_{item['file_name']}"
-            )
-
-
 def build_detailed_document_summary(file_name, file_bytes, text):
     lines = [line.strip() for line in str(text).splitlines() if line.strip()]
     words = re.findall(r"\w+", str(text))
@@ -1961,19 +1942,13 @@ def extract_document_headings(text):
         numbered = re.match(r'^(\d+(?:\.\d+)*)(?:[.)]|\s+)\s+(.+)', line)
         if numbered:
             title = numbered.group(2).strip()
-            if 3 <= len(title) <= 100:
+            if 3 <= len(title) <= 120 and not title.isupper():
                 headings.append((numbered.group(1), title))
-            continue
-
-        if len(line) < 60 and line == line.title() and " " in line and not line.endswith("."):
-            headings.append((None, line))
-        elif len(line) < 60 and line.endswith(":"):
-            headings.append((None, line[:-1].strip().title()))
 
     seen = set()
     deduped = []
     for num, title in headings:
-        key = f"{num or ''}:{title}"
+        key = f"{num}:{title}"
         if key not in seen:
             seen.add(key)
             deduped.append((num, title))
@@ -1983,50 +1958,35 @@ def extract_document_headings(text):
 @st.cache_data(show_spinner=False)
 def build_file_overview(file_name, text):
     text = str(text)
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    words = re.findall(r"\w+", text)
     page1_text = extract_page_text(text, 1)
     page1_headings = extract_document_headings(page1_text)
     all_headings = extract_document_headings(text)
-    preview_lines = lines[:5]
 
-    summary_parts = [
-        f"📄 **{file_name}**",
-        f"- Characters: {len(text)}",
-        f"- Lines: {len(text.splitlines())}",
-        f"- Words: {len(words)}",
-        f"- Non-empty lines: {len(lines)}",
-    ]
+    image_count = len(re.findall(r"\[IMAGE:|\[EMBEDDED_IMAGE:|Embedded Image|Slide Image", text, re.IGNORECASE))
+    table_count = len(re.findall(r"Page \d+ Table \d+:|Table \d+:|Sheet \'[^\']+\':|Table:\n", text, re.IGNORECASE))
 
+    overview_parts = [f"📄 **{file_name}**"]
+    overview_parts.append("### Table of Contents (page 1)")
     if page1_headings:
-        summary_parts.append("- Table of Contents from page 1:")
-        summary_parts.extend(
-            f"  - {num} {title}" if num else f"  - {title}"
-            for num, title in page1_headings
+        overview_parts.extend(
+            f"- {num} {title}" for num, title in page1_headings
         )
     else:
-        summary_parts.append("- Table of Contents from page 1: Not detected.")
+        overview_parts.append("- No explicit page-1 table of contents was detected.")
 
+    overview_parts.append("### Document headings")
     if all_headings:
-        summary_parts.append("- Section headings found in document:")
-        summary_parts.extend(
-            f"  - {num} {title}" if num else f"  - {title}"
-            for num, title in all_headings[:12]
+        overview_parts.extend(
+            f"- {num} {title}" for num, title in all_headings
         )
-
-    top_terms = Counter(word.lower() for word in words if len(word) > 2).most_common(8)
-    if top_terms:
-        summary_parts.append(
-            "- Top keywords: " + ", ".join(f"{word} ({count})" for word, count in top_terms)
-        )
-
-    if preview_lines:
-        summary_parts.append("- Preview:")
-        summary_parts.extend(f"  {line[:180]}" for line in preview_lines)
     else:
-        summary_parts.append("- No readable text could be extracted from this file.")
+        overview_parts.append("- No numbered document headings were detected.")
 
-    return "\n".join(summary_parts)
+    overview_parts.append("### Document assets")
+    overview_parts.append(f"- Images detected: {image_count}")
+    overview_parts.append(f"- Tables detected: {table_count}")
+
+    return "\n".join(overview_parts)
 
 
 @st.cache_data(show_spinner=False)
@@ -3051,13 +3011,11 @@ with tab1:
                 if user_input.strip().lower() == "clear":
                     st.session_state.messages = []
                     st.session_state.chat_summary_downloads = {"images": [], "tables": []}
-                    st.session_state.chat_overview_downloads = []
                     st.success("✅ Chat cleared!")
                 else:
                     st.session_state.messages.append({"role": "user", "content": user_input})
                     with st.spinner("Processing your request..."):
                         st.session_state.chat_summary_downloads = {"images": [], "tables": []}
-                        st.session_state.chat_overview_downloads = []
                         user_input_lower = user_input.lower()
                         # Word count queries
                         if any(t in user_input_lower for t in ["how many", "count", "number of", "occurrences"]):
@@ -3082,22 +3040,13 @@ with tab1:
                                 response = "⚠️ Specify the search word or phrase in quotes. Example: find('keyword') or search(\"keyword\")"
                         elif "overview" in user_input_lower:
                             result = []
-                            overview_downloads = []
                             for f in chat_files:
                                 file_text = st.session_state.file_texts.get(f, "")
+                                file_entry = get_uploaded_file_entry(f)
                                 if file_text.strip():
-                                    overview_text = build_file_overview(f, file_text)
-                                    result.append(overview_text)
-                                    overview_downloads.append({
-                                        "label": f"Download overview for {f}",
-                                        "data": overview_text.encode("utf-8"),
-                                        "file_name": f"{os.path.splitext(f)[0]}_overview.txt",
-                                        "mime": "text/plain"
-                                    })
+                                    result.append(build_file_overview(f, file_text))
                                 else:
                                     result.append(f"📄 **{f}**\n\nNo readable content found in this document.")
-
-                            st.session_state.chat_overview_downloads = overview_downloads
                             response = "\n\n---\n\n".join(result)
                         elif any(term in user_input_lower for term in ["analyze", "summary", "summarize", "summarise"]):
                             result = []
@@ -3155,7 +3104,6 @@ with tab1:
             st.markdown(f"{role} {msg['content']}", unsafe_allow_html=True)
 
         render_chat_summary_downloads()
-        render_chat_overview_downloads()
     else:
         st.info("Select files from the sidebar to start chatting.")
 
