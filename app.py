@@ -828,9 +828,41 @@ def get_uploaded_file_entry(file_name):
     return None
 
 
+def create_preview_link(file_name, highlight_term=None):
+    file_entry = get_uploaded_file_entry(file_name)
+    if not file_entry:
+        return None
+    token = str(uuid.uuid4())
+    PREVIEW_TOKENS[token] = {'file_name': file_name, 'timestamp': datetime.now()}
+    PREVIEW_STORE[token] = file_entry
+    save_preview_data()
+    safe_term = urllib.parse.quote_plus(highlight_term) if highlight_term else None
+    url = f"./?preview_token={token}"
+    if safe_term:
+        url += f"&highlight={safe_term}"
+    return url
 
 
-def render_document_preview(file_name, file_entry=None):
+def highlight_for_preview(text, highlight_term=None):
+    if not highlight_term:
+        return html.escape(text)
+    escaped = html.escape(text)
+    pattern = re.compile(re.escape(highlight_term), re.IGNORECASE)
+    highlighted = pattern.sub(
+        lambda m: f"<mark style='background:#fff3a3; padding:0 2px;'>{html.escape(m.group(0))}</mark>",
+        escaped
+    )
+    return highlighted
+
+
+def render_text_block(text, highlight_term=None):
+    if highlight_term:
+        highlighted = highlight_for_preview(text, highlight_term)
+        return f"<pre style='white-space: pre-wrap; word-break: break-word; background:#f4f7fb; padding:12px; border-radius:8px; font-family: inherit;'>{highlighted}</pre>"
+    return None
+
+
+def render_document_preview(file_name, file_entry=None, highlight_term=None):
     st.markdown(f"**Preview: {file_name}**")
     if file_entry is None:
         ensure_file_processed(file_name)
@@ -891,7 +923,10 @@ def render_document_preview(file_name, file_entry=None):
                             page_text = page.extract_text() or ""
                             if page_text.strip():
                                 st.markdown(f"#### Page {i+1} Text")
-                                st.code(page_text, language="text")
+                                if highlight_term:
+                                    st.markdown(render_text_block(page_text, highlight_term), unsafe_allow_html=True)
+                                else:
+                                    st.code(page_text, language="text")
                     if image_download_items:
                         with st.expander("🖼️ Image Downloads", expanded=False):
                             for item in image_download_items:
@@ -1020,12 +1055,18 @@ def render_document_preview(file_name, file_entry=None):
                 # Fall back to showing raw content
                 st.markdown("### Document Content")
                 with st.expander("Show extracted text", expanded=True):
-                    st.code(full_content.strip(), language="text")
+                    if highlight_term:
+                        st.markdown(render_text_block(full_content.strip(), highlight_term), unsafe_allow_html=True)
+                    else:
+                        st.code(full_content.strip(), language="text")
                 return
         
         if not sections:
             st.warning("Content was extracted but could not be parsed into displayable sections.")
-            st.code(full_content[:1000] + ("..." if len(full_content) > 1000 else ""), language="text")
+            if highlight_term:
+                st.markdown(render_text_block(full_content[:1000] + ("..." if len(full_content) > 1000 else ""), highlight_term), unsafe_allow_html=True)
+            else:
+                st.code(full_content[:1000] + ("..." if len(full_content) > 1000 else ""), language="text")
             return
         
         # Display each section
@@ -1033,7 +1074,10 @@ def render_document_preview(file_name, file_entry=None):
             if section_type == "METADATA":
                 with st.expander(f"📋 {section_title}", expanded=False):
                     if section_content.strip():
-                        st.code(section_content, language="text")
+                        if highlight_term:
+                            st.markdown(render_text_block(section_content, highlight_term), unsafe_allow_html=True)
+                        else:
+                            st.code(section_content, language="text")
                     else:
                         st.info("No metadata available")
             elif section_type == "TEXT":
@@ -1041,9 +1085,15 @@ def render_document_preview(file_name, file_entry=None):
                     st.markdown(f"### {section_title}")
                     if len(section_content) > 2000:
                         with st.expander("Show text content", expanded=False):
-                            st.code(section_content, language="text")
+                            if highlight_term:
+                                st.markdown(render_text_block(section_content, highlight_term), unsafe_allow_html=True)
+                            else:
+                                st.code(section_content, language="text")
                     else:
-                        st.code(section_content, language="text")
+                        if highlight_term:
+                            st.markdown(render_text_block(section_content, highlight_term), unsafe_allow_html=True)
+                        else:
+                            st.code(section_content, language="text")
             elif section_type == "TABLE":
                 with st.expander(f"📊 {section_title}", expanded=True):
                     # Try to parse table and display as dataframe
@@ -1083,9 +1133,15 @@ def render_document_preview(file_name, file_entry=None):
                                 except Exception:
                                     pass
                             else:
-                                st.code(section_content, language="text")
+                                if highlight_term:
+                                    st.markdown(render_text_block(section_content, highlight_term), unsafe_allow_html=True)
+                                else:
+                                    st.code(section_content, language="text")
                     except Exception:
-                        st.code(section_content, language="text")
+                        if highlight_term:
+                            st.markdown(render_text_block(section_content, highlight_term), unsafe_allow_html=True)
+                        else:
+                            st.code(section_content, language="text")
             elif section_type == "EMBEDDED_IMAGE":
                 # Display embedded image
                 image_key = section_content.split(": ")[-1] if ": " in section_content else section_content
@@ -1442,6 +1498,7 @@ try:
 except Exception:
     query_params = {}
 
+highlight_term = None
 if "preview_token" in query_params and query_params["preview_token"]:
     preview_value = query_params["preview_token"]
     if isinstance(preview_value, list):
@@ -1449,6 +1506,11 @@ if "preview_token" in query_params and query_params["preview_token"]:
     preview_token = str(preview_value)
     token_data = PREVIEW_TOKENS.get(preview_token)
     preview_file_from_url = token_data['file_name'] if token_data else None
+    if "highlight" in query_params and query_params["highlight"]:
+        highlight_value = query_params["highlight"]
+        if isinstance(highlight_value, list):
+            highlight_value = highlight_value[0] if highlight_value else ""
+        highlight_term = urllib.parse.unquote_plus(str(highlight_value))
 
     # If preview_token is present but not found, show error and stop
     if not token_data:
@@ -1465,7 +1527,7 @@ if preview_file_from_url:
     if preview_entry is not None:
         st.markdown(f"### {preview_entry['name']}")
         st.markdown("---")
-        render_document_preview(preview_entry['name'], file_entry=preview_entry)
+        render_document_preview(preview_entry['name'], file_entry=preview_entry, highlight_term=highlight_term)
         show_assets = st.checkbox("Show extracted asset previews", value=False)
         if show_assets:
             st.markdown("---")
@@ -2013,7 +2075,6 @@ def extract_toc_with_page_numbers(text):
     return toc_entries
 
 
-@st.cache_data(show_spinner=False)
 def build_file_overview(file_name, text):
     text = str(text)
     toc_entries = extract_toc_with_page_numbers(text)
@@ -2036,7 +2097,12 @@ def build_file_overview(file_name, text):
     overview_parts.append("### Document Headings")
     if all_headings:
         for num, title in all_headings:
-            overview_parts.append(f"- {title}")
+            preview_link = create_preview_link(file_name, highlight_term=title)
+            content_str = f"{num} {title}" if num else title
+            if preview_link:
+                overview_parts.append(f"- <a href='{preview_link}' target='_blank'>{html.escape(content_str)}</a>")
+            else:
+                overview_parts.append(f"- {content_str}")
     else:
         overview_parts.append("- No document headings were detected.")
 
