@@ -542,8 +542,19 @@ def render_document_preview(file_name):
             )
 
 # Handle browser tab preview links
-query_params = st.experimental_get_query_params()
 preview_file_from_url = None
+query_params = {}
+if hasattr(st, "experimental_get_query_params"):
+    try:
+        query_params = st.experimental_get_query_params() or {}
+    except Exception:
+        query_params = {}
+elif hasattr(st, "get_query_params"):
+    try:
+        query_params = st.get_query_params() or {}
+    except Exception:
+        query_params = {}
+
 if "preview" in query_params and query_params["preview"]:
     preview_file_from_url = urllib.parse.unquote_plus(query_params["preview"][0])
 
