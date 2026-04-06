@@ -440,48 +440,265 @@ def ensure_file_processed(file_name):
 
 
 def extract_text(file_name, file_bytes):
-    text = ""
+    """Extract comprehensive text content from various file formats including tables and metadata."""
+    text_parts = []
     bio = BytesIO(file_bytes)
     file_name_lower = file_name.lower()
+    
     try:
         if file_name_lower.endswith(".pdf"):
-            with pdfplumber.open(bio) as pdf:
-                text_parts = []
-                for page in pdf.pages:
-                    page_text = page.extract_text() or ""
-                    text_parts.append(page_text)
-                    
-                    # Extract tables from this page
-                    tables = page.extract_tables()
-                    for table in tables:
-                        if table:
-                            # Convert table to text representation
-                            table_text = "\n".join([" | ".join(str(cell) if cell else "" for cell in row) for row in table])
-                            text_parts.append(f"\nTABLE:\n{table_text}\n")
-                
-                text = "\n".join(text_parts)
-                # Debug: show extraction result
-                if not text.strip():
-                    st.warning(f"No text could be extracted from PDF. Pages: {len(pdf.pages)}")
-        elif file_name_lower.endswith(".txt"):
-            text = bio.read().decode("utf-8", errors="ignore")
-        elif file_name_lower.endswith(".can"):
-            text = bio.read().decode("utf-8", errors="ignore")
+            text_parts.extend(extract_pdf_content(bio))
         elif file_name_lower.endswith(".docx"):
-            doc = docx.Document(bio)
-            text = "\n".join([p.text for p in doc.paragraphs])
+            text_parts.extend(extract_docx_content(bio))
         elif file_name_lower.endswith(".pptx"):
-            prs = Presentation(bio)
-            text = "\n".join(shape.text for slide in prs.slides for shape in slide.shapes if hasattr(shape, "text"))
-        elif file_name_lower.endswith((".html", ".htm")):
-            soup = BeautifulSoup(bio.read(), "html.parser")
-            text = soup.get_text(separator="\n")
+            text_parts.extend(extract_pptx_content(bio))
         elif file_name_lower.endswith(".xlsx"):
-            wb = openpyxl.load_workbook(bio, data_only=True)
-            text = "\n".join(" ".join(str(c) for c in row if c) for sh in wb for row in wb[sh.title].iter_rows(values_only=True))
-    except Exception:
-        text = ""
-    return text
+            text_parts.extend(extract_xlsx_content(bio))
+        elif file_name_lower.endswith((".html", ".htm")):
+            text_parts.extend(extract_html_content(bio))
+        elif file_name_lower.endswith(".txt"):
+            text_parts.append(("TEXT", bio.read().decode("utf-8", errors="ignore")))
+        elif file_name_lower.endswith(".can"):
+            text_parts.append(("TEXT", bio.read().decode("utf-8", errors="ignore")))
+        else:
+            text_parts.append(("UNSUPPORTED", f"Unsupported file format: {file_name_lower}"))
+    
+    except Exception as e:
+        text_parts.append(("ERROR", f"Error extracting content: {str(e)}"))
+    
+    # Combine all extracted content
+    combined_text = ""
+    for content_type, content in text_parts:
+        if content_type == "TEXT":
+            combined_text += content + "\n"
+        elif content_type == "TABLE":
+            combined_text += f"\nTABLE:\n{content}\n"
+        elif content_type == "IMAGE":
+            combined_text += f"\n[IMAGE: {content}]\n"
+        elif content_type == "METADATA":
+            combined_text += f"\n{content}\n"
+        elif content_type == "ERROR":
+            combined_text += f"\nERROR: {content}\n"
+        elif content_type == "UNSUPPORTED":
+            combined_text += f"\n{content}\n"
+    
+    return combined_text.strip()
+
+
+def extract_pdf_content(bio):
+    """Extract text, tables, and metadata from PDF."""
+    content = []
+    try:
+        with pdfplumber.open(bio) as pdf:
+            # Add metadata
+            if pdf.metadata:
+                metadata = []
+                for key, value in pdf.metadata.items():
+                    if value:
+                        metadata.append(f"{key}: {value}")
+                if metadata:
+                    content.append(("METADATA", "PDF Metadata:\n" + "\n".join(metadata)))
+            
+            content.append(("METADATA", f"Total Pages: {len(pdf.pages)}"))
+            
+            # Extract content from each page
+            for i, page in enumerate(pdf.pages):
+                page_content = []
+                
+                # Extract text
+                page_text = page.extract_text() or ""
+                if page_text.strip():
+                    page_content.append(f"Page {i+1} Text:\n{page_text}")
+                
+                # Extract tables
+                tables = page.extract_tables()
+                if tables:
+                    for j, table in enumerate(tables):
+                        if table and any(any(cell for cell in row) for row in table):
+                            table_text = "\n".join([" | ".join(str(cell) if cell else "" for cell in row) for row in table])
+                            page_content.append(f"Page {i+1} Table {j+1}:\n{table_text}")
+                
+                # Check for images (basic detection)
+                if hasattr(page, 'images') and page.images:
+                    content.append(("IMAGE", f"Page {i+1}: {len(page.images)} images detected"))
+                
+                if page_content:
+                    content.append(("TEXT", "\n\n".join(page_content)))
+    
+    except Exception as e:
+        content.append(("ERROR", f"PDF extraction failed: {str(e)}"))
+    
+    return content
+
+
+def extract_docx_content(bio):
+    """Extract text, tables, and images from DOCX."""
+    content = []
+    try:
+        doc = docx.Document(bio)
+        
+        # Extract metadata
+        core_props = doc.core_properties
+        metadata = []
+        if core_props.title:
+            metadata.append(f"Title: {core_props.title}")
+        if core_props.author:
+            metadata.append(f"Author: {core_props.author}")
+        if core_props.created:
+            metadata.append(f"Created: {core_props.created}")
+        if metadata:
+            content.append(("METADATA", "Document Metadata:\n" + "\n".join(metadata)))
+        
+        # Count images
+        image_count = 0
+        for rel in doc.part.rels.values():
+            if "image" in rel.reltype:
+                image_count += 1
+        if image_count > 0:
+            content.append(("IMAGE", f"{image_count} images found in document"))
+        
+        # Extract paragraphs
+        paragraphs = []
+        for para in doc.paragraphs:
+            if para.text.strip():
+                paragraphs.append(para.text)
+        
+        if paragraphs:
+            content.append(("TEXT", "\n\n".join(paragraphs)))
+        
+        # Extract tables
+        for i, table in enumerate(doc.tables):
+            table_data = []
+            for row in table.rows:
+                row_data = []
+                for cell in row.cells:
+                    cell_text = cell.text.strip()
+                    row_data.append(cell_text)
+                table_data.append(row_data)
+            
+            if table_data:
+                table_text = "\n".join([" | ".join(row) for row in table_data])
+                content.append(("TABLE", f"Table {i+1}:\n{table_text}"))
+    
+    except Exception as e:
+        content.append(("ERROR", f"DOCX extraction failed: {str(e)}"))
+    
+    return content
+
+
+def extract_pptx_content(bio):
+    """Extract text, tables, and images from PPTX."""
+    content = []
+    try:
+        prs = Presentation(bio)
+        
+        content.append(("METADATA", f"Total Slides: {len(prs.slides)}"))
+        
+        # Count images across all slides
+        image_count = 0
+        for slide in prs.slides:
+            for shape in slide.shapes:
+                if hasattr(shape, 'image'):
+                    image_count += 1
+        if image_count > 0:
+            content.append(("IMAGE", f"{image_count} images found in presentation"))
+        
+        # Extract text and tables from each slide
+        for i, slide in enumerate(prs.slides):
+            slide_content = []
+            
+            # Extract text shapes
+            for shape in slide.shapes:
+                if hasattr(shape, "text") and shape.text.strip():
+                    slide_content.append(shape.text)
+            
+            # Extract tables
+            for shape in slide.shapes:
+                if hasattr(shape, 'table'):
+                    table = shape.table
+                    table_data = []
+                    for row in table.rows:
+                        row_data = []
+                        for cell in row.cells:
+                            cell_text = cell.text.strip()
+                            row_data.append(cell_text)
+                        table_data.append(row_data)
+                    
+                    if table_data:
+                        table_text = "\n".join([" | ".join(row) for row in table_data])
+                        slide_content.append(f"Table:\n{table_text}")
+            
+            if slide_content:
+                content.append(("TEXT", f"Slide {i+1}:\n" + "\n\n".join(slide_content)))
+    
+    except Exception as e:
+        content.append(("ERROR", f"PPTX extraction failed: {str(e)}"))
+    
+    return content
+
+
+def extract_xlsx_content(bio):
+    """Extract data from all sheets in XLSX."""
+    content = []
+    try:
+        wb = openpyxl.load_workbook(bio, data_only=True)
+        
+        content.append(("METADATA", f"Workbook contains {len(wb.sheetnames)} sheets: {', '.join(wb.sheetnames)}"))
+        
+        # Extract data from each sheet
+        for sheet_name in wb.sheetnames:
+            sheet = wb[sheet_name]
+            sheet_data = []
+            
+            # Get all rows with data
+            for row in sheet.iter_rows(values_only=True):
+                if any(cell for cell in row):  # Skip empty rows
+                    row_data = [str(cell) if cell is not None else "" for cell in row]
+                    sheet_data.append(row_data)
+            
+            if sheet_data:
+                table_text = "\n".join([" | ".join(row) for row in sheet_data])
+                content.append(("TABLE", f"Sheet '{sheet_name}':\n{table_text}"))
+    
+    except Exception as e:
+        content.append(("ERROR", f"XLSX extraction failed: {str(e)}"))
+    
+    return content
+
+
+def extract_html_content(bio):
+    """Extract text and metadata from HTML."""
+    content = []
+    try:
+        html_content = bio.read()
+        soup = BeautifulSoup(html_content, "html.parser")
+        
+        # Extract title
+        title = soup.title.string if soup.title else "No title"
+        content.append(("METADATA", f"Title: {title}"))
+        
+        # Extract meta tags
+        meta_info = []
+        for meta in soup.find_all('meta'):
+            if meta.get('name') and meta.get('content'):
+                meta_info.append(f"{meta['name']}: {meta['content']}")
+        if meta_info:
+            content.append(("METADATA", "Meta Tags:\n" + "\n".join(meta_info)))
+        
+        # Count images
+        images = soup.find_all('img')
+        if images:
+            content.append(("IMAGE", f"{len(images)} images found in HTML"))
+        
+        # Extract text content
+        text = soup.get_text(separator="\n")
+        if text.strip():
+            content.append(("TEXT", text))
+    
+    except Exception as e:
+        content.append(("ERROR", f"HTML extraction failed: {str(e)}"))
+    
+    return content
 
 
 def get_uploaded_file_entry(file_name):
@@ -491,30 +708,6 @@ def get_uploaded_file_entry(file_name):
     return None
 
 
-def extract_docx_preview(file_bytes):
-    try:
-        document = docx.Document(BytesIO(file_bytes))
-        paragraphs = [paragraph.text.strip() for paragraph in document.paragraphs if paragraph.text.strip()]
-        return paragraphs[:25]
-    except Exception:
-        return []
-
-
-def extract_pptx_preview(file_bytes):
-    try:
-        presentation = Presentation(BytesIO(file_bytes))
-        slides_content = []
-        for i, slide in enumerate(presentation.slides):
-            slide_title = f"Slide {i+1}"
-            slide_text = []
-            for shape in slide.shapes:
-                if hasattr(shape, "text") and shape.text.strip():
-                    slide_text.append(shape.text.strip())
-            if slide_text:
-                slides_content.append({"title": slide_title, "content": slide_text})
-        return slides_content[:10]
-    except Exception:
-        return []
 
 
 def render_document_preview(file_name, file_entry=None):
@@ -535,85 +728,198 @@ def render_document_preview(file_name, file_entry=None):
 
     file_name_lower = file_name.lower()
 
+    # Special handling for images
+    if file_name_lower.endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp")):
+        with st.spinner("Loading preview..."):
+            st.image(file_entry["bytes"], caption=file_name, use_container_width=True)
+        return
+
+    # Special handling for Excel files (show as table)
     if file_name_lower.endswith(".xlsx"):
         with st.spinner("Loading preview..."):
             data = st.session_state.excel_data_by_file.get(file_name, [])
             if data:
-                st.markdown("### XLSX Preview")
+                st.markdown("### Excel Preview")
                 st.dataframe(pd.DataFrame(data).head(20), use_container_width=True, hide_index=True)
             else:
                 st.info("No preview data available for this spreadsheet.")
-    elif file_name_lower.endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp")):
-        with st.spinner("Loading preview..."):
-            st.image(file_entry["bytes"], caption=file_name, use_container_width=True)
-    elif file_name_lower.endswith(".pdf"):
-        with st.spinner("Loading preview..."):
-            preview_text = st.session_state.file_texts.get(file_name, "")
-            st.markdown("### PDF Preview")
-            if preview_text:
-                st.text_area(
-                    "PDF Text Preview",
-                    value=preview_text[:15000],  # Increased limit
-                    height=500,
-                    disabled=True,
-                    key=f"preview_{file_name}"
-                )
-                if len(preview_text) > 15000:
-                    st.info(f"Showing first 15,000 characters of {len(preview_text)} total characters. Full text is available for chat.")
+        return
+
+    # For all other files, show comprehensive extracted content
+    with st.spinner("Loading preview..."):
+        full_content = st.session_state.file_texts.get(file_name, "")
+        
+        if not full_content.strip():
+            st.info("No content could be extracted from this file.")
+            return
+
+        # Parse the content into sections
+        sections = parse_extracted_content(full_content)
+        
+        # Display each section
+        for section_type, section_title, section_content in sections:
+            if section_type == "METADATA":
+                with st.expander(f"📋 {section_title}", expanded=False):
+                    st.code(section_content, language="text")
+            elif section_type == "TEXT":
+                st.markdown(f"### {section_title}")
+                # Show first 10,000 characters, with option to expand
+                if len(section_content) > 10000:
+                    st.text_area(
+                        f"{section_title} (truncated)",
+                        value=section_content[:10000] + "\n\n[... content truncated ...]",
+                        height=400,
+                        disabled=True,
+                        key=f"preview_text_{file_name}_{section_title}"
+                    )
+                    with st.expander("Show full content"):
+                        st.text_area(
+                            f"Full {section_title}",
+                            value=section_content,
+                            height=600,
+                            disabled=True,
+                            key=f"preview_full_text_{file_name}_{section_title}"
+                        )
+                else:
+                    st.text_area(
+                        section_title,
+                        value=section_content,
+                        height=400,
+                        disabled=True,
+                        key=f"preview_text_{file_name}_{section_title}"
+                    )
+            elif section_type == "TABLE":
+                with st.expander(f"📊 {section_title}", expanded=True):
+                    # Try to parse table and display as dataframe
+                    try:
+                        lines = section_content.strip().split('\n')
+                        if lines:
+                            # Parse table data
+                            table_data = []
+                            for line in lines:
+                                if ' | ' in line:
+                                    row = [cell.strip() for cell in line.split(' | ')]
+                                    table_data.append(row)
+                            
+                            if table_data:
+                                df = pd.DataFrame(table_data[1:] if len(table_data) > 1 else table_data, 
+                                                columns=table_data[0] if len(table_data) > 1 else None)
+                                st.dataframe(df, use_container_width=True, hide_index=True)
+                            else:
+                                st.code(section_content, language="text")
+                    except Exception:
+                        st.code(section_content, language="text")
+            elif section_type == "IMAGE":
+                st.info(f"🖼️ {section_content}")
+            elif section_type == "ERROR":
+                st.error(f"❌ {section_content}")
+            elif section_type == "UNSUPPORTED":
+                st.warning(f"⚠️ {section_content}")
+
+
+def parse_extracted_content(content):
+    """Parse the extracted content into sections for display."""
+    sections = []
+    lines = content.split('\n')
+    current_section = None
+    current_content = []
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+            
+        # Check for section markers
+        if line.startswith('TABLE:'):
+            # Save previous section
+            if current_section and current_content:
+                sections.append(current_section)
+            
+            # Start new table section
+            current_section = ("TABLE", "Table Content", "")
+            current_content = []
+            
+        elif line.startswith('[IMAGE:'):
+            # Save previous section
+            if current_section and current_content:
+                sections.append(current_section)
+            
+            # Add image info
+            sections.append(("IMAGE", "Images", line))
+            current_section = None
+            current_content = []
+            
+        elif line.startswith('PDF Metadata:') or line.startswith('Document Metadata:') or line.startswith('Meta Tags:') or line.startswith('Title:') or 'Pages:' in line or 'Slides:' in line or 'sheets:' in line:
+            # Save previous section
+            if current_section and current_content:
+                sections.append(current_section)
+            
+            # Start metadata section
+            if 'Metadata:' in line or 'Tags:' in line:
+                section_title = line.split(':')[0] + " Information"
             else:
-                st.info("No extracted text is available for this PDF. The PDF may contain only images or use non-standard fonts.")
-                # Try to show basic PDF info
-                try:
-                    bio = BytesIO(file_entry["bytes"])
-                    with pdfplumber.open(bio) as pdf:
-                        st.info(f"PDF has {len(pdf.pages)} pages but no extractable text was found.")
-                except Exception as e:
-                    st.error(f"Could not read PDF: {e}")
-    elif file_name_lower.endswith((".html", ".htm")):
-        with st.spinner("Loading preview..."):
-            preview_text = st.session_state.file_texts.get(file_name, "")
-            st.markdown("### HTML/Text Preview")
-            st.info("HTML preview is shown as extracted text because browser rendering is disabled in this popup.")
-            if preview_text:
-                st.text_area(
-                    "HTML Text Preview",
-                    value=preview_text[:8000],
-                    height=420,
-                    disabled=True,
-                    key=f"preview_{file_name}"
-                )
+                section_title = "Document Information"
+            
+            current_section = ("METADATA", section_title, line)
+            current_content = [line]
+            
+        elif line.startswith('Page ') and 'Text:' in line:
+            # Save previous section
+            if current_section and current_content:
+                sections.append(current_section)
+            
+            # Start new text section
+            current_section = ("TEXT", f"Page {line.split()[1]} Content", "")
+            current_content = []
+            
+        elif line.startswith('Slide ') and ':' in line:
+            # Save previous section
+            if current_section and current_content:
+                sections.append(current_section)
+            
+            # Start new slide section
+            slide_num = line.split(':')[0]
+            current_section = ("TEXT", f"{slide_num} Content", "")
+            current_content = []
+            
+        elif line.startswith('Sheet ') and ':' in line:
+            # Save previous section
+            if current_section and current_content:
+                sections.append(current_section)
+            
+            # Start new sheet section
+            sheet_name = line.split(':')[0].replace("'", "")
+            current_section = ("TABLE", f"{sheet_name} Data", "")
+            current_content = []
+            
+        elif current_section:
+            # Add to current section
+            if current_section[0] == "METADATA":
+                current_content.append(line)
+                current_section = (current_section[0], current_section[1], '\n'.join(current_content))
             else:
-                st.info("No extracted text is available for this HTML file.")
-    elif file_name_lower.endswith(".docx"):
-        with st.spinner("Loading preview..."):
-            paragraphs = extract_docx_preview(file_entry["bytes"])
-            if paragraphs:
-                st.markdown("### DOCX Preview")
-                for paragraph in paragraphs:
-                    st.write(paragraph)
-            else:
-                st.info("No preview content available for this Word document.")
-    elif file_name_lower.endswith(".pptx"):
-        with st.spinner("Loading preview..."):
-            slides_content = extract_pptx_preview(file_entry["bytes"])
-            if slides_content:
-                st.markdown("### PPTX Preview")
-                for slide in slides_content:
-                    with st.expander(slide["title"], expanded=False):
-                        for item in slide["content"]:
-                            st.write(item)
-            else:
-                st.info("No preview content available for this PowerPoint file.")
-    else:
-        with st.spinner("Loading preview..."):
-            preview_text = st.session_state.file_texts.get(file_name, "")
-            st.text_area(
-                "Document Preview",
-                value=preview_text[:8000] if preview_text else "No readable preview available for this file.",
-                height=420,
-                disabled=True,
-                key=f"preview_{file_name}"
-            )
+                current_content.append(line)
+        else:
+            # Start default text section
+            if not current_section:
+                current_section = ("TEXT", "Document Content", "")
+                current_content = []
+            current_content.append(line)
+    
+    # Save final section
+    if current_section and current_content:
+        if current_section[0] == "TEXT" or current_section[0] == "TABLE":
+            content_text = '\n'.join(current_content)
+            sections.append((current_section[0], current_section[1], content_text))
+        else:
+            sections.append(current_section)
+    
+    # If no sections were created but we have content, create a default text section
+    if not sections and content.strip():
+        sections.append(("TEXT", "Document Content", content.strip()))
+    
+    return sections
+
 
 # Handle browser tab preview links
 preview_file_from_url = None
