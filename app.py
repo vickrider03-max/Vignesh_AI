@@ -204,6 +204,8 @@ if "chat_file_selection" not in st.session_state:
     st.session_state.chat_file_selection = []
 if "chat_summary_downloads" not in st.session_state:
     st.session_state.chat_summary_downloads = {"images": [], "tables": []}
+if "chat_overview_downloads" not in st.session_state:
+    st.session_state.chat_overview_downloads = []
 if "compare_file_selection" not in st.session_state:
     st.session_state.compare_file_selection = []
 if "file_dropdown" not in st.session_state:
@@ -1856,6 +1858,23 @@ def render_chat_summary_downloads():
                 )
 
 
+def render_chat_overview_downloads():
+    downloads = st.session_state.get("chat_overview_downloads", [])
+    if not downloads:
+        return
+
+    st.markdown("### Overview Downloads")
+    with st.expander("Download generated overview files", expanded=False):
+        for index, item in enumerate(downloads):
+            st.download_button(
+                label=item["label"],
+                data=item["data"],
+                file_name=item["file_name"],
+                mime=item["mime"],
+                key=f"chat_overview_{index}_{item['file_name']}"
+            )
+
+
 def build_detailed_document_summary(file_name, file_bytes, text):
     lines = [line.strip() for line in str(text).splitlines() if line.strip()]
     words = re.findall(r"\w+", str(text))
@@ -1921,21 +1940,81 @@ def build_detailed_document_summary(file_name, file_bytes, text):
     """
 
 
+def extract_page_text(text, page_number=1):
+    text = str(text)
+    pattern = rf"Page {page_number}\s+Text:\s*(.*?)(?=Page \d+\s+Text:|\Z)"
+    match = re.search(pattern, text, re.S | re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    return "\n".join(lines[:80])
+
+
+def extract_document_headings(text):
+    headings = []
+    lines = [line.strip() for line in str(text).splitlines() if line.strip()]
+    for line in lines:
+        if len(line) > 120:
+            continue
+
+        numbered = re.match(r'^(\d+(?:\.\d+)*)(?:[.)]|\s+)\s+(.+)', line)
+        if numbered:
+            title = numbered.group(2).strip()
+            if 3 <= len(title) <= 100:
+                headings.append((numbered.group(1), title))
+            continue
+
+        if len(line) < 60 and line == line.title() and " " in line and not line.endswith("."):
+            headings.append((None, line))
+        elif len(line) < 60 and line.endswith(":"):
+            headings.append((None, line[:-1].strip().title()))
+
+    seen = set()
+    deduped = []
+    for num, title in headings:
+        key = f"{num or ''}:{title}"
+        if key not in seen:
+            seen.add(key)
+            deduped.append((num, title))
+    return deduped
+
+
 @st.cache_data(show_spinner=False)
 def build_file_overview(file_name, text):
-    lines = [line.strip() for line in str(text).splitlines() if line.strip()]
-    words = re.findall(r"\w+", str(text))
-    top_terms = Counter(word.lower() for word in words if len(word) > 2).most_common(8)
+    text = str(text)
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    words = re.findall(r"\w+", text)
+    page1_text = extract_page_text(text, 1)
+    page1_headings = extract_document_headings(page1_text)
+    all_headings = extract_document_headings(text)
     preview_lines = lines[:5]
 
     summary_parts = [
         f"📄 **{file_name}**",
-        f"- Characters: {len(str(text))}",
-        f"- Lines: {len(str(text).splitlines())}",
+        f"- Characters: {len(text)}",
+        f"- Lines: {len(text.splitlines())}",
         f"- Words: {len(words)}",
         f"- Non-empty lines: {len(lines)}",
     ]
 
+    if page1_headings:
+        summary_parts.append("- Table of Contents from page 1:")
+        summary_parts.extend(
+            f"  - {num} {title}" if num else f"  - {title}"
+            for num, title in page1_headings
+        )
+    else:
+        summary_parts.append("- Table of Contents from page 1: Not detected.")
+
+    if all_headings:
+        summary_parts.append("- Section headings found in document:")
+        summary_parts.extend(
+            f"  - {num} {title}" if num else f"  - {title}"
+            for num, title in all_headings[:12]
+        )
+
+    top_terms = Counter(word.lower() for word in words if len(word) > 2).most_common(8)
     if top_terms:
         summary_parts.append(
             "- Top keywords: " + ", ".join(f"{word} ({count})" for word, count in top_terms)
@@ -2972,13 +3051,16 @@ with tab1:
                 if user_input.strip().lower() == "clear":
                     st.session_state.messages = []
                     st.session_state.chat_summary_downloads = {"images": [], "tables": []}
+                    st.session_state.chat_overview_downloads = []
                     st.success("✅ Chat cleared!")
                 else:
                     st.session_state.messages.append({"role": "user", "content": user_input})
                     with st.spinner("Processing your request..."):
                         st.session_state.chat_summary_downloads = {"images": [], "tables": []}
+                        st.session_state.chat_overview_downloads = []
+                        user_input_lower = user_input.lower()
                         # Word count queries
-                        if any(t in user_input.lower() for t in ["how many", "count", "number of", "occurrences"]):
+                        if any(t in user_input_lower for t in ["how many", "count", "number of", "occurrences"]):
                             match = re.search(r"'(.*?)'|\"(.*?)\"", user_input)
                             if match:
                                 word = match.group(1) or match.group(2)
@@ -2987,7 +3069,7 @@ with tab1:
                                 response = f"🔢 The word/phrase '{word}' appears {count} times in the selected documents."
                             else:
                                 response = "⚠️ Specify the word/phrase in quotes. Example: count('keyword') or count(\"keyword\")"
-                        elif any(term in user_input.lower() for term in ["find", "search", "locate"]) or "highlight" in user_input.lower():
+                        elif any(term in user_input_lower for term in ["find", "search", "locate"]) or "highlight" in user_input_lower:
                             match = re.search(r"'(.*?)'|\"(.*?)\"", user_input)
                             if match:
                                 query = match.group(1) or match.group(2)
@@ -2998,7 +3080,26 @@ with tab1:
                                 response = "".join(response_blocks)
                             else:
                                 response = "⚠️ Specify the search word or phrase in quotes. Example: find('keyword') or search(\"keyword\")"
-                        elif any(term in user_input.lower() for term in ["analyze", "summary", "summarize", "summarise", "overview"]):
+                        elif "overview" in user_input_lower:
+                            result = []
+                            overview_downloads = []
+                            for f in chat_files:
+                                file_text = st.session_state.file_texts.get(f, "")
+                                if file_text.strip():
+                                    overview_text = build_file_overview(f, file_text)
+                                    result.append(overview_text)
+                                    overview_downloads.append({
+                                        "label": f"Download overview for {f}",
+                                        "data": overview_text.encode("utf-8"),
+                                        "file_name": f"{os.path.splitext(f)[0]}_overview.txt",
+                                        "mime": "text/plain"
+                                    })
+                                else:
+                                    result.append(f"📄 **{f}**\n\nNo readable content found in this document.")
+
+                            st.session_state.chat_overview_downloads = overview_downloads
+                            response = "\n\n---\n\n".join(result)
+                        elif any(term in user_input_lower for term in ["analyze", "summary", "summarize", "summarise"]):
                             result = []
                             summary_image_downloads = []
                             summary_table_downloads = []
@@ -3019,7 +3120,7 @@ with tab1:
                                 "tables": summary_table_downloads
                             }
                             response = "\n\n---\n\n".join(result)
-                        elif "compare" in user_input.lower():
+                        elif "compare" in user_input_lower:
                             if len(chat_files) >= 2:
                                 selected_texts = {f: st.session_state.file_texts[f] for f in chat_files}
                                 response = highlight_multi_file_differences(selected_texts)
@@ -3054,6 +3155,7 @@ with tab1:
             st.markdown(f"{role} {msg['content']}", unsafe_allow_html=True)
 
         render_chat_summary_downloads()
+        render_chat_overview_downloads()
     else:
         st.info("Select files from the sidebar to start chatting.")
 
