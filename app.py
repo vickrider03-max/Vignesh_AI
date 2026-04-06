@@ -577,6 +577,22 @@ def table_to_png_bytes(table_data, title=None):
     return output.getvalue()
 
 
+def image_bytes_to_png_bytes(image_bytes):
+    """Convert an uploaded image to PNG bytes."""
+    with Image.open(BytesIO(image_bytes)) as image:
+        png_buffer = BytesIO()
+        image.save(png_buffer, format="PNG")
+        return png_buffer.getvalue()
+
+
+def dataframe_to_table_rows(df):
+    """Convert a dataframe to table rows suitable for PNG rendering."""
+    safe_df = df.fillna("")
+    rows = [list(map(str, safe_df.columns.tolist()))]
+    rows.extend([list(map(str, row)) for row in safe_df.values.tolist()])
+    return rows
+
+
 def extract_docx_content(bio):
     """Extract text, tables, and images from DOCX."""
     content = []
@@ -836,7 +852,7 @@ def render_document_preview(file_name, file_entry=None):
 
                             st.image(image_bytes, caption=f"Page {i+1}", use_container_width=True)
                             download_items.append({
-                                "label": f"📥 Download Page {i+1} as PNG",
+                                "label": f"Download {section_title} as PNG",
                                 "data": image_bytes,
                                 "file_name": f"{os.path.splitext(file_name)[0]}_page_{i+1}.png",
                                 "mime": "image/png",
@@ -880,8 +896,10 @@ def render_document_preview(file_name, file_entry=None):
     # Special handling for images
     if file_name_lower.endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp")):
         with st.spinner("Loading preview..."):
+            mime_type = "application/octet-stream"
             try:
                 st.image(file_entry["bytes"], caption=file_name, use_container_width=True)
+                png_bytes = image_bytes_to_png_bytes(file_entry["bytes"])
                 # Determine MIME type
                 ext = file_name_lower.split('.')[-1]
                 mime_type = f"image/{ext}"
@@ -889,18 +907,25 @@ def render_document_preview(file_name, file_entry=None):
                     mime_type = "image/jpeg"
                 elif ext == "svg":
                     mime_type = "image/svg+xml"
-                
+
                 st.download_button(
-                    label="📥 Download Image",
+                    label="Download Image",
                     data=file_entry["bytes"],
                     file_name=file_name,
                     mime=mime_type,
                     key=f"download_image_{file_name}"
                 )
+                st.download_button(
+                    label="Download as PNG",
+                    data=png_bytes,
+                    file_name=f"{os.path.splitext(file_name)[0]}.png",
+                    mime="image/png",
+                    key=f"download_image_png_{file_name}"
+                )
             except Exception as e:
                 st.error(f"Could not display image: {e}")
                 st.download_button(
-                    label="📥 Download Image File",
+                    label="Download Image File",
                     data=file_entry["bytes"],
                     file_name=file_name,
                     mime=mime_type,
@@ -914,7 +939,29 @@ def render_document_preview(file_name, file_entry=None):
             data = st.session_state.excel_data_by_file.get(file_name, [])
             if data:
                 st.markdown("### Excel Preview")
-                st.dataframe(pd.DataFrame(data).head(20), use_container_width=True, hide_index=True)
+                preview_df = pd.DataFrame(data).head(20)
+                st.dataframe(preview_df, use_container_width=True, hide_index=True)
+                st.download_button(
+                    label="Download table as CSV",
+                    data=preview_df.to_csv(index=False),
+                    file_name=f"{os.path.splitext(file_name)[0]}_preview.csv",
+                    mime="text/csv",
+                    key=f"download_excel_csv_{file_name}"
+                )
+                try:
+                    table_png = table_to_png_bytes(
+                        dataframe_to_table_rows(preview_df),
+                        title=f"{file_name} Preview"
+                    )
+                    st.download_button(
+                        label="Download table as PNG",
+                        data=table_png,
+                        file_name=f"{os.path.splitext(file_name)[0]}_preview.png",
+                        mime="image/png",
+                        key=f"download_excel_png_{file_name}"
+                    )
+                except Exception:
+                    pass
             else:
                 st.info("No preview data available for this spreadsheet.")
         return
@@ -994,7 +1041,7 @@ def render_document_preview(file_name, file_entry=None):
                                 # Add download button for table as CSV
                                 csv_data = df.to_csv(index=False)
                                 st.download_button(
-                                    label="📥 Download as CSV",
+                                    label="Download as CSV",
                                     data=csv_data,
                                     file_name=f"{section_title.replace(' ', '_')}.csv",
                                     mime="text/csv",
@@ -1003,7 +1050,7 @@ def render_document_preview(file_name, file_entry=None):
                                 try:
                                     table_png = table_to_png_bytes(table_data, title=section_title)
                                     download_items.append({
-                                        "label": f"📥 Download {section_title} as PNG",
+                                        "label": f"Download {section_title} as PNG",
                                         "data": table_png,
                                         "file_name": f"{section_title.replace(' ', '_')}.png",
                                         "mime": "image/png",
@@ -1027,12 +1074,23 @@ def render_document_preview(file_name, file_entry=None):
                         if image_data['ext'] == "jpg":
                             mime_type = "image/jpeg"
                         st.download_button(
-                            label="📥 Download Image",
+                            label="Download Image",
                             data=image_data['bytes'],
                             file_name=image_data['filename'],
                             mime=mime_type,
                             key=f"download_embedded_{image_key}"
                         )
+                        try:
+                            png_bytes = image_bytes_to_png_bytes(image_data['bytes'])
+                            st.download_button(
+                                label="Download as PNG",
+                                data=png_bytes,
+                                file_name=f"{os.path.splitext(image_data['filename'])[0]}.png",
+                                mime="image/png",
+                                key=f"download_embedded_png_{image_key}"
+                            )
+                        except Exception:
+                            pass
                     except Exception as e:
                         st.error(f"Could not display image: {e}")
                 else:
@@ -1246,11 +1304,32 @@ with st.sidebar:
                     background: #f8fbff;
                     border: 1px solid #d7e3f4;
                     border-radius: 12px;
-                    padding: 12px 14px;
                     margin-bottom: 8px;
                     color: #173152;
                     font-size: 14px;
                     overflow-wrap: anywhere;
+                }
+                [data-testid="stSidebar"] [class*="st-key-select_file_"] button[kind="secondary"],
+                [data-testid="stSidebar"] [class*="st-key-select_file_"] button[kind="primary"] {
+                    width: 100%;
+                    min-height: 72px;
+                    border-radius: 12px;
+                    padding: 12px 14px;
+                    font-size: 14px;
+                    text-align: left;
+                    justify-content: flex-start;
+                    white-space: normal;
+                    line-height: 1.4;
+                }
+                [data-testid="stSidebar"] [class*="st-key-select_file_"] button[kind="secondary"] {
+                    background: #f8fbff;
+                    border: 1px solid #d7e3f4;
+                    color: #173152;
+                }
+                [data-testid="stSidebar"] [class*="st-key-select_file_"] button[kind="primary"] {
+                    background: #eaf2ff;
+                    border: 1px solid #1f4f91;
+                    color: #173152;
                 }
                 .file-icon-button {
                     display: inline-flex;
@@ -1259,13 +1338,24 @@ with st.sidebar:
                     width: 38px;
                     height: 38px;
                     border-radius: 12px;
-                    background: #1f4f91;
-                    color: #ffffff;
+                    background: transparent;
+                    color: #1f4f91;
                     text-decoration: none;
                     font-size: 18px;
                 }
                 .file-icon-button:hover {
-                    background: #163b6f;
+                    background: #eaf2ff;
+                }
+                [data-testid="stSidebar"] [class*="st-key-del_file_"] button[kind="tertiary"] {
+                    background: transparent;
+                    border: none;
+                    box-shadow: none;
+                    color: #6c7280;
+                    min-height: 38px;
+                }
+                [data-testid="stSidebar"] [class*="st-key-del_file_"] button[kind="tertiary"]:hover {
+                    background: #f3f6fb;
+                    color: #b42318;
                 }
             </style>
             """,
@@ -1291,7 +1381,7 @@ with st.sidebar:
             st.rerun()
 
         st.header("Upload Documents")
-        st.info("1) Upload files. 2) Check the files you need. 3) Switch tabs and work with selected files.")
+        st.info("1) Upload files. 2) Click the file cards you need. 3) Switch tabs and work with selected files.")
         new_files = st.file_uploader(
             "Upload PDF, DOCX, TXT, PPTX, XLSX, HTML, CAPL, Images",
             type=["pdf", "docx", "txt", "pptx", "xlsx", "html", "htm", "capl", "can", "png", "jpg", "jpeg", "gif", "bmp", "webp"],
@@ -1313,22 +1403,33 @@ with st.sidebar:
         for idx, file_dict in enumerate(st.session_state.uploaded_files[:]):
             cols = st.columns([0.65, 0.18, 0.17], vertical_alignment="center")
             with cols[0]:
-                st.markdown(
-                    f"<div class='file-box'>{html.escape(file_dict['name'])}</div>",
-                    unsafe_allow_html=True,
-                )
+                file_name = file_dict["name"]
+                is_selected = file_name in st.session_state.selected_files
+                button_label = file_name if not is_selected else f"Selected: {file_name}"
+                if st.button(
+                    button_label,
+                    key=f"select_file_{idx}",
+                    help=f"Click to {'remove' if is_selected else 'add'} {file_name}",
+                    use_container_width=True,
+                    type="primary" if is_selected else "secondary",
+                ):
+                    if is_selected:
+                        st.session_state.selected_files.remove(file_name)
+                    else:
+                        st.session_state.selected_files.append(file_name)
+                    st.rerun()
             with cols[1]:
                 token = str(uuid.uuid4())
-                PREVIEW_TOKENS[token] = {'file_name': file_dict["name"], 'timestamp': datetime.now()}
+                PREVIEW_TOKENS[token] = {'file_name': file_name, 'timestamp': datetime.now()}
                 PREVIEW_STORE[token] = file_dict
                 save_preview_data()
                 st.markdown(
-                    f"<a href='./?preview_token={token}' target='_blank' class='file-icon-button' title='Preview {html.escape(file_dict['name'])}'>👁️</a>",
+                    f"<a href='./?preview_token={token}' target='_blank' class='file-icon-button' title='Preview {html.escape(file_name)}'>👁️</a>",
                     unsafe_allow_html=True,
                 )
             with cols[2]:
-                if st.button("🗑️", key=f"del_file_{idx}", help=f"Delete {file_dict['name']}", use_container_width=True):
-                    deleted_name = file_dict["name"]
+                if st.button("🗑️", key=f"del_file_{idx}", help=f"Delete {file_name}", use_container_width=True, type="tertiary"):
+                    deleted_name = file_name
                     st.session_state.uploaded_files = [f for f in st.session_state.uploaded_files if
                                                        f["name"] != deleted_name]
 
