@@ -315,6 +315,7 @@ for key, default_value in [
     ("chat_file_selection", []),
     ("chat_summary_downloads", {"images": [], "tables": []}),
     ("messages", []),
+    ("welcome_shown", False),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default_value
@@ -385,6 +386,10 @@ with col_logo:
 
 with col_status:
     if st.session_state.is_authenticated:
+        if not st.session_state.get('welcome_shown', False):
+            st.toast(f"🎉 Welcome back, {st.session_state.logged_in_username}! We're thrilled to have you here.", icon="🎉")
+            st.session_state.welcome_shown = True
+
         render_status_strip()
 
         creator_timestamp = None
@@ -401,7 +406,7 @@ with col_status:
             status_message += f"\nLogin time: {creator_timestamp}"
 
         st.markdown(f"**{status_message}**")
-        logout_clicked = st.button("Logout", key="logout_button", use_container_width=True)
+        logout_clicked = st.button("Logout", key="logout_button")
         if logout_clicked:
             active_file = "active_users.json"
             if os.path.exists(active_file):
@@ -420,6 +425,7 @@ with col_status:
             st.session_state.chat_file_selection = []
             st.session_state.chat_summary_downloads = {"images": [], "tables": []}
             st.session_state.messages = []
+            st.session_state.welcome_shown = False
             st.success("Logged out successfully.")
             st.rerun()
 
@@ -3482,6 +3488,15 @@ def ensure_help_popup_state(tab_name):
     return key
 
 
+# Define keywords for each tab
+tab_keywords = {
+    "chat": ["overview", "summary", "count", "find", "analyze", "explain", "details", "questions"],
+    "dashboard": ["statistics", "trends", "charts", "metrics", "data", "visualize", "insights"],
+    "compare": ["differences", "compare", "changes", "merge", "diff", "side-by-side", "inline"],
+    "capl": ["syntax", "variables", "functions", "errors", "debug", "code", "fix", "suggestions"]
+}
+
+
 def show_help_popup(tab_name, selected_files):
     state_key = ensure_help_popup_state(tab_name)
     st.checkbox("Show query helper popup", key=state_key)
@@ -3489,12 +3504,15 @@ def show_help_popup(tab_name, selected_files):
     if not st.session_state[state_key]:
         return
 
+    keywords = tab_keywords.get(tab_name.lower(), [])
+
     if not selected_files:
         st.markdown(
-            """
+            f"""
             <div style='position:fixed; bottom:14px; right:14px; width:340px; padding:14px; background:#ffffff; border:1px solid #1f4f91; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.24); z-index:9999;'>
-                <h4 style='margin:0 0 6px 0; font-size:15px; color:#1f4f91;'>📘 Document Chat Syntax</h4>
+                <h4 style='margin:0 0 6px 0; font-size:15px; color:#1f4f91;'>📘 {tab_name.capitalize()} Query Keywords</h4>
                 <p style='margin:0; font-size:13px; color:#253659;'>Select a document first to see targeted query guidance.</p>
+                <p style='margin:5px 0 0 0; font-size:13px; color:#253659;'>Suggested keywords: {', '.join(keywords)}</p>
             </div>
             """,
             unsafe_allow_html=True
@@ -3526,13 +3544,9 @@ def show_help_popup(tab_name, selected_files):
     st.markdown(
         f"""
         <div style='position:fixed; bottom:14px; right:14px; width:340px; padding:14px; background:#ffffff; border:1px solid #1f4f91; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.24); z-index:9999;'>
-            <h4 style='margin:0 0 6px 0; font-size:15px; color:#1f4f91;'>📘 {tab_name.capitalize()} Query Help</h4>
+            <h4 style='margin:0 0 6px 0; font-size:15px; color:#1f4f91;'>📘 {tab_name.capitalize()} Query Keywords</h4>
             <p style='margin:0 0 8px 0; font-size:13px; color:#253659;'>Support for selected file types: {', '.join(sorted(selected_types))}</p>
-            <ul style='margin:0 0 8px 18px; padding:0; color:#253659; font-size:13px;'>
-                <li><code style='background:#f1f5f9; padding:1px 4px; border-radius:3px;'>count('Approved')</code> - frequency</li>
-                <li><code style='background:#f1f5f9; padding:1px 4px; border-radius:3px;'>find('Error')</code> - locate phrases</li>
-                <li><code style='background:#f1f5f9; padding:1px 4px; border-radius:3px;'>summarize()</code> - quick summary</li>
-            </ul>
+            <p style='margin:0 0 8px 0; font-size:13px; color:#253659;'>Suggested keywords: {', '.join(keywords)}</p>
             <p style='margin:0; font-size:12px; color:#3c4f7e;'>{extra}</p>
             <p style='margin:5px 0 0 0; font-size:12px; color:#3c4f7e;'>{type_hint}</p>
         </div>
@@ -4124,7 +4138,11 @@ if active_main_tab == "📊 Dashboard":
                 ensure_file_processed(file_dropdown)
             file_entry = get_uploaded_file_entry(file_dropdown)
             file_bytes = file_entry["bytes"] if file_entry else b""
-            chart_type = st.radio("Chart type", ["Bar Chart", "Pie Chart"])
+            chart_type = st.radio("Chart type", ["Pie Chart", "Bar Chart"], index=0)
+            bar_orientation = "Vertical"
+            if chart_type == "Bar Chart":
+                bar_orientation = st.radio("Bar orientation", ["Vertical", "Horizontal"], index=0)
+            horizontal_bar = (bar_orientation == "Horizontal")
 
             if file_dropdown.lower().endswith(".xlsx"):
                 data = st.session_state.excel_data_by_file.get(file_dropdown, [])
@@ -4138,7 +4156,7 @@ if active_main_tab == "📊 Dashboard":
                         if counts:
                             fig = plot_pie_chart(counts,
                                                  f"{col} Distribution") if chart_type == "Pie Chart" else plot_bar_chart(
-                                counts, f"{col} Distribution"
+                                counts, f"{col} Distribution", horizontal=horizontal_bar
                             )
                             st.plotly_chart(fig, use_container_width=True)
                         else:
@@ -4161,7 +4179,7 @@ if active_main_tab == "📊 Dashboard":
                     c3.metric("Failed", stats["Failed"])
 
                     fig = plot_pie_chart(stats, "Statistics") if chart_type == "Pie Chart" else plot_bar_chart(
-                        stats, "Statistics"
+                        stats, "Statistics", horizontal=horizontal_bar
                     )
                     st.plotly_chart(fig, use_container_width=True)
                 else:
@@ -4316,7 +4334,7 @@ if active_main_tab == "📊 Dashboard":
                         if verdict_counts:
                             fig = plot_pie_chart(verdict_counts,
                                                  f"Verdict Distribution - {selected_fixture}") if chart_type == "Pie Chart" else plot_bar_chart(
-                                verdict_counts, f"Verdict Distribution - {selected_fixture}", horizontal=True
+                                verdict_counts, f"Verdict Distribution - {selected_fixture}", horizontal=horizontal_bar
                             )
                             st.plotly_chart(fig, use_container_width=True)
                 else:
