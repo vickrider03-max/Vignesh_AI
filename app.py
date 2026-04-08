@@ -93,84 +93,44 @@ st.markdown(
             font-weight: 700;
             color: #1f4f91;
         }
-        #benz-canvas {
+        .benz-logo-wrapper {
             width: 50px;
             height: 50px;
             display: inline-block;
+            perspective: 1000px;
+        }
+        .benz-logo-wrapper svg {
+            width: 100%;
+            height: 100%;
+            animation: mercedes-flip 3s linear infinite;
+        }
+        @keyframes mercedes-flip {
+            0% { transform: rotateY(0deg); }
+            100% { transform: rotateY(360deg); }
         }
     </style>
     <div class="app-header">
-        <canvas id="benz-canvas" width="200" height="200"></canvas>
+        <div class="benz-logo-wrapper">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet">
+                <!-- Outer Ring -->
+                <circle cx="100" cy="100" r="90" fill="none" stroke="#A0A0A0" stroke-width="12" />
+                
+                <!-- Star Points (3 faceted triangles with chrome shading) -->
+                <!-- Top point -->
+                <polygon points="100,25 115,95 85,95" fill="#FFFFFF" />
+                <polygon points="100,25 85,95 100,100" fill="#000000" />
+                
+                <!-- Bottom Left point -->
+                <polygon points="40,165 71,55 129,78" fill="#FFFFFF" />
+                <polygon points="40,165 129,78 100,100" fill="#000000" />
+                
+                <!-- Bottom Right point -->
+                <polygon points="160,165 71,55 129,78" fill="#FFFFFF" />
+                <polygon points="160,165 129,78 100,100" fill="#000000" />
+            </svg>
+        </div>
         <span>Vignesh_AI</span>
     </div>
-    <script>
-        const canvas = document.getElementById('benz-canvas');
-        const ctx = canvas.getContext('2d');
-        
-        // Chrome colors matching the matplotlib code
-        const GLINT = '#FFFFFF';
-        const SILVER = '#A0A0A0';
-        const SHADOW = '#000000';
-        
-        function drawMercedesFace(flipScale) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.save();
-            
-            const centerX = 100;
-            const centerY = 100;
-            ctx.translate(centerX, centerY);
-            
-            // Draw Ring (Circle)
-            ctx.beginPath();
-            ctx.arc(0, 0, 80, 0, 2 * Math.PI);
-            ctx.lineWidth = 12;
-            ctx.strokeStyle = Math.abs(flipScale) > 0.8 ? GLINT : SILVER;
-            ctx.stroke();
-            
-            const baseAngles = [Math.PI / 2, Math.PI / 2 + 2 * Math.PI / 3, Math.PI / 2 + 4 * Math.PI / 3];
-            
-            baseAngles.forEach((angle) => {
-                const tipX = 0.88 * 80 * Math.cos(angle) * flipScale;
-                const tipY = 0.88 * 80 * Math.sin(angle);
-                
-                const sideLX = 0.16 * 80 * Math.cos(angle + 2.15) * flipScale;
-                const sideLY = 0.16 * 80 * Math.sin(angle + 2.15);
-                
-                const sideRX = 0.16 * 80 * Math.cos(angle - 2.15) * flipScale;
-                const sideRY = 0.16 * 80 * Math.sin(angle - 2.15);
-                
-                // Left facet
-                ctx.beginPath();
-                ctx.moveTo(0, 0);
-                ctx.lineTo(tipX, tipY);
-                ctx.lineTo(sideLX, sideLY);
-                ctx.closePath();
-                ctx.fillStyle = flipScale > 0 ? GLINT : SHADOW;
-                ctx.fill();
-                
-                // Right facet
-                ctx.beginPath();
-                ctx.moveTo(0, 0);
-                ctx.lineTo(tipX, tipY);
-                ctx.lineTo(sideRX, sideRY);
-                ctx.closePath();
-                ctx.fillStyle = flipScale > 0 ? SHADOW : GLINT;
-                ctx.fill();
-            });
-            
-            ctx.restore();
-        }
-        
-        let frame = 0;
-        function animate() {
-            const flipScale = Math.cos(frame * Math.PI / 180);
-            drawMercedesFace(flipScale);
-            frame = (frame + 2) % 360;
-            requestAnimationFrame(animate);
-        }
-        
-        animate();
-    </script>
     """,
     unsafe_allow_html=True
 )
