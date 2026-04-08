@@ -3,6 +3,7 @@ import uuid
 import urllib.parse
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
+from difflib import SequenceMatcher
 from io import BytesIO
 from pytz import timezone
 
@@ -359,6 +360,8 @@ if "llm_task" not in st.session_state:
     st.session_state.llm_task = None
 if "user_session_start_time" not in st.session_state:
     st.session_state.user_session_start_time = None
+if "active_main_tab" not in st.session_state:
+    st.session_state.active_main_tab = "💬 Chat"
 
 # Load README.txt from file system
 def load_readme_text():
@@ -2869,11 +2872,14 @@ def plot_bar_chart(counts, title, horizontal=False):
 # Generates the inline visual comparison shown in the Compare tab and also reused
 # from Chat when the user asks to compare multiple selected documents.
 @st.cache_data(show_spinner=False)
-def highlight_multi_file_differences_cached(file_items):
+def highlight_multi_file_differences_cached(file_items, comparison_mode="Exact inline word diff", reference_file=None):
     if len(file_items) < 2:
         return "Select at least two files to compare."
 
     files = [fname for fname, _ in file_items]
+    if reference_file is None or reference_file not in files:
+        reference_file = files[0]
+
     css = """
     <style>
         body { font-family: Arial; margin: 20px; }
@@ -2902,31 +2908,43 @@ def highlight_multi_file_differences_cached(file_items):
         html_parts.append(f"<tr><td class='line-number'>{i + 1}</td>")
 
         line_word_lists = {}
-        word_presence = defaultdict(int)
         ordered_words = []
+        word_presence = defaultdict(int)
 
         for fname in files:
             raw_line = file_lines[fname][i] if i < len(file_lines[fname]) else ""
             words = raw_line.split()
             line_word_lists[fname] = words
-            seen_words = set()
             for word in words:
-                if word not in seen_words:
-                    word_presence[word] += 1
-                    seen_words.add(word)
                 if word not in ordered_words:
                     ordered_words.append(word)
+            for word in set(words):
+                word_presence[word] += 1
+
+        reference_words = line_word_lists.get(reference_file, [])
 
         for fname in files:
-            words = set(line_word_lists[fname])
-            highlighted = []
-            for word in ordered_words:
-                escaped_word = html.escape(word)
-                if word in words and word_presence[word] == len(files):
-                    highlighted.append(f"<span class='match'>{escaped_word}</span>")
-                else:
-                    highlighted.append(f"<span class='mismatch'>{escaped_word}</span>")
-            html_parts.append(f"<td>{' '.join(highlighted) if highlighted else '&nbsp;'}</td>")
+            words = line_word_lists[fname]
+            if comparison_mode == "Word presence summary":
+                highlighted = []
+                word_set = set(words)
+                for word in ordered_words:
+                    escaped_word = html.escape(word)
+                    if word in word_set and word_presence[word] == len(files):
+                        highlighted.append(f"<span class='match'>{escaped_word}</span>")
+                    else:
+                        highlighted.append(f"<span class='mismatch'>{escaped_word}</span>")
+                cell_html = ' '.join(highlighted) if highlighted else '&nbsp;'
+            else:
+                highlighted = []
+                matcher = SequenceMatcher(None, reference_words, words)
+                for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+                    if tag == "equal":
+                        highlighted.extend(f"<span class='match'>{html.escape(w)}</span>" for w in words[j1:j2])
+                    else:
+                        highlighted.extend(f"<span class='mismatch'>{html.escape(w)}</span>" for w in words[j1:j2])
+                cell_html = ' '.join(highlighted) if highlighted else '&nbsp;'
+            html_parts.append(f"<td>{cell_html}</td>")
 
         html_parts.append("</tr>")
 
@@ -2934,8 +2952,12 @@ def highlight_multi_file_differences_cached(file_items):
     return "".join(html_parts)
 
 
-def highlight_multi_file_differences(file_texts):
-    return highlight_multi_file_differences_cached(tuple((fname, str(text)) for fname, text in file_texts.items()))
+def highlight_multi_file_differences(file_texts, comparison_mode="Exact inline word diff", reference_file=None):
+    return highlight_multi_file_differences_cached(
+        tuple((fname, str(text)) for fname, text in file_texts.items()),
+        comparison_mode=comparison_mode,
+        reference_file=reference_file
+    )
 
 
 # -------------------------------
@@ -3415,7 +3437,7 @@ def show_help_popup(tab_name, selected_files):
     elif tab_name == "dashboard":
         extra = "If *.xlsx selected, ask for columns and trend counts; *.html can be parsed for test verdicts."
     elif tab_name == "compare":
-        extra = "Select 2+ files; use compare shorthand like compare('Error')(doc1, doc2) in natural language."
+        extra = "Inline word diff and Excel export are supported for PDF, DOCX, PPTX, XLSX, HTML, TXT, CAN, and CAPL files."
     elif tab_name == "capl":
         extra = "For CAPL code, use 'find missing semicolon' or 'show unused variables' style queries."
     else:
@@ -3457,8 +3479,17 @@ def show_help_popup(tab_name, selected_files):
 # feature, start in the matching tab block and then follow the helper comments above.
 render_status_strip()
 
-# All authenticated users get full panel tabs; content can still be permission-aware.
-tab1, tab2, tab3, tab4 = st.tabs(["💬 Chat", "📊 Dashboard", "📂 Compare", "🧠 CAPL"])
+# Session-backed main navigation:
+# Using a radio selector instead of st.tabs prevents Streamlit reruns from
+# snapping the UI back to the first tab after actions like Compare/Analyze.
+main_tab_options = ["💬 Chat", "📊 Dashboard", "📂 Compare", "🧠 CAPL"]
+active_main_tab = st.radio(
+    "Open Section",
+    main_tab_options,
+    horizontal=True,
+    key="active_main_tab",
+    label_visibility="collapsed",
+)
 
 # -------------------------------
 # TAB 1: CHAT
@@ -3466,7 +3497,7 @@ tab1, tab2, tab3, tab4 = st.tabs(["💬 Chat", "📊 Dashboard", "📂 Compare",
 # Chat tab:
 # Handles per-tab file selection, direct commands like summarize/find/count,
 # semantic Q&A via vector search, and chat-specific download assets.
-with tab1:
+if active_main_tab == "💬 Chat":
     chat_header_col, chat_reset_col = st.columns([8, 1])
     with chat_header_col:
         st.subheader("Chat with Selected Documents")
@@ -3621,7 +3652,7 @@ with tab1:
 # Dashboard tab:
 # Focused on structured HTML/XLSX analysis, charts, login/stat extraction, and
 # grouped test fixture reporting for uploaded report files.
-with tab2:
+if active_main_tab == "📊 Dashboard":
     dashboard_header_col, dashboard_reset_col = st.columns([8, 1])
     with dashboard_header_col:
         st.subheader("Dashboard")
@@ -4164,7 +4195,7 @@ with tab2:
 # Compare tab:
 # Lets users pick 2+ selected files, generate inline word-level differences,
 # and download the comparison results as an Excel file.
-with tab3:
+if active_main_tab == "📂 Compare":
     compare_header_col, compare_reset_col = st.columns([8, 1])
     with compare_header_col:
         st.subheader("Compare Files")
@@ -4181,6 +4212,14 @@ with tab3:
     show_help_popup('compare', st.session_state.selected_files)
     render_file_context_card("Compare File Context", st.session_state.selected_files, st.session_state.compare_file_selection)
 
+    st.markdown("**Comparison options:**")
+    st.markdown(
+        "- Inline word-level diff (sequence-aware highlighting)\n"
+        "- Word presence summary across selected files\n"
+        "- Downloadable Excel comparison workbook\n"
+        "- Supports PDF, DOCX, PPTX, XLSX, HTML, TXT, CAN/CAPL formats"
+    )
+
     # Use selected files in multiselect (user must choose from selected_files independently)
     st.session_state.compare_file_selection = [
         file_name for file_name in st.session_state.compare_file_selection
@@ -4192,6 +4231,22 @@ with tab3:
         default=st.session_state.compare_file_selection,
         key="compare_file_selection"
     )
+
+    compare_mode = st.selectbox(
+        "Comparison mode",
+        ["Exact inline word diff", "Word presence summary"],
+        index=0,
+        key="compare_mode"
+    )
+
+    reference_file = None
+    if selected_files_for_comparison:
+        reference_file = st.selectbox(
+            "Reference file for inline comparison",
+            selected_files_for_comparison,
+            index=0,
+            help="Use this file as the baseline for the inline diff mode."
+        )
 
     compare_clicked = st.button("Compare Selected Files", key="run_compare_button", use_container_width=True)
 
@@ -4206,7 +4261,11 @@ with tab3:
                 selected_texts[f] = raw_text if isinstance(raw_text, str) else str(raw_text)
 
             with st.spinner("Loading comparison results..."):
-                html_diff = highlight_multi_file_differences(selected_texts)
+                html_diff = highlight_multi_file_differences(
+                    selected_texts,
+                    comparison_mode=compare_mode,
+                    reference_file=reference_file
+                )
                 excel_io = generate_word_level_comparison_excel(selected_texts)
 
             st.session_state.compare_result_html = html_diff
@@ -4236,7 +4295,7 @@ with tab3:
 # CAPL tab:
 # Dedicated to CAPL file selection, live editing, compile/analyze checks, issue
 # reporting, and optional AI-assisted fix generation for CAPL scripts.
-with tab4:
+if active_main_tab == "🧠 CAPL":
     capl_header_col, capl_reset_col = st.columns([8, 1])
     with capl_header_col:
         st.subheader("⚙️ CAPL Compiler & Analyzer")
@@ -4417,4 +4476,3 @@ with tab4:
                                 render_capl_issue_table(issues)
                             except Exception as exc:
                                 st.error(f"AI suggestion failed: {exc}")
-
