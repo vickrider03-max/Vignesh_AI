@@ -78,39 +78,9 @@ def get_perfect_mercedes_logo():
         plt = importlib.import_module('matplotlib.pyplot')
         np = importlib.import_module('numpy')
         Polygon = importlib.import_module('matplotlib.patches').Polygon
-    except Exception:
-        return """
-        <div style="display:flex; justify-content:center; margin-bottom:16px;">
-            <div style="width:140px; height:140px;">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet" style="width:100%; height:100%;">
-                    <defs>
-                        <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" stop-color="#ffffff"/>
-                            <stop offset="40%" stop-color="#c0c0c0"/>
-                            <stop offset="100%" stop-color="#777777"/>
-                        </linearGradient>
-                        <linearGradient id="starGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" stop-color="#ffffff"/>
-                            <stop offset="100%" stop-color="#444444"/>
-                        </linearGradient>
-                    </defs>
-                    <circle cx="100" cy="100" r="88" fill="none" stroke="url(#ringGrad)" stroke-width="14" />
-                    <circle cx="100" cy="100" r="40" fill="none" stroke="#808080" stroke-width="3" />
-                    <g style="transform-origin:100px 100px; transform-box: fill-box; animation: mercedes-flip 3s linear infinite;">
-                        <line x1="100" y1="20" x2="100" y2="100" stroke="url(#starGrad)" stroke-width="12" stroke-linecap="round" />
-                        <line x1="38" y1="170" x2="100" y2="100" stroke="url(#starGrad)" stroke-width="12" stroke-linecap="round" />
-                        <line x1="162" y1="170" x2="100" y2="100" stroke="url(#starGrad)" stroke-width="12" stroke-linecap="round" />
-                    </g>
-                </svg>
-            </div>
-        </div>
-        <style>
-            @keyframes mercedes-flip {
-                0% { transform: rotateY(0deg); }
-                100% { transform: rotateY(360deg); }
-            }
-        </style>
-        """
+    except Exception as e:
+        st.warning("Mercedes logo generation requires matplotlib and numpy. Install these packages to view the animated logo.")
+        return None
 
     frames = []
     GLINT, SILVER, SHADOW = '#FFFFFF', '#C0C0C0', '#000000'
@@ -170,16 +140,10 @@ load_preview_data()
 # Clean up expired preview tokens on app start
 cleanup_expired_preview_tokens()
 
-logo_html = get_perfect_mercedes_logo()
-
-with st.sidebar:
-    st.markdown(logo_html, unsafe_allow_html=True)
+logo_data = get_perfect_mercedes_logo()
 
 st.markdown(
     """
-    <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
-        <h1 style="margin:0; color:#1f4f91;">Vignesh_AI</h1>
-    </div>
     <style>
         :root {
             --brand: #1f4f91;
@@ -249,10 +213,64 @@ st.markdown(
             font-size: 13px;
             margin: 0 0 6px 0;
         }
+        .brand-hero {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            margin: 0 0 22px 0;
+            text-align: center;
+        }
+        .brand-hero img {
+            width: 180px;
+            max-width: 100%;
+            height: auto;
+            display: block;
+        }
+        .brand-title {
+            color: #173152;
+            font-size: 2rem;
+            font-weight: 700;
+            line-height: 1.1;
+            margin: 0;
+        }
+        .brand-subtitle {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #666;
+            font-size: 0.82rem;
+            margin: 0;
+            font-weight: 500;
+            letter-spacing: 0.22rem;
+            text-transform: uppercase;
+        }
     </style>
     """,
     unsafe_allow_html=True
 )
+
+if logo_data:
+    st.markdown(
+        f"""
+        <div class="brand-hero">
+            <img src="data:image/gif;base64,{logo_data}" alt="Mercedes-Benz logo" />
+            <h1 class="brand-title">Vignesh_AI</h1>
+            <p class="brand-subtitle">Mercedes-Benz</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+else:
+    st.markdown(
+        """
+        <div class="brand-hero">
+            <h1 class="brand-title">Vignesh_AI</h1>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.info("Mercedes logo generation requires matplotlib and numpy. Install these packages to view the animated logo.")
 
 # -------------------------------
 # SESSION STATE INITIALIZATION
