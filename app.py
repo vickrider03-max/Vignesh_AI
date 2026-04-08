@@ -7,6 +7,8 @@ from io import BytesIO
 from pytz import timezone
 
 import docx, openpyxl, pdfplumber, streamlit as st
+from docx.text.paragraph import Paragraph
+from docx.table import Table
 import pandas as pd
 from openpyxl.styles import PatternFill
 from pptx import Presentation
@@ -80,7 +82,44 @@ load_preview_data()
 # Clean up expired preview tokens on app start
 cleanup_expired_preview_tokens()
 
-st.title("🤖 Vignesh_AI")
+st.markdown(
+    """
+    <style>
+        .app-header {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 38px;
+            font-weight: 700;
+            color: #1f4f91;
+        }
+        .benz-logo {
+            width: 46px;
+            height: 46px;
+            animation: spin-clockwise 4s linear infinite;
+            transform-origin: center center;
+            display: inline-block;
+        }
+        @keyframes spin-clockwise {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    </style>
+    <div class="app-header">
+        <span class="benz-logo">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+                <circle cx="50" cy="50" r="45" fill="none" stroke="#1f4f91" stroke-width="8" />
+                <polygon points="50,10 56,49 50,51 44,49" fill="#1f4f91" />
+                <polygon points="50,10 88,50 82,54 50,51" fill="#1f4f91" />
+                <polygon points="50,10 12,50 18,54 50,51" fill="#1f4f91" />
+            </svg>
+        </span>
+        <span>Vignesh_AI</span>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
 st.markdown(
     """
     <style>
@@ -624,8 +663,10 @@ def extract_docx_content(bio):
         if metadata:
             content.append(("METADATA", "Document Metadata:\n" + "\n".join(metadata)))
         
-        # Extract and display images
+        # Extract embedded images for preview and downloads
         image_count = 0
+        if 'extracted_images' not in st.session_state:
+            st.session_state.extracted_images = {}
         for rel in doc.part.rels.values():
             if "image" in rel.reltype:
                 try:
@@ -634,53 +675,88 @@ def extract_docx_content(bio):
                     image_ext = image_part.content_type.split('/')[-1]
                     if image_ext == 'jpeg':
                         image_ext = 'jpg'
-                    
-                    # Create a unique key for the image
                     image_key = f"docx_image_{image_count}"
-                    
-                    # Store image data for display
-                    if 'extracted_images' not in st.session_state:
-                        st.session_state.extracted_images = {}
                     st.session_state.extracted_images[image_key] = {
                         'bytes': image_bytes,
                         'ext': image_ext,
                         'filename': f"image_{image_count}.{image_ext}"
                     }
-                    
                     content.append(("EMBEDDED_IMAGE", f"Embedded Image {image_count + 1}: {image_key}"))
                     image_count += 1
                 except Exception as e:
                     content.append(("ERROR", f"Could not extract image {image_count + 1}: {e}"))
-        
         if image_count > 0:
             content.append(("METADATA", f"Total Images: {image_count}"))
-        
-        # Extract paragraphs
-        paragraphs = []
-        for para in doc.paragraphs:
-            if para.text.strip():
-                paragraphs.append(para.text)
-        
-        if paragraphs:
-            content.append(("TEXT", "\n\n".join(paragraphs)))
-        
-        # Extract tables
-        for i, table in enumerate(doc.tables):
-            table_data = []
-            for row in table.rows:
-                row_data = []
-                for cell in row.cells:
-                    cell_text = cell.text.strip()
-                    row_data.append(cell_text)
-                table_data.append(row_data)
-            
-            if table_data:
-                table_text = "\n".join([" | ".join(row) for row in table_data])
-                content.append(("TABLE", f"Table {i+1}:\n{table_text}"))
-    
+
+        # Walk the document body in order and preserve headings, tables, and text.
+        current_section_title = None
+        current_section_lines = []
+        table_count = 0
+
+        def flush_current_section():
+            nonlocal current_section_title, current_section_lines
+            if current_section_title or current_section_lines:
+                if current_section_title:
+                    section_text = "\n\n".join(current_section_lines).strip()
+                    if section_text:
+                        content.append(("TEXT", f"Heading: {current_section_title}\n{section_text}"))
+                    else:
+                        content.append(("TEXT", f"Heading: {current_section_title}"))
+                else:
+                    section_text = "\n\n".join(current_section_lines).strip()
+                    if section_text:
+                        content.append(("TEXT", section_text))
+                current_section_title = None
+                current_section_lines = []
+
+        def is_docx_heading(para):
+            text = para.text.strip()
+            if not text:
+                return False
+            try:
+                style_name = (para.style.name or "").lower()
+            except Exception:
+                style_name = ""
+            if "heading" in style_name or style_name.startswith("title") or style_name.startswith("subtitle"):
+                return True
+            if re.match(r'^\d+(?:\.\d+)*\s+.+', text) and len(text) <= 120:
+                return True
+            return False
+
+        for element in doc.element.body:
+            if element.tag.endswith('}p'):
+                paragraph = Paragraph(element, doc)
+                paragraph_text = paragraph.text.strip()
+                if not paragraph_text:
+                    continue
+                if is_docx_heading(paragraph):
+                    flush_current_section()
+                    current_section_title = paragraph_text
+                else:
+                    current_section_lines.append(paragraph_text)
+            elif element.tag.endswith('}tbl'):
+                flush_current_section()
+                table_count += 1
+                table = Table(element, doc)
+                table_data = []
+                for row in table.rows:
+                    row_data = [cell.text.strip() for cell in row.cells]
+                    table_data.append(row_data)
+                if table_data:
+                    table_text = "\n".join([" | ".join(row) for row in table_data])
+                    content.append(("TABLE", f"Table {table_count}:\n{table_text}"))
+
+        flush_current_section()
+
+        if table_count > 0:
+            content.append(("METADATA", f"Total Tables: {table_count}"))
+
+        if not any(item[0] in ("TEXT", "TABLE", "EMBEDDED_IMAGE", "IMAGE", "METADATA") for item in content):
+            paragraphs = [para.text.strip() for para in doc.paragraphs if para.text.strip()]
+            if paragraphs:
+                content.append(("TEXT", "\n\n".join(paragraphs)))
     except Exception as e:
         content.append(("ERROR", f"DOCX extraction failed: {str(e)}"))
-    
     return content
 
 
@@ -1149,10 +1225,10 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None, hig
                     else:
                         st.info("No metadata available")
             elif section_type == "TEXT":
-                if section_content.strip():  # Only show if there's actual content
-                    section_anchor_id = create_heading_anchor(section_title)
-                    st.markdown(f"<div id='{section_anchor_id}'></div>", unsafe_allow_html=True)
-                    st.markdown(f"### {section_title}")
+                section_anchor_id = create_heading_anchor(section_title)
+                st.markdown(f"<div id='{section_anchor_id}'></div>", unsafe_allow_html=True)
+                st.markdown(f"### {section_title}")
+                if section_content.strip():
                     if len(section_content) > 2000:
                         with st.expander("Show text content", expanded=False):
                             if highlight_term:
@@ -1164,6 +1240,8 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None, hig
                             st.markdown(render_text_block(section_content, highlight_term, anchor_id=None), unsafe_allow_html=True)
                         else:
                             st.code(section_content, language="text")
+                else:
+                    st.info("No text content available for this section.")
             elif section_type == "TABLE":
                 with st.expander(f"📊 {section_title}", expanded=True):
                     # Try to parse table and display as dataframe
@@ -1289,7 +1367,7 @@ def parse_extracted_content(content):
         # Check for section markers
         if line.startswith('TABLE:'):
             # Save previous section
-            if current_section and current_content:
+            if current_section:
                 sections.append(current_section)
             
             # Start new table section
@@ -1298,7 +1376,7 @@ def parse_extracted_content(content):
             
         elif line.startswith('[IMAGE:'):
             # Save previous section
-            if current_section and current_content:
+            if current_section:
                 sections.append(current_section)
             
             # Add image info
@@ -1308,7 +1386,7 @@ def parse_extracted_content(content):
             
         elif line.startswith('[EMBEDDED_IMAGE:'):
             # Save previous section
-            if current_section and current_content:
+            if current_section:
                 sections.append(current_section)
             
             # Add embedded image info
@@ -1319,7 +1397,7 @@ def parse_extracted_content(content):
             
         elif line.startswith('PDF Metadata:') or line.startswith('Document Metadata:') or line.startswith('Meta Tags:') or line.startswith('Title:') or 'Pages:' in line or 'Slides:' in line or 'sheets:' in line:
             # Save previous section
-            if current_section and current_content:
+            if current_section:
                 sections.append(current_section)
             
             # Start metadata section
@@ -1331,6 +1409,15 @@ def parse_extracted_content(content):
             current_section = ("METADATA", section_title, line)
             current_content = [line]
             
+        elif line.startswith('Heading:'):
+            # Save previous section
+            if current_section:
+                sections.append(current_section)
+            
+            heading_title = line.replace('Heading:', '', 1).strip()
+            current_section = ("TEXT", heading_title or "Heading", "")
+            current_content = []
+
         elif line.startswith('Page ') and 'Text:' in line:
             # Save previous section
             if current_section and current_content:
@@ -1375,7 +1462,7 @@ def parse_extracted_content(content):
             current_content.append(line)
     
     # Save final section
-    if current_section and current_content:
+    if current_section:
         if current_section[0] == "TEXT" or current_section[0] == "TABLE":
             content_text = '\n'.join(current_content)
             sections.append((current_section[0], current_section[1], content_text))
@@ -2110,7 +2197,7 @@ def resolve_heading_page_number(text, heading, toc_entries=None):
 
 
 def extract_document_headings(text):
-    """Extract numbered headings from document text."""
+    """Extract numbered headings and explicit DOCX headings from extracted text."""
     headings = []
     text = str(text)
     lines = [line.strip() for line in text.splitlines() if line.strip()]
@@ -2124,6 +2211,13 @@ def extract_document_headings(text):
         if (line.isupper() or line.endswith(":") or 
             "Page" in line or "PDF Metadata" in line or 
             "Total Pages" in line or "TABLE:" in line):
+            continue
+
+        # Match explicit heading markers from DOCX extraction
+        if line.startswith("Heading:"):
+            heading_text = line.replace("Heading:", "", 1).strip()
+            if 3 <= len(heading_text) <= 120:
+                headings.append(("", heading_text))
             continue
         
         # Match numbered headings at start: "1 Overview", "1.1 Introduction", etc.
@@ -2186,7 +2280,7 @@ def extract_toc_with_page_numbers(text):
                             break
                     if page_num:
                         break
-            toc_entries.append((num, title, page_num or "?"))
+            toc_entries.append((num, title, page_num))
     return toc_entries
 
 
@@ -2204,12 +2298,15 @@ def build_file_overview(file_name, text):
         overview_parts.append("|----------|---------|")
         for num, title, page_num in toc_entries:
             content_str = f"{num} {title}" if num else title
-            display_text = f"{content_str} (Page {page_num})" if page_num and page_num != "?" else content_str
-            preview_link = create_preview_link(file_name, highlight_term=title, page_num=page_num if page_num != "?" else None)
+            display_text = f"{content_str} (Page {page_num})" if page_num else content_str
+            preview_link = create_preview_link(file_name, highlight_term=title, page_num=page_num)
+            anchor_id = create_heading_anchor(title)
             if preview_link:
-                overview_parts.append(f"| <a href='{preview_link}' target='_blank'>{html.escape(display_text)}</a> | {page_num} |")
+                page_display = page_num if page_num else "-"
+                overview_parts.append(f"| <a href='{preview_link}#{anchor_id}' target='_blank'>{html.escape(display_text)}</a> | {page_display} |")
             else:
-                overview_parts.append(f"| {html.escape(display_text)} | {page_num} |")
+                page_display = page_num if page_num else "-"
+                overview_parts.append(f"| {html.escape(display_text)} | {page_display} |")
     else:
         overview_parts.append("- No table of contents found with page numbers.")
 
@@ -3298,7 +3395,8 @@ with tab1:
                                             display_text = f"{content_str} (Page {page_num})" if page_num else content_str
                                             preview_link = create_preview_link(f, highlight_term=title, page_num=page_num)
                                             if preview_link:
-                                                response_lines.append(f"- <a href='{preview_link}' target='_blank'>{html.escape(display_text)}</a>")
+                                                anchor_id = create_heading_anchor(title)
+                                                response_lines.append(f"- <a href='{preview_link}#{anchor_id}' target='_blank'>{html.escape(display_text)}</a>")
                                             else:
                                                 response_lines.append(f"- {html.escape(display_text)}")
                                     else:
