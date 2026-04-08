@@ -15,3 +15,5 @@ sentence-transformers
 torch
 torchvision
 pytz
+numpy
+matplotlib
