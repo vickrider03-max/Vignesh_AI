@@ -113,20 +113,22 @@ st.markdown(
         <div class="benz-logo-wrapper">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet">
                 <!-- Outer Ring -->
-                <circle cx="100" cy="100" r="90" fill="none" stroke="#A0A0A0" stroke-width="12" />
+                <circle cx="100" cy="100" r="90" fill="none" stroke="#A0A0A0" stroke-width="12" stroke-linejoin="round" />
                 
-                <!-- Star Points (3 faceted triangles with chrome shading) -->
-                <!-- Top point -->
-                <polygon points="100,25 115,95 85,95" fill="#FFFFFF" />
-                <polygon points="100,25 85,95 100,100" fill="#000000" />
+                <!-- Inner Circle -->
+                <circle cx="100" cy="100" r="40" fill="none" stroke="#808080" stroke-width="2" />
                 
-                <!-- Bottom Left point -->
-                <polygon points="40,165 71,55 129,78" fill="#FFFFFF" />
-                <polygon points="40,165 129,78 100,100" fill="#000000" />
+                <!-- Star Point 1 (Top) - Two facets -->
+                <polygon points="100,20 115,75 85,75" fill="#FFFFFF" stroke="none" />
+                <polygon points="100,20 85,75 100,100" fill="#333333" stroke="none" />
                 
-                <!-- Bottom Right point -->
-                <polygon points="160,165 71,55 129,78" fill="#FFFFFF" />
-                <polygon points="160,165 129,78 100,100" fill="#000000" />
+                <!-- Star Point 2 (Bottom-Left) - Two facets -->
+                <polygon points="32,160 72,60 128,80" fill="#FFFFFF" stroke="none" />
+                <polygon points="32,160 128,80 100,100" fill="#333333" stroke="none" />
+                
+                <!-- Star Point 3 (Bottom-Right) - Two facets -->
+                <polygon points="168,160 72,60 128,80" fill="#FFFFFF" stroke="none" />
+                <polygon points="168,160 128,80 100,100" fill="#333333" stroke="none" />
             </svg>
         </div>
         <span>Vignesh_AI</span>
