@@ -3345,10 +3345,10 @@ def render_status_strip():
     status_label = "Last Login" if role == "creator" else "Usage Time"
     session_start = st.session_state.get("user_session_start_time")
 
+    elapsed_seconds = 0
     if role == "creator":
         status_value = last_login
     else:
-        elapsed_seconds = 0
         if isinstance(session_start, str):
             try:
                 session_start = datetime.fromisoformat(session_start)
@@ -3361,80 +3361,54 @@ def render_status_strip():
         minutes = (elapsed_seconds % 3600) // 60
         seconds = elapsed_seconds % 60
         status_value = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-    status_cols = st.columns(4)
 
-    with status_cols[0]:
-        st.markdown(
-            f"""
-            <div class="status-tile">
-                <div class="status-label">User</div>
-                <div class="status-value">{html.escape(username)}</div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+    status_html = f"""
+    <div class="status-strip">
+        <div class="status-tile">
+            <div class="status-label">User</div>
+            <div class="status-value">{html.escape(username)}</div>
+        </div>
+        <div class="status-tile">
+            <div class="status-label">Role</div>
+            <div class="status-value">{html.escape(str(role).title())}</div>
+        </div>
+        <div class="status-tile">
+            <div class="status-label">Available Files</div>
+            <div class="status-value">{len(available_files)}</div>
+        </div>
+        <div class="status-tile">
+            <div class="status-label">{html.escape(status_label)}</div>
+            <div id="usage-time-value" class="status-value">{html.escape(str(status_value))}</div>
+        </div>
+    </div>
+    """
 
-    with status_cols[1]:
-        st.markdown(
-            f"""
-            <div class="status-tile">
-                <div class="status-label">Role</div>
-                <div class="status-value">{html.escape(str(role).title())}</div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+    if role == "creator":
+        st.components.v1.html(status_html, height=112)
+        return
 
-    with status_cols[2]:
-        st.markdown(
-            f"""
-            <div class="status-tile">
-                <div class="status-label">Available Files</div>
-                <div class="status-value">{len(available_files)}</div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+    status_html += f"""
+    <script>
+        const timerEl = document.getElementById("usage-time-value");
+        let elapsedSeconds = {elapsed_seconds};
+        const formatTime = (totalSeconds) => {{
+            const hrs = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
+            const mins = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
+            const secs = String(totalSeconds % 60).padStart(2, "0");
+            return `${{hrs}}:${{mins}}:${{secs}}`;
+        }};
+        timerEl.textContent = formatTime(elapsedSeconds);
+        if (window.usageTimeInterval) {{
+            clearInterval(window.usageTimeInterval);
+        }}
+        window.usageTimeInterval = setInterval(() => {{
+            elapsedSeconds += 1;
+            timerEl.textContent = formatTime(elapsedSeconds);
+        }}, 1000);
+    </script>
+    """
 
-    with status_cols[3]:
-        if role == "creator":
-            st.markdown(
-                f"""
-                <div class="status-tile">
-                    <div class="status-label">{status_label}</div>
-                    <div class="status-value" style="font-size:14px;">{html.escape(str(status_value))}</div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-        else:
-            st.components.v1.html(
-                f"""
-                <div class="status-tile" style="display:flex; flex-direction:column; justify-content:center; gap:4px; background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%); border: 1px solid #d7e3f4; border-radius: 14px; padding: 12px 14px; min-height: 92px; box-sizing: border-box;">
-                    <div class="status-label" style="color:#51627a; font-size:12px;">{html.escape(status_label)}</div>
-                    <div id="usage-time-value" class="status-value" style="color:#173152; font-size:18px; font-weight:600;">{html.escape(str(status_value))}</div>
-                </div>
-                <script>
-                    const timerEl = document.getElementById("usage-time-value");
-                    let elapsedSeconds = {elapsed_seconds};
-                    const formatTime = (totalSeconds) => {{
-                        const hrs = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
-                        const mins = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
-                        const secs = String(totalSeconds % 60).padStart(2, "0");
-                        return `${{hrs}}:${{mins}}:${{secs}}`;
-                    }};
-                    timerEl.textContent = formatTime(elapsedSeconds);
-                    if (window.usageTimeInterval) {{
-                        clearInterval(window.usageTimeInterval);
-                    }}
-                    window.usageTimeInterval = setInterval(() => {{
-                        elapsedSeconds += 1;
-                        timerEl.textContent = formatTime(elapsedSeconds);
-                    }}, 1000);
-                </script>
-                """,
-                height=92
-            )
+    st.components.v1.html(status_html, height=112)
 
 
 def render_file_context_card(title, available_files, active_files=None):
@@ -3540,52 +3514,75 @@ def show_help_popup(tab_name, selected_files):
 render_status_strip()
 
 # Session-backed main navigation:
-# 1. Custom CSS for Pill Style + Sparkling "AI" Effect
+# Final Smooth-Glide Pill Navigation
 st.markdown("""
     <style>
-    /* Hide the standard radio circles */
+    /* 1. Remove standard radio UI */
     div[role="radiogroup"] > label > div:first-child { display: none !important; }
-    
-    /* Layout for the pills */
-    div[role="radiogroup"] { gap: 14px; }
-
-    /* Base Pill Styling */
-    div[role="radiogroup"] > label {
-        background-color: rgba(240, 242, 246, 0.8) !important;
-        padding: 10px 24px !important;
-        border-radius: 50px !important;
-        border: 1px solid rgba(0,0,0,0.05) !important;
-        position: relative;
-        font-weight: 500;
-        transition: all 0.3s ease;
+    div[role="radiogroup"] { 
+        gap: 10px; 
+        display: flex; 
+        justify-content: flex-start;
+        padding: 5px 0;
     }
 
-    /* Active State (Blue Highlight) */
+    /* 2. Base Pill Styling */
+    div[role="radiogroup"] > label {
+        background-color: rgba(128, 128, 128, 0.1) !important;
+        color: inherit !important;
+        padding: 8px 22px !important;
+        border-radius: 50px !important;
+        border: 1px solid rgba(128, 128, 128, 0.15) !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        font-weight: 500;
+        height: 42px;
+        cursor: pointer;
+        /* THE MAGIC: Smooth transition for glide feel */
+        transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1) !important;
+    }
+
+    /* 3. The Active "Glide" Highlight */
     div[role="radiogroup"] > label[data-checked="true"] {
         background-color: #007BFF !important;
         color: white !important;
-        box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
+        border-color: #007BFF !important;
+        box-shadow: 0 4px 15px rgba(0, 123, 255, 0.4);
+        transform: scale(1.02); /* Slight pop when selected */
     }
 
-    /* Sparkle Icon Effect for 'Chat' */
-    div[role="radiogroup"] > label:first-child::after {
-        content: '✨'; /* The sparkle emoji */
-        position: absolute;
-        top: -6px;
-        right: -4px;
-        font-size: 14px;
-        animation: sparkle-float 2s ease-in-out infinite;
+    /* 4. Unified Status Dots */
+    div[role="radiogroup"] > label::after {
+        content: '';
+        margin-left: 10px;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        transition: all 0.3s ease;
     }
 
-    /* Floating animation for the sparkle */
-    @keyframes sparkle-float {
-        0%, 100% { transform: translateY(0) scale(1); filter: drop-shadow(0 0 2px gold); }
-        50% { transform: translateY(-4px) scale(1.2); filter: drop-shadow(0 0 8px gold); }
+    /* 5. Active White Dot Transition */
+    div[role="radiogroup"] > label[data-checked="true"]::after {
+        background-color: white !important;
+        box-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+    }
+
+    /* 6. Individual Dot Colors (Inactive State) */
+    div[role="radiogroup"] > label:nth-child(1):not([data-checked="true"])::after { background-color: #00D1FF; } 
+    div[role="radiogroup"] > label:nth-child(2):not([data-checked="true"])::after { background-color: #28a745; } 
+    div[role="radiogroup"] > label:nth-child(3):not([data-checked="true"])::after { background-color: #FFC107; } 
+    div[role="radiogroup"] > label:nth-child(4):not([data-checked="true"])::after { background-color: #A349A4; }
+
+    /* 7. Hover Effect for extra feedback */
+    div[role="radiogroup"] > label:hover:not([data-checked="true"]) {
+        background-color: rgba(128, 128, 128, 0.2) !important;
+        transform: translateY(-1px);
     }
     </style>
 """, unsafe_allow_html=True)
 
-# 2. Your Tab Logic
+# 2. Your Original Tab Logic
 main_tab_options = ["💬 Chat", "📊 Dashboard", "📂 Compare", "🧠 CAPL"]
 active_main_tab = st.radio(
     "Open Section",
