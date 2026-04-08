@@ -107,11 +107,9 @@ st.markdown(
     </style>
     <div class="app-header">
         <span class="benz-logo">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
-                <circle cx="50" cy="50" r="45" fill="none" stroke="#1f4f91" stroke-width="8" />
-                <polygon points="50,10 56,49 50,51 44,49" fill="#1f4f91" />
-                <polygon points="50,10 88,50 82,54 50,51" fill="#1f4f91" />
-                <polygon points="50,10 12,50 18,54 50,51" fill="#1f4f91" />
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" preserveAspectRatio="xMidYMid meet">
+                <circle cx="60" cy="60" r="52" fill="none" stroke="#1f4f91" stroke-width="8" />
+                <path d="M60 14 L70.5 59.3 L111 65.5 L70.5 71.7 L60 106 L49.5 71.7 L9 65.5 L49.5 59.3 Z" fill="none" stroke="#1f4f91" stroke-width="8" stroke-linejoin="round" />
             </svg>
         </span>
         <span>Vignesh_AI</span>
