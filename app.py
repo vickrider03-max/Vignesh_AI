@@ -2895,7 +2895,7 @@ def highlight_multi_file_differences_cached(file_items, comparison_mode="Exact i
     """
     html_parts = [
         "<html><head>", css, "</head><body><div class='scrollable'>",
-        "<p class='legend'><b>Legend:</b> <span class='match'></span> Exact match, <span class='mismatch'></span> Missing or mismatch</p>",
+        "<p class='legend'><b>Legend:</b> <span class='match'></span> Matched word, <span class='mismatch'></span> Different or missing word</p>",
         "<table><tr><th>Line #</th>",
         "".join(f"<th>{html.escape(fname)}</th>" for fname in files),
         "</tr>",
@@ -2977,7 +2977,7 @@ def highlight_side_by_side_differences_cached(file_items, reference_file=None):
     """
     html_parts = [
         "<html><head>", css, "</head><body><div class='scrollable'>",
-        "<p class='legend'><b>Legend:</b> <span class='line-match'></span> Matching line, <span class='line-mismatch'></span> Differing or missing line</p>",
+        "<p class='legend'><b>Legend:</b> <span class='line-match'></span> Same as reference line, <span class='line-mismatch'></span> Different from reference or missing line</p>",
         "<p><b>Reference file:</b> " + html.escape(reference_file) + "</p>",
         "<table><tr><th>Line #</th>",
         "".join(f"<th>{html.escape(fname)}</th>" for fname in files),
@@ -3535,8 +3535,52 @@ def show_help_popup(tab_name, selected_files):
 render_status_strip()
 
 # Session-backed main navigation:
-# Using a radio selector instead of st.tabs prevents Streamlit reruns from
-# snapping the UI back to the first tab after actions like Compare/Analyze.
+# 1. Custom CSS for Pill Style + Notification Badge
+st.markdown("""
+    <style>
+    /* Hide radio circles */
+    div[role="radiogroup"] > label > div:first-child {
+        display: none !important;
+    }
+    
+    /* Pill Container */
+    div[role="radiogroup"] {
+        gap: 12px;
+    }
+
+    /* Base Pill Styling */
+    div[role="radiogroup"] > label {
+        background-color: rgba(240, 242, 246, 0.8) !important;
+        padding: 10px 24px !important;
+        border-radius: 50px !important;
+        border: 1px solid rgba(0,0,0,0.05) !important;
+        transition: all 0.2s ease !important;
+        position: relative; /* Necessary for the badge positioning */
+    }
+
+    /* Active State */
+    div[role="radiogroup"] > label[data-checked="true"] {
+        background-color: #007BFF !important;
+        color: white !important;
+        box-shadow: 0 4px 10px rgba(0, 123, 255, 0.3);
+    }
+
+    /* Red Notification Badge for 'Chat' (The first child) */
+    div[role="radiogroup"] > label:first-child::after {
+        content: '';
+        position: absolute;
+        top: 6px;
+        right: 12px;
+        width: 8px;
+        height: 8px;
+        background-color: #FF4B4B;
+        border-radius: 50%;
+        border: 2px solid white;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# 2. Your Tab Logic
 main_tab_options = ["💬 Chat", "📊 Dashboard", "📂 Compare", "🧠 CAPL"]
 active_main_tab = st.radio(
     "Open Section",
@@ -4296,7 +4340,7 @@ if active_main_tab == "📂 Compare":
     )
 
     reference_file = None
-    if selected_files_for_comparison:
+    if len(selected_files_for_comparison) > 1:
         reference_choice = ["Auto select first file"] + selected_files_for_comparison
         reference_default = st.session_state.get("compare_reference_file", "Auto select first file")
         if reference_default not in reference_choice:
@@ -4310,6 +4354,8 @@ if active_main_tab == "📂 Compare":
         )
         if reference_file_choice != "Auto select first file":
             reference_file = reference_file_choice
+    elif len(selected_files_for_comparison) == 1:
+        st.info("Select at least two files to compare in order to enable reference baseline selection.")
 
     compare_clicked = st.button("Compare Selected Files", key="run_compare_button", use_container_width=True)
 
