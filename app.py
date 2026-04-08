@@ -301,6 +301,22 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# Ensure session state keys exist before rendering login status
+for key, default_value in [
+    ("is_authenticated", False),
+    ("logged_in_username", ""),
+    ("user_role", None),
+    ("login_history", []),
+    ("selected_files", []),
+    ("file_texts", {}),
+    ("vector_stores", {}),
+    ("chat_file_selection", []),
+    ("chat_summary_downloads", {"images": [], "tables": []}),
+    ("messages", []),
+]:
+    if key not in st.session_state:
+        st.session_state[key] = default_value
+
 # Logged in info at top right
 if st.session_state.is_authenticated:
     col1, col2 = st.columns([3, 1])
