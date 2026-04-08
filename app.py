@@ -186,14 +186,14 @@ st.markdown(
             font-size: 13px;
             margin: 0;
         }
-        .status-strip {
+        .dashboard-grid {
             display: flex;
             justify-content: space-between;
             gap: 20px;
             margin-bottom: 30px;
         }
 
-        .status-tile {
+        .metric-card {
             flex: 1;
             background: #ffffff;
             padding: 18px;
@@ -204,7 +204,7 @@ st.markdown(
             transition: all 0.3s ease;
         }
 
-        .status-label {
+        .card-label {
             display: block;
             font-size: 0.75rem;
             font-weight: 600;
@@ -214,14 +214,14 @@ st.markdown(
             margin-bottom: 8px;
         }
 
-        .status-value {
+        .card-value {
             display: block;
             font-size: 1.15rem;
             font-weight: 700;
             color: #1E88E5;
         }
 
-        .status-tile:hover {
+        .metric-card:hover {
             border-color: #1E88E5;
             box-shadow: 0 4px 12px rgba(30, 136, 229, 0.1);
         }
@@ -300,6 +300,45 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
+# Logged in info at top right
+if st.session_state.is_authenticated:
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        creator_timestamp = None
+        if st.session_state.user_role == "creator" and st.session_state.login_history:
+            creator_entries = [
+                entry for entry in st.session_state.login_history
+                if entry.get("username") == st.session_state.logged_in_username and entry.get("role") == "creator"
+            ]
+            if creator_entries:
+                creator_timestamp = creator_entries[-1].get("timestamp")
+
+        status_message = f"Logged in as {st.session_state.logged_in_username} ({st.session_state.user_role})"
+        if creator_timestamp:
+            status_message += f"\nLogin time: {creator_timestamp}"
+        st.success(status_message)
+        if st.button("Logout"):
+            # Remove from active users
+            active_file = "active_users.json"
+            if os.path.exists(active_file):
+                with open(active_file, "r") as f:
+                    active_users = json.load(f)
+                active_users = [u for u in active_users if u["username"] != st.session_state.logged_in_username]
+                with open(active_file, "w") as f:
+                    json.dump(active_users, f)
+            st.session_state.is_authenticated = False
+            st.session_state.logged_in_username = ""
+            st.session_state.user_role = None
+            st.session_state.user_session_start_time = None
+            st.session_state.selected_files = []
+            st.session_state.file_texts = {}
+            st.session_state.vector_stores = {}
+            st.session_state.chat_file_selection = []
+            st.session_state.chat_summary_downloads = {"images": [], "tables": []}
+            st.session_state.messages = []
+            st.success("Logged out successfully.")
+            st.rerun()
 
 if logo_data:
     st.markdown(
@@ -3368,22 +3407,22 @@ def render_status_strip():
         status_value = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
     status_html = f"""
-    <div class="status-strip">
-        <div class="status-tile">
-            <span class="status-label">User</span>
-            <span class="status-value">{html.escape(username)}</span>
+    <div class="dashboard-grid">
+        <div class="metric-card">
+            <span class="card-label">User</span>
+            <span class="card-value">{html.escape(username)}</span>
         </div>
-        <div class="status-tile">
-            <span class="status-label">Role</span>
-            <span class="status-value">{html.escape(str(role).title())}</span>
+        <div class="metric-card">
+            <span class="card-label">Role</span>
+            <span class="card-value">{html.escape(str(role).title())}</span>
         </div>
-        <div class="status-tile">
-            <span class="status-label">Available Files</span>
-            <span class="status-value">{len(available_files)}</span>
+        <div class="metric-card">
+            <span class="card-label">Available Files</span>
+            <span class="card-value">{len(available_files)}</span>
         </div>
-        <div class="status-tile">
-            <span class="status-label">{html.escape(status_label)}</span>
-            <span id="usage-time-value" class="status-value">{html.escape(str(status_value))}</span>
+        <div class="metric-card">
+            <span class="card-label">{html.escape(status_label)}</span>
+            <span id="usage-time-value" class="card-value">{html.escape(str(status_value))}</span>
         </div>
     </div>
     """
@@ -3516,45 +3555,6 @@ def show_help_popup(tab_name, selected_files):
 # Main application tabs:
 # Each block below owns one visible area of the app. If you want to change a
 # feature, start in the matching tab block and then follow the helper comments above.
-
-# Logged in info at top right
-if st.session_state.is_authenticated:
-    col1, col2 = st.columns([3, 1])
-    with col2:
-        creator_timestamp = None
-        if st.session_state.user_role == "creator" and st.session_state.login_history:
-            creator_entries = [
-                entry for entry in st.session_state.login_history
-                if entry.get("username") == st.session_state.logged_in_username and entry.get("role") == "creator"
-            ]
-            if creator_entries:
-                creator_timestamp = creator_entries[-1].get("timestamp")
-
-        status_message = f"Logged in as {st.session_state.logged_in_username} ({st.session_state.user_role})"
-        if creator_timestamp:
-            status_message += f"\nLogin time: {creator_timestamp}"
-        st.success(status_message)
-        if st.button("Logout"):
-            # Remove from active users
-            active_file = "active_users.json"
-            if os.path.exists(active_file):
-                with open(active_file, "r") as f:
-                    active_users = json.load(f)
-                active_users = [u for u in active_users if u["username"] != st.session_state.logged_in_username]
-                with open(active_file, "w") as f:
-                    json.dump(active_users, f)
-            st.session_state.is_authenticated = False
-            st.session_state.logged_in_username = ""
-            st.session_state.user_role = None
-            st.session_state.user_session_start_time = None
-            st.session_state.selected_files = []
-            st.session_state.file_texts = {}
-            st.session_state.vector_stores = {}
-            st.session_state.chat_file_selection = []
-            st.session_state.chat_summary_downloads = {"images": [], "tables": []}
-            st.session_state.messages = []
-            st.success("Logged out successfully.")
-            st.rerun()
 
 render_status_strip()
 
