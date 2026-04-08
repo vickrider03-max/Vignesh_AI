@@ -195,21 +195,25 @@ st.markdown(
             flex-wrap: wrap;
         }
         .status-tile {
-            flex: 1 1 0;
-            min-width: 180px;
+            flex: 1 1 220px;
+            max-width: 260px;
             background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
             border: 1px solid var(--border);
             border-radius: 14px;
-            padding: 12px 14px;
+            padding: 16px 18px;
             display: flex;
             flex-direction: column;
-            justify-content: center;
-            min-height: 92px;
+            justify-content: flex-start;
+            align-items: flex-start;
+            min-height: 108px;
+            gap: 8px;
         }
         .status-label {
             color: var(--text-soft);
-            font-size: 12px;
-            margin-bottom: 4px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin: 0;
         }
         .status-value {
             color: #173152;
