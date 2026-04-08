@@ -96,13 +96,14 @@ st.markdown(
         .benz-logo {
             width: 46px;
             height: 46px;
-            animation: spin-clockwise 4s linear infinite;
+            animation: flip-right-left 3s linear infinite;
             transform-origin: center center;
+            transform-style: preserve-3d;
             display: inline-block;
         }
-        @keyframes spin-clockwise {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
+        @keyframes flip-right-left {
+            from { transform: rotateY(0deg); }
+            to { transform: rotateY(360deg); }
         }
     </style>
     <div class="app-header">
