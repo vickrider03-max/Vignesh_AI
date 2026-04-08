@@ -251,12 +251,12 @@ st.markdown(
         .brand-hero {
             display: flex;
             flex-direction: column;
-            align-items: center;
+            align-items: flex-start;
             justify-content: center;
             gap: 4px;
             width: 100%;
-            margin: -50px 0 8px 0;
-            text-align: center;
+            margin: 0 0 8px 0;
+            text-align: left;
         }
         .brand-hero img {
             width: 120px;
@@ -317,10 +317,32 @@ for key, default_value in [
     if key not in st.session_state:
         st.session_state[key] = default_value
 
-# Logged in info at top right
-if st.session_state.is_authenticated:
-    col1, col2 = st.columns([3, 1])
-    with col2:
+col_logo, col_status = st.columns([3, 1])
+with col_logo:
+    if logo_data:
+        st.markdown(
+            f"""
+            <div class="brand-hero">
+                <img src="data:image/gif;base64,{logo_data}" alt="Mercedes-Benz logo" />
+                <p class="brand-subtitle">Mercedes-Benz</p>
+                <h1 class="brand-title">Vignesh_AI</h1>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            """
+            <div class="brand-hero">
+                <h1 class="brand-title">Vignesh_AI</h1>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.info("Mercedes logo generation requires matplotlib and numpy. Install these packages to view the animated logo.")
+
+with col_status:
+    if st.session_state.is_authenticated:
         creator_timestamp = None
         if st.session_state.user_role == "creator" and st.session_state.login_history:
             creator_entries = [
@@ -333,9 +355,10 @@ if st.session_state.is_authenticated:
         status_message = f"Logged in as {st.session_state.logged_in_username} ({st.session_state.user_role})"
         if creator_timestamp:
             status_message += f"\nLogin time: {creator_timestamp}"
+
         st.success(status_message)
-        if st.button("Logout"):
-            # Remove from active users
+        logout_clicked = st.button("Logout", key="logout_button", use_container_width=True)
+        if logout_clicked:
             active_file = "active_users.json"
             if os.path.exists(active_file):
                 with open(active_file, "r") as f:
@@ -355,28 +378,6 @@ if st.session_state.is_authenticated:
             st.session_state.messages = []
             st.success("Logged out successfully.")
             st.rerun()
-
-if logo_data:
-    st.markdown(
-        f"""
-        <div class="brand-hero">
-            <img src="data:image/gif;base64,{logo_data}" alt="Mercedes-Benz logo" />
-            <p class="brand-subtitle">Mercedes-Benz</p>
-            <h1 class="brand-title">Vignesh_AI</h1>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-else:
-    st.markdown(
-        """
-        <div class="brand-hero">
-            <h1 class="brand-title">Vignesh_AI</h1>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.info("Mercedes logo generation requires matplotlib and numpy. Install these packages to view the animated logo.")
 
 # -------------------------------
 # SESSION STATE INITIALIZATION
@@ -2809,21 +2810,25 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
     login_username = st.text_input("Username")
     login_password = st.text_input("Password", type="password")
     st.info("Note: For users, leave the password field blank (empty).")
-    
-    # Place Access button on the left, checkbox on the right
+
+    has_read_readme = st.checkbox("I have read the README and want to continue")
+
     col1, col2 = st.columns([1, 3])
     with col1:
-        access_clicked = st.button("Access", use_container_width=True)
+        access_clicked = False
+        if has_read_readme:
+            access_clicked = st.button("Access", use_container_width=True)
+        else:
+            st.write("")
     with col2:
-        has_read_readme = st.checkbox("I have read the README and want to continue")
-    
+        st.write("")
+
     st.markdown("### Read Me First")
     st.text_area("README", value=README_TEXT, height=360, disabled=True)
 
-    if access_clicked:
-        if not has_read_readme:
-            st.warning("Please read the README and confirm the checkbox before accessing the app.")
-            st.stop()
+    if access_clicked and not has_read_readme:
+        st.warning("Please read the README and confirm the checkbox before accessing the app.")
+        st.stop()
 
         cleaned_username = (login_username or "").strip()
         cleaned_password = (login_password or "").strip()
@@ -3400,27 +3405,19 @@ def render_status_strip():
     available_files = st.session_state.get("selected_files", [])
     role = st.session_state.get("user_role") or "-"
     username = st.session_state.get("logged_in_username") or "-"
-    login_entries = st.session_state.get("login_history", [])
-    last_login = login_entries[-1]["timestamp"] if login_entries else "-"
-    status_label = "Last Login" if role == "creator" else "Usage Time"
     session_start = st.session_state.get("user_session_start_time")
 
-    elapsed_seconds = 0
-    if role == "creator":
-        status_value = last_login
-    else:
-        if isinstance(session_start, str):
-            try:
-                session_start = datetime.fromisoformat(session_start)
-            except ValueError:
-                session_start = None
-        if isinstance(session_start, datetime):
-            elapsed_seconds = max(0, int((datetime.now() - session_start).total_seconds()))
+    if isinstance(session_start, str):
+        try:
+            session_start = datetime.fromisoformat(session_start)
+        except ValueError:
+            session_start = None
 
-        hours = elapsed_seconds // 3600
-        minutes = (elapsed_seconds % 3600) // 60
-        seconds = elapsed_seconds % 60
-        status_value = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+    elapsed_seconds = 0
+    if isinstance(session_start, datetime):
+        elapsed_seconds = max(0, int((datetime.now() - session_start).total_seconds()))
+
+    status_value = f"{elapsed_seconds // 3600:02d}:{(elapsed_seconds % 3600) // 60:02d}:{elapsed_seconds % 60:02d}"
 
     status_html = f"""
     <div class="dashboard-grid">
@@ -3437,15 +3434,11 @@ def render_status_strip():
             <span class="card-value">{len(available_files)}</span>
         </div>
         <div class="metric-card">
-            <span class="card-label">{html.escape(status_label)}</span>
-            <span id="usage-time-value" class="card-value">{html.escape(str(status_value))}</span>
+            <span class="card-label">Usage Time</span>
+            <span id="usage-time-value" class="card-value">{html.escape(status_value)}</span>
         </div>
     </div>
     """
-
-    if role == "creator":
-        st.components.v1.html(status_html, height=112)
-        return
 
     status_html += f"""
     <script>
@@ -3468,7 +3461,7 @@ def render_status_strip():
     </script>
     """
 
-    st.components.v1.html(status_html, height=112)
+    st.components.v1.html(status_html, height=132)
 
 
 def render_file_context_card(title, available_files, active_files=None):
