@@ -197,6 +197,10 @@ st.markdown(
             border: 1px solid var(--border);
             border-radius: 14px;
             padding: 12px 14px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            min-height: 92px;
         }
         .status-label {
             color: var(--text-soft);
@@ -207,6 +211,7 @@ st.markdown(
             color: #173152;
             font-size: 18px;
             font-weight: 600;
+            line-height: 1.1;
         }
         .file-chip-wrap {
             display: flex;
@@ -3535,18 +3540,14 @@ def show_help_popup(tab_name, selected_files):
 render_status_strip()
 
 # Session-backed main navigation:
-# 1. Custom CSS for Pill Style + Notification Badge
+# 1. Custom CSS for Pill Style + Sparkling "AI" Effect
 st.markdown("""
     <style>
-    /* Hide radio circles */
-    div[role="radiogroup"] > label > div:first-child {
-        display: none !important;
-    }
+    /* Hide the standard radio circles */
+    div[role="radiogroup"] > label > div:first-child { display: none !important; }
     
-    /* Pill Container */
-    div[role="radiogroup"] {
-        gap: 12px;
-    }
+    /* Layout for the pills */
+    div[role="radiogroup"] { gap: 14px; }
 
     /* Base Pill Styling */
     div[role="radiogroup"] > label {
@@ -3554,28 +3555,32 @@ st.markdown("""
         padding: 10px 24px !important;
         border-radius: 50px !important;
         border: 1px solid rgba(0,0,0,0.05) !important;
-        transition: all 0.2s ease !important;
-        position: relative; /* Necessary for the badge positioning */
+        position: relative;
+        font-weight: 500;
+        transition: all 0.3s ease;
     }
 
-    /* Active State */
+    /* Active State (Blue Highlight) */
     div[role="radiogroup"] > label[data-checked="true"] {
         background-color: #007BFF !important;
         color: white !important;
-        box-shadow: 0 4px 10px rgba(0, 123, 255, 0.3);
+        box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
     }
 
-    /* Red Notification Badge for 'Chat' (The first child) */
+    /* Sparkle Icon Effect for 'Chat' */
     div[role="radiogroup"] > label:first-child::after {
-        content: '';
+        content: '✨'; /* The sparkle emoji */
         position: absolute;
-        top: 6px;
-        right: 12px;
-        width: 8px;
-        height: 8px;
-        background-color: #FF4B4B;
-        border-radius: 50%;
-        border: 2px solid white;
+        top: -6px;
+        right: -4px;
+        font-size: 14px;
+        animation: sparkle-float 2s ease-in-out infinite;
+    }
+
+    /* Floating animation for the sparkle */
+    @keyframes sparkle-float {
+        0%, 100% { transform: translateY(0) scale(1); filter: drop-shadow(0 0 2px gold); }
+        50% { transform: translateY(-4px) scale(1.2); filter: drop-shadow(0 0 8px gold); }
     }
     </style>
 """, unsafe_allow_html=True)
@@ -4340,22 +4345,9 @@ if active_main_tab == "📂 Compare":
     )
 
     reference_file = None
-    if len(selected_files_for_comparison) > 1:
-        reference_choice = ["Auto select first file"] + selected_files_for_comparison
-        reference_default = st.session_state.get("compare_reference_file", "Auto select first file")
-        if reference_default not in reference_choice:
-            reference_default = "Auto select first file"
-        reference_file_choice = st.selectbox(
-            "Reference file for comparison (optional)",
-            reference_choice,
-            index=reference_choice.index(reference_default),
-            key="compare_reference_file",
-            help="Choose a file as the baseline for inline and side-by-side diff modes, or leave on auto to use the first selected file."
-        )
-        if reference_file_choice != "Auto select first file":
-            reference_file = reference_file_choice
-    elif len(selected_files_for_comparison) == 1:
-        st.info("Select at least two files to compare in order to enable reference baseline selection.")
+    # Reference file selection is no longer shown; the first selected file is used automatically for comparison baselines.
+    if len(selected_files_for_comparison) == 1:
+        st.info("Select at least two files to compare.")
 
     compare_clicked = st.button("Compare Selected Files", key="run_compare_button", use_container_width=True)
 
