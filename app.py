@@ -2952,7 +2952,62 @@ def highlight_multi_file_differences_cached(file_items, comparison_mode="Exact i
     return "".join(html_parts)
 
 
+def highlight_side_by_side_differences_cached(file_items, reference_file=None):
+    files = [fname for fname, _ in file_items]
+    if len(files) < 2:
+        return "Select at least two files to compare."
+    if reference_file is None or reference_file not in files:
+        reference_file = files[0]
+
+    file_lines = {fname: text.splitlines() for fname, text in file_items}
+    max_lines = max(len(lines) for lines in file_lines.values())
+
+    css = """
+    <style>
+        body { font-family: Arial; margin: 20px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid black; padding: 4px; vertical-align: top; white-space: pre-wrap; }
+        th { background-color: #f0f0f0; }
+        td.line-number { background-color: #f0f0f0; font-weight: bold; text-align: center; }
+        .line-match { background-color: #ccffcc; display: block; width: 100%; }
+        .line-mismatch { background-color: #ffcccc; display: block; width: 100%; }
+        .scrollable { overflow:auto; max-height:800px; }
+        p.legend span { display:inline-block; width:20px; height:20px; margin-right:5px; vertical-align:middle; }
+    </style>
+    """
+    html_parts = [
+        "<html><head>", css, "</head><body><div class='scrollable'>",
+        "<p class='legend'><b>Legend:</b> <span class='line-match'></span> Matching line, <span class='line-mismatch'></span> Differing or missing line</p>",
+        "<p><b>Reference file:</b> " + html.escape(reference_file) + "</p>",
+        "<table><tr><th>Line #</th>",
+        "".join(f"<th>{html.escape(fname)}</th>" for fname in files),
+        "</tr>",
+    ]
+
+    for i in range(max_lines):
+        html_parts.append(f"<tr><td class='line-number'>{i + 1}</td>")
+        reference_line = file_lines[reference_file][i] if i < len(file_lines[reference_file]) else ""
+        for fname in files:
+            line_text = file_lines[fname][i] if i < len(file_lines[fname]) else ""
+            if line_text == reference_line and line_text != "":
+                cell_html = f"<span class='line-match'>{html.escape(line_text)}</span>"
+            elif line_text == reference_line == "":
+                cell_html = "&nbsp;"
+            else:
+                cell_html = f"<span class='line-mismatch'>{html.escape(line_text)}</span>"
+            html_parts.append(f"<td>{cell_html}</td>")
+        html_parts.append("</tr>")
+
+    html_parts.append("</table></div></body></html>")
+    return "".join(html_parts)
+
+
 def highlight_multi_file_differences(file_texts, comparison_mode="Exact inline word diff", reference_file=None):
+    if comparison_mode == "Side-by-side line diff":
+        return highlight_side_by_side_differences_cached(
+            tuple((fname, str(text)) for fname, text in file_texts.items()),
+            reference_file=reference_file
+        )
     return highlight_multi_file_differences_cached(
         tuple((fname, str(text)) for fname, text in file_texts.items()),
         comparison_mode=comparison_mode,
@@ -3350,8 +3405,8 @@ def render_status_strip():
         else:
             st.components.v1.html(
                 f"""
-                <div class="status-tile" style="background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%); border: 1px solid #d7e3f4; border-radius: 14px; padding: 12px 14px; height: 92px; box-sizing: border-box;">
-                    <div class="status-label" style="color:#51627a; font-size:12px; margin-bottom:4px;">{html.escape(status_label)}</div>
+                <div class="status-tile" style="display:flex; flex-direction:column; justify-content:center; gap:4px; background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%); border: 1px solid #d7e3f4; border-radius: 14px; padding: 12px 14px; min-height: 92px; box-sizing: border-box;">
+                    <div class="status-label" style="color:#51627a; font-size:12px;">{html.escape(status_label)}</div>
                     <div id="usage-time-value" class="status-value" style="color:#173152; font-size:18px; font-weight:600;">{html.escape(str(status_value))}</div>
                 </div>
                 <script>
@@ -3437,7 +3492,7 @@ def show_help_popup(tab_name, selected_files):
     elif tab_name == "dashboard":
         extra = "If *.xlsx selected, ask for columns and trend counts; *.html can be parsed for test verdicts."
     elif tab_name == "compare":
-        extra = "Inline word diff and Excel export are supported for PDF, DOCX, PPTX, XLSX, HTML, TXT, CAN, and CAPL files."
+        extra = "Choose inline or side-by-side diff, select a reference file, and download results for PDF, DOCX, PPTX, XLSX, HTML, TXT, CAN, and CAPL files."
     elif tab_name == "capl":
         extra = "For CAPL code, use 'find missing semicolon' or 'show unused variables' style queries."
     else:
@@ -4215,6 +4270,7 @@ if active_main_tab == "📂 Compare":
     st.markdown("**Comparison options:**")
     st.markdown(
         "- Inline word-level diff (sequence-aware highlighting)\n"
+        "- Side-by-side line diff for direct file comparison\n"
         "- Word presence summary across selected files\n"
         "- Downloadable Excel comparison workbook\n"
         "- Supports PDF, DOCX, PPTX, XLSX, HTML, TXT, CAN/CAPL formats"
@@ -4234,7 +4290,7 @@ if active_main_tab == "📂 Compare":
 
     compare_mode = st.selectbox(
         "Comparison mode",
-        ["Exact inline word diff", "Word presence summary"],
+        ["Exact inline word diff", "Side-by-side line diff", "Word presence summary"],
         index=0,
         key="compare_mode"
     )
@@ -4242,10 +4298,10 @@ if active_main_tab == "📂 Compare":
     reference_file = None
     if selected_files_for_comparison:
         reference_file = st.selectbox(
-            "Reference file for inline comparison",
+            "Reference file for comparison",
             selected_files_for_comparison,
             index=0,
-            help="Use this file as the baseline for the inline diff mode."
+            help="Use this file as the baseline for inline and side-by-side diff modes."
         )
 
     compare_clicked = st.button("Compare Selected Files", key="run_compare_button", use_container_width=True)
@@ -4276,7 +4332,7 @@ if active_main_tab == "📂 Compare":
 
     if st.session_state.compare_result_html and st.session_state.compare_result_files:
         st.info("Compared files: " + ", ".join(st.session_state.compare_result_files))
-        st.markdown(f"### Inline Word-Level Comparison ({len(st.session_state.compare_result_files)} files)")
+        st.markdown(f"### Comparison Results ({len(st.session_state.compare_result_files)} files)")
         st.components.v1.html(st.session_state.compare_result_html, height=800, scrolling=True)
 
         st.markdown("### Download Excel Comparison")
@@ -4476,3 +4532,4 @@ if active_main_tab == "🧠 CAPL":
                                 render_capl_issue_table(issues)
                             except Exception as exc:
                                 st.error(f"AI suggestion failed: {exc}")
+
