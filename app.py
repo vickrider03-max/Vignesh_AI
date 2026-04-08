@@ -234,7 +234,7 @@ st.markdown(
             justify-content: center;
             gap: 4px;
             width: 100%;
-            margin: -32px 0 10px 0;
+            margin: -50px 0 8px 0;
             text-align: center;
         }
         .brand-hero img {
