@@ -17,4 +17,3 @@ torchvision
 pytz
 numpy
 matplotlib
-time
