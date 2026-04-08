@@ -189,35 +189,42 @@ st.markdown(
         .status-strip {
             display: flex;
             justify-content: space-between;
-            gap: 10px;
-            margin: 8px 0 18px 0;
-            align-items: stretch;
-            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 30px;
         }
+
         .status-tile {
-            flex: 1 1 220px;
-            max-width: 260px;
-            background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 16px 18px;
-            display: flex;
-            flex-direction: column;
-            justify-content: flex-start;
-            align-items: flex-start;
-            min-height: 108px;
-            gap: 8px;
+            flex: 1;
+            background: #ffffff;
+            padding: 18px;
+            border-radius: 12px;
+            border: 1px solid #f0f2f6;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            text-align: center;
+            transition: all 0.3s ease;
         }
+
         .status-label {
-            color: var(--text-soft);
-            font-size: 11px;
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #808495;
             text-transform: uppercase;
-            letter-spacing: 0.06em;
-            margin: 0;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
         }
+
         .status-value {
-            color: #173152;
-            font-size: 18px;
+            display: block;
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: #1E88E5;
+        }
+
+        .status-tile:hover {
+            border-color: #1E88E5;
+            box-shadow: 0 4px 12px rgba(30, 136, 229, 0.1);
+        }
             font-weight: 600;
             line-height: 1.1;
         }
@@ -1925,27 +1932,10 @@ with st.sidebar:
             unsafe_allow_html=True
         )
 
-        status_message = f"Logged in as {st.session_state.logged_in_username} ({st.session_state.user_role})"
-        if creator_timestamp:
-            status_message += f"\nLogin time: {creator_timestamp}"
-        st.success(status_message)
-        if st.button("Logout"):
-            # Remove from active users
-            active_file = "active_users.json"
-            if os.path.exists(active_file):
-                with open(active_file, "r") as f:
-                    active_users = json.load(f)
-                active_users = [u for u in active_users if u["username"] != st.session_state.logged_in_username]
-                with open(active_file, "w") as f:
-                    json.dump(active_users, f)
-            st.session_state.is_authenticated = False
-            st.session_state.logged_in_username = ""
-            st.session_state.user_role = None
-            st.session_state.user_session_start_time = None
-            st.rerun()
-
         st.header("Upload Documents")
-        st.info("1) Upload files. 2) Click the file cards you need. 3) Switch tabs and work with selected files.")
+        st.info("1) Upload files." \
+        " 2) Click the file cards you need. " \
+        "3) Switch tabs and work with selected files.")
         new_files = st.file_uploader(
             "Upload PDF, DOCX, TXT, PPTX, XLSX, HTML, CAPL, Images",
             type=["pdf", "docx", "txt", "pptx", "xlsx", "html", "htm", "capl", "can", "png", "jpg", "jpeg", "gif", "bmp", "webp"],
@@ -2764,11 +2754,18 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
     login_username = st.text_input("Username")
     login_password = st.text_input("Password", type="password")
     st.info("Note: For users, leave the password field blank (empty).")
-    has_read_readme = st.checkbox("I have read the README and want to continue")
+    
+    # Place Access button on the left, checkbox on the right
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        access_clicked = st.button("Access", use_container_width=True)
+    with col2:
+        has_read_readme = st.checkbox("I have read the README and want to continue")
+    
     st.markdown("### Read Me First")
     st.text_area("README", value=README_TEXT, height=360, disabled=True)
 
-    if st.button("Access"):
+    if access_clicked:
         if not has_read_readme:
             st.warning("Please read the README and confirm the checkbox before accessing the app.")
             st.stop()
@@ -3373,20 +3370,20 @@ def render_status_strip():
     status_html = f"""
     <div class="status-strip">
         <div class="status-tile">
-            <div class="status-label">User</div>
-            <div class="status-value">{html.escape(username)}</div>
+            <span class="status-label">User</span>
+            <span class="status-value">{html.escape(username)}</span>
         </div>
         <div class="status-tile">
-            <div class="status-label">Role</div>
-            <div class="status-value">{html.escape(str(role).title())}</div>
+            <span class="status-label">Role</span>
+            <span class="status-value">{html.escape(str(role).title())}</span>
         </div>
         <div class="status-tile">
-            <div class="status-label">Available Files</div>
-            <div class="status-value">{len(available_files)}</div>
+            <span class="status-label">Available Files</span>
+            <span class="status-value">{len(available_files)}</span>
         </div>
         <div class="status-tile">
-            <div class="status-label">{html.escape(status_label)}</div>
-            <div id="usage-time-value" class="status-value">{html.escape(str(status_value))}</div>
+            <span class="status-label">{html.escape(status_label)}</span>
+            <span id="usage-time-value" class="status-value">{html.escape(str(status_value))}</span>
         </div>
     </div>
     """
@@ -3519,6 +3516,46 @@ def show_help_popup(tab_name, selected_files):
 # Main application tabs:
 # Each block below owns one visible area of the app. If you want to change a
 # feature, start in the matching tab block and then follow the helper comments above.
+
+# Logged in info at top right
+if st.session_state.is_authenticated:
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        creator_timestamp = None
+        if st.session_state.user_role == "creator" and st.session_state.login_history:
+            creator_entries = [
+                entry for entry in st.session_state.login_history
+                if entry.get("username") == st.session_state.logged_in_username and entry.get("role") == "creator"
+            ]
+            if creator_entries:
+                creator_timestamp = creator_entries[-1].get("timestamp")
+
+        status_message = f"Logged in as {st.session_state.logged_in_username} ({st.session_state.user_role})"
+        if creator_timestamp:
+            status_message += f"\nLogin time: {creator_timestamp}"
+        st.success(status_message)
+        if st.button("Logout"):
+            # Remove from active users
+            active_file = "active_users.json"
+            if os.path.exists(active_file):
+                with open(active_file, "r") as f:
+                    active_users = json.load(f)
+                active_users = [u for u in active_users if u["username"] != st.session_state.logged_in_username]
+                with open(active_file, "w") as f:
+                    json.dump(active_users, f)
+            st.session_state.is_authenticated = False
+            st.session_state.logged_in_username = ""
+            st.session_state.user_role = None
+            st.session_state.user_session_start_time = None
+            st.session_state.selected_files = []
+            st.session_state.file_texts = {}
+            st.session_state.vector_stores = {}
+            st.session_state.chat_file_selection = []
+            st.session_state.chat_summary_downloads = {"images": [], "tables": []}
+            st.session_state.messages = []
+            st.success("Logged out successfully.")
+            st.rerun()
+
 render_status_strip()
 
 # Session-backed main navigation:
