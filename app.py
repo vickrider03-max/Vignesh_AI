@@ -109,7 +109,12 @@ st.markdown(
         <span class="benz-logo">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" preserveAspectRatio="xMidYMid meet">
                 <circle cx="60" cy="60" r="52" fill="none" stroke="#1f4f91" stroke-width="8" />
-                <path d="M60 14 L70.5 59.3 L111 65.5 L70.5 71.7 L60 106 L49.5 71.7 L9 65.5 L49.5 59.3 Z" fill="none" stroke="#1f4f91" stroke-width="8" stroke-linejoin="round" />
+                <g stroke="#1f4f91" stroke-width="8" stroke-linecap="round" fill="none">
+                    <line x1="60" y1="60" x2="60" y2="14" />
+                    <line x1="60" y1="60" x2="104" y2="98" />
+                    <line x1="60" y1="60" x2="16" y2="98" />
+                </g>
+                <circle cx="60" cy="60" r="24" fill="none" stroke="#1f4f91" stroke-width="4" />
             </svg>
         </span>
         <span>Vignesh_AI</span>
