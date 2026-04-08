@@ -187,12 +187,16 @@ st.markdown(
             margin: 0;
         }
         .status-strip {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
+            display: flex;
+            justify-content: space-between;
             gap: 10px;
             margin: 8px 0 18px 0;
+            align-items: stretch;
+            flex-wrap: wrap;
         }
         .status-tile {
+            flex: 1 1 0;
+            min-width: 180px;
             background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
             border: 1px solid var(--border);
             border-radius: 14px;
@@ -3514,83 +3518,80 @@ def show_help_popup(tab_name, selected_files):
 render_status_strip()
 
 # Session-backed main navigation:
-# Final Smooth-Glide Pill Navigation
+# 1. Premium "Soft-Glow" Navigation CSS
 st.markdown("""
     <style>
-    /* 1. Remove standard radio UI */
+    /* Hide default radio UI */
     div[role="radiogroup"] > label > div:first-child { display: none !important; }
-    div[role="radiogroup"] { 
-        gap: 10px; 
-        display: flex; 
-        justify-content: flex-start;
-        padding: 5px 0;
-    }
+    div[role="radiogroup"] { gap: 12px; display: flex; }
 
-    /* 2. Base Pill Styling */
+    /* Base Pill Styling */
     div[role="radiogroup"] > label {
-        background-color: rgba(128, 128, 128, 0.1) !important;
-        color: inherit !important;
+        background-color: rgba(128, 128, 128, 0.08) !important;
         padding: 8px 22px !important;
         border-radius: 50px !important;
-        border: 1px solid rgba(128, 128, 128, 0.15) !important;
+        border: 1px solid rgba(128, 128, 128, 0.1) !important;
         display: flex !important;
         align-items: center !important;
-        justify-content: center !important;
-        font-weight: 500;
         height: 42px;
-        cursor: pointer;
-        /* THE MAGIC: Smooth transition for glide feel */
-        transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1) !important;
+        font-weight: 500;
+        transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
     }
 
-    /* 3. The Active "Glide" Highlight */
+    /* Active State - Deep Electric Blue */
     div[role="radiogroup"] > label[data-checked="true"] {
-        background-color: #007BFF !important;
+        background-color: #1E88E5 !important;
         color: white !important;
-        border-color: #007BFF !important;
-        box-shadow: 0 4px 15px rgba(0, 123, 255, 0.4);
-        transform: scale(1.02); /* Slight pop when selected */
+        box-shadow: 0 4px 15px rgba(30, 136, 229, 0.4);
     }
 
-    /* 4. Unified Status Dots */
+    /* Dot Base Style - Soft Glow */
     div[role="radiogroup"] > label::after {
         content: '';
-        margin-left: 10px;
-        width: 7px;
-        height: 7px;
+        margin-left: 12px;
+        width: 6px;
+        height: 6px;
         border-radius: 50%;
-        transition: all 0.3s ease;
+        filter: blur(0.4px); /* Softens the edges */
     }
 
-    /* 5. Active White Dot Transition */
+    /* White Dot for Active Tab */
     div[role="radiogroup"] > label[data-checked="true"]::after {
         background-color: white !important;
-        box-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+        box-shadow: 0 0 8px #ffffff;
     }
 
-    /* 6. Individual Dot Colors (Inactive State) */
-    div[role="radiogroup"] > label:nth-child(1):not([data-checked="true"])::after { background-color: #00D1FF; } 
-    div[role="radiogroup"] > label:nth-child(2):not([data-checked="true"])::after { background-color: #28a745; } 
-    div[role="radiogroup"] > label:nth-child(3):not([data-checked="true"])::after { background-color: #FFC107; } 
-    div[role="radiogroup"] > label:nth-child(4):not([data-checked="true"])::after { background-color: #A349A4; }
+    /* --- UPDATED PREMIUM COLORS --- */
+    
+    /* 1. CHAT - Soft Ice Blue (Instead of bright cyan) */
+    div[role="radiogroup"] > label:nth-child(1):not([data-checked="true"])::after { 
+        background-color: #81D4FA; 
+        box-shadow: 0 0 6px #81D4FA;
+    } 
 
-    /* 7. Hover Effect for extra feedback */
-    div[role="radiogroup"] > label:hover:not([data-checked="true"]) {
-        background-color: rgba(128, 128, 128, 0.2) !important;
-        transform: translateY(-1px);
+    /* 2. DASHBOARD - Emerald Mint (Softer than standard Green) */
+    div[role="radiogroup"] > label:nth-child(2):not([data-checked="true"])::after { 
+        background-color: #66BB6A; 
+        box-shadow: 0 0 6px #66BB6A;
+    } 
+
+    /* 3. COMPARE - Muted Amber (Less "Caution" yellow) */
+    div[role="radiogroup"] > label:nth-child(3):not([data-checked="true"])::after { 
+        background-color: #FFB74D; 
+        box-shadow: 0 0 6px #FFB74D;
+    } 
+
+    /* 4. CAPL - Royal Orchid (Sophisticated Purple) */
+    div[role="radiogroup"] > label:nth-child(4):not([data-checked="true"])::after { 
+        background-color: #BA68C8; 
+        box-shadow: 0 0 6px #BA68C8;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# 2. Your Original Tab Logic
+# 2. Your Tab Logic
 main_tab_options = ["💬 Chat", "📊 Dashboard", "📂 Compare", "🧠 CAPL"]
-active_main_tab = st.radio(
-    "Open Section",
-    main_tab_options,
-    horizontal=True,
-    key="active_main_tab",
-    label_visibility="collapsed",
-)
+active_main_tab = st.radio("Open Section", main_tab_options, horizontal=True, key="active_main_tab", label_visibility="collapsed")
 
 # -------------------------------
 # TAB 1: CHAT
