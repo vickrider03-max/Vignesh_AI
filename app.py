@@ -3405,62 +3405,94 @@ def show_current_sidebar_selection():
 
 
 def render_status_strip():
+    # 1. Check Authentication
     if not st.session_state.get("is_authenticated"):
         return
 
+    # 2. Inject the CSS Styles
+    st.markdown("""
+        <style>
+        .dashboard-grid {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .metric-card {
+            flex: 1;
+            background: #ffffff;
+            padding: 18px;
+            border-radius: 12px;
+            border: 1px solid #f0f2f6;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+        .card-label {
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #808495;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        .card-value {
+            display: block;
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: #1E88E5;
+        }
+        .metric-card:hover {
+            border-color: #1E88E5;
+            box-shadow: 0 4px 12px rgba(30, 136, 229, 0.1);
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # 3. Initialize dynamic data and placeholder
     placeholder = st.empty()
-    available_files = st.session_state.get("selected_files", [])
-    role = st.session_state.get("user_role") or "User"
-    username = st.session_state.get("logged_in_username") or "Vignesh"
-    start_time = st.session_state.get("start_time")
+    
+    if 'start_time' not in st.session_state:
+        st.session_state.start_time = time.time()
 
-    if start_time is None:
-        start_time = time.time()
-        st.session_state.start_time = start_time
+    # 4. The Live Update Loop
+    # This loop updates the placeholder every second with fresh state data
+    while True:
+        # Fetch fresh data from session state on every iteration
+        available_files = len(st.session_state.get("selected_files", []))
+        role = (st.session_state.get("user_role") or "User").title()
+        username = st.session_state.get("logged_in_username") or "Vignesh"
+        
+        # Calculate Time
+        elapsed = int(time.time() - st.session_state.start_time)
+        hours, rem = divmod(elapsed, 3600)
+        mins, secs = divmod(rem, 60)
+        timer_str = f"{hours:02d}:{mins:02d}:{secs:02d}"
 
-    elapsed_seconds = max(0, int(time.time() - start_time))
-    status_value = f"{elapsed_seconds // 3600:02d}:{(elapsed_seconds % 3600) // 60:02d}:{elapsed_seconds % 60:02d}"
-
-    status_html = f"""
-    <div class="dashboard-grid">
-        <div class="metric-card">
-            <span class="card-label">User</span>
-            <span class="card-value">{html.escape(username)}</span>
-        </div>
-        <div class="metric-card">
-            <span class="card-label">Role</span>
-            <span class="card-value">{html.escape(str(role).title())}</span>
-        </div>
-        <div class="metric-card">
-            <span class="card-label">Available Files</span>
-            <span class="card-value">{len(available_files)}</span>
-        </div>
-        <div class="metric-card">
-            <span class="card-label">Usage Time</span>
-            <span id="usage-time-value" class="card-value">{html.escape(status_value)}</span>
-        </div>
-    </div>
-    <script>
-        const timerEl = document.getElementById("usage-time-value");
-        let elapsedSeconds = {elapsed_seconds};
-        const formatTime = (totalSeconds) => {{
-            const hrs = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
-            const mins = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
-            const secs = String(totalSeconds % 60).padStart(2, "0");
-            return `${{hrs}}:${{mins}}:${{secs}}`;
-        }};
-        timerEl.textContent = formatTime(elapsedSeconds);
-        if (window.usageTimeInterval) {{
-            clearInterval(window.usageTimeInterval);
-        }}
-        window.usageTimeInterval = setInterval(() => {{
-            elapsedSeconds += 1;
-            timerEl.textContent = formatTime(elapsedSeconds);
-        }}, 1000);
-    </script>
-    """
-
-    st.components.v1.html(status_html, height=132)
+        # Update the UI
+        placeholder.markdown(f"""
+            <div class="dashboard-grid">
+                <div class="metric-card">
+                    <span class="card-label">User</span>
+                    <span class="card-value">{html.escape(username)}</span>
+                </div>
+                <div class="metric-card">
+                    <span class="card-label">Role</span>
+                    <span class="card-value">{html.escape(role)}</span>
+                </div>
+                <div class="metric-card">
+                    <span class="card-label">Available Files</span>
+                    <span class="card-value">{available_files}</span>
+                </div>
+                <div class="metric-card">
+                    <span class="card-label">Usage Time</span>
+                    <span class="card-value">{timer_str}</span>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        time.sleep(1)
 
 
 def render_file_context_card(title, available_files, active_files=None):
