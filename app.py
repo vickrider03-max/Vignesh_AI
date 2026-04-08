@@ -4297,12 +4297,19 @@ if active_main_tab == "📂 Compare":
 
     reference_file = None
     if selected_files_for_comparison:
-        reference_file = st.selectbox(
-            "Reference file for comparison",
-            selected_files_for_comparison,
-            index=0,
-            help="Use this file as the baseline for inline and side-by-side diff modes."
+        reference_choice = ["Auto select first file"] + selected_files_for_comparison
+        reference_default = st.session_state.get("compare_reference_file", "Auto select first file")
+        if reference_default not in reference_choice:
+            reference_default = "Auto select first file"
+        reference_file_choice = st.selectbox(
+            "Reference file for comparison (optional)",
+            reference_choice,
+            index=reference_choice.index(reference_default),
+            key="compare_reference_file",
+            help="Choose a file as the baseline for inline and side-by-side diff modes, or leave on auto to use the first selected file."
         )
+        if reference_file_choice != "Auto select first file":
+            reference_file = reference_file_choice
 
     compare_clicked = st.button("Compare Selected Files", key="run_compare_button", use_container_width=True)
 
