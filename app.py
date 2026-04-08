@@ -2826,9 +2826,10 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
     st.markdown("### Read Me First")
     st.text_area("README", value=README_TEXT, height=360, disabled=True)
 
-    if access_clicked and not has_read_readme:
-        st.warning("Please read the README and confirm the checkbox before accessing the app.")
-        st.stop()
+    if access_clicked:
+        if not has_read_readme:
+            st.warning("Please read the README and confirm the checkbox before accessing the app.")
+            st.stop()
 
         cleaned_username = (login_username or "").strip()
         cleaned_password = (login_password or "").strip()
