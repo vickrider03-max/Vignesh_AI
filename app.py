@@ -73,60 +73,38 @@ def cleanup_expired_preview_tokens():
 
 
 def get_perfect_mercedes_logo():
-    try:
-        import importlib
-        plt = importlib.import_module('matplotlib.pyplot')
-        np = importlib.import_module('numpy')
-        Polygon = importlib.import_module('matplotlib.patches').Polygon
-    except Exception as e:
-        st.warning(f"Mercedes logo generation is unavailable: {e}")
-        return None
-
-    frames = []
-    GLINT, SILVER, SHADOW = '#FFFFFF', '#C0C0C0', '#000000'
-
-    for angle_deg in range(0, 360, 10):
-        fig, ax = plt.subplots(figsize=(4, 4), facecolor='none')
-        ax.set_xlim(-1.1, 1.1)
-        ax.set_ylim(-1.1, 1.1)
-        ax.axis('off')
-
-        flip_scale = np.cos(np.deg2rad(angle_deg))
-        theta = np.linspace(0, 2 * np.pi, 100)
-        ax.plot(np.cos(theta) * flip_scale, np.sin(theta),
-                color=SILVER if abs(flip_scale) < 0.8 else GLINT,
-                linewidth=7, zorder=1)
-
-        base_angles = np.deg2rad([90, 210, 330])
-        for angle in base_angles:
-            center = [0 * flip_scale, 0]
-            tip = [0.88 * np.cos(angle) * flip_scale, 0.88 * np.sin(angle)]
-            side_l = [0.18 * np.cos(angle + 2.1) * flip_scale, 0.18 * np.sin(angle + 2.1)]
-            side_r = [0.18 * np.cos(angle - 2.1) * flip_scale, 0.18 * np.sin(angle - 2.1)]
-
-            c_l, c_r = (GLINT, SHADOW) if flip_scale > 0 else (SHADOW, GLINT)
-            ax.add_patch(Polygon([center, tip, side_l], facecolor=c_l, zorder=2))
-            ax.add_patch(Polygon([center, tip, side_r], facecolor=c_r, zorder=2))
-
-        buf = BytesIO()
-        plt.savefig(buf, transparent=True, format='png', bbox_inches='tight', pad_inches=0)
-        buf.seek(0)
-        frames.append(Image.open(buf))
-        plt.close(fig)
-
-    gif_buf = BytesIO()
-    if frames:
-        frames[0].save(
-            gif_buf,
-            format='GIF',
-            save_all=True,
-            append_images=frames[1:],
-            duration=80,
-            loop=0,
-            disposal=2
-        )
-
-    return base64.b64encode(gif_buf.getvalue()).decode('utf-8')
+    return """
+    <div style="display:flex; justify-content:center; margin-bottom:16px;">
+        <div style="width:140px; height:140px;">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet" style="width:100%; height:100%;">
+                <defs>
+                    <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="#ffffff"/>
+                        <stop offset="40%" stop-color="#c0c0c0"/>
+                        <stop offset="100%" stop-color="#777777"/>
+                    </linearGradient>
+                    <linearGradient id="starGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="#ffffff"/>
+                        <stop offset="100%" stop-color="#444444"/>
+                    </linearGradient>
+                </defs>
+                <circle cx="100" cy="100" r="88" fill="none" stroke="url(#ringGrad)" stroke-width="14" />
+                <circle cx="100" cy="100" r="40" fill="none" stroke="#808080" stroke-width="3" />
+                <g style="transform-origin:100px 100px; transform-box: fill-box; animation: mercedes-flip 3s linear infinite;">
+                    <line x1="100" y1="20" x2="100" y2="100" stroke="url(#starGrad)" stroke-width="12" stroke-linecap="round" />
+                    <line x1="38" y1="170" x2="100" y2="100" stroke="url(#starGrad)" stroke-width="12" stroke-linecap="round" />
+                    <line x1="162" y1="170" x2="100" y2="100" stroke="url(#starGrad)" stroke-width="12" stroke-linecap="round" />
+                </g>
+            </svg>
+        </div>
+    </div>
+    <style>
+        @keyframes mercedes-flip {
+            0% { transform: rotateY(0deg); }
+            100% { transform: rotateY(360deg); }
+        }
+    </style>
+    """
 
 
 # -------------------------------
@@ -140,20 +118,10 @@ load_preview_data()
 # Clean up expired preview tokens on app start
 cleanup_expired_preview_tokens()
 
-logo_data = get_perfect_mercedes_logo()
+logo_html = get_perfect_mercedes_logo()
 
 with st.sidebar:
-    if logo_data:
-        st.markdown(
-            f"""
-            <div style="display:flex; justify-content:center; margin-bottom:16px;">
-                <img src="data:image/gif;base64,{logo_data}" width="140" alt="Mercedes-Benz Logo" />
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-    else:
-        st.markdown("### Mercedes-Benz")
+    st.markdown(logo_html, unsafe_allow_html=True)
 
 st.markdown(
     """
