@@ -72,39 +72,46 @@ def cleanup_expired_preview_tokens():
     save_preview_data()
 
 
-def get_perfect_mercedes_logo():
+def get_needle_minimalist_logo():
     try:
-        import importlib
-        plt = importlib.import_module('matplotlib.pyplot')
-        np = importlib.import_module('numpy')
-        Polygon = importlib.import_module('matplotlib.patches').Polygon
-    except Exception as e:
+        import matplotlib.pyplot as plt
+        import numpy as np
+        from matplotlib.patches import Polygon
+    except Exception:
         st.warning("Mercedes logo generation requires matplotlib and numpy. Install these packages to view the animated logo.")
         return None
 
     frames = []
-    GLINT, SILVER, SHADOW = '#FFFFFF', '#C0C0C0', '#000000'
 
-    for angle_deg in range(0, 360, 10):
+    SILVER_GREY = '#A0A0A0'
+    STAR_LIGHT = '#DCDCDC'
+    STAR_SHADOW = '#B8B8B8'
+
+    for angle_deg in range(360, 0, -10):
         fig, ax = plt.subplots(figsize=(4, 4), facecolor='none')
         ax.set_xlim(-1.1, 1.1)
         ax.set_ylim(-1.1, 1.1)
         ax.axis('off')
 
-        flip_scale = np.cos(np.deg2rad(angle_deg))
-        theta = np.linspace(0, 2 * np.pi, 100)
+        raw_scale = np.cos(np.deg2rad(angle_deg))
+        flip_scale = raw_scale if abs(raw_scale) > 0.08 else (0.08 * np.sign(raw_scale + 0.001))
+
+        theta = np.linspace(0, 2 * np.pi, 150)
         ax.plot(np.cos(theta) * flip_scale, np.sin(theta),
-                color=SILVER if abs(flip_scale) < 0.8 else GLINT,
-                linewidth=7, zorder=1)
+                color=SILVER_GREY, linewidth=3.0, zorder=1)
 
         base_angles = np.deg2rad([90, 210, 330])
         for angle in base_angles:
-            center = [0 * flip_scale, 0]
+            center = [0, 0]
             tip = [0.88 * np.cos(angle) * flip_scale, 0.88 * np.sin(angle)]
-            side_l = [0.18 * np.cos(angle + 2.1) * flip_scale, 0.18 * np.sin(angle + 2.1)]
-            side_r = [0.18 * np.cos(angle - 2.1) * flip_scale, 0.18 * np.sin(angle - 2.1)]
+            side_l = [0.11 * np.cos(angle + 2.15) * flip_scale, 0.11 * np.sin(angle + 2.15)]
+            side_r = [0.11 * np.cos(angle - 2.15) * flip_scale, 0.11 * np.sin(angle - 2.15)]
 
-            c_l, c_r = (GLINT, SHADOW) if flip_scale > 0 else (SHADOW, GLINT)
+            if flip_scale > 0:
+                c_l, c_r = STAR_LIGHT, STAR_SHADOW
+            else:
+                c_l, c_r = STAR_SHADOW, STAR_LIGHT
+
             ax.add_patch(Polygon([center, tip, side_l], facecolor=c_l, zorder=2))
             ax.add_patch(Polygon([center, tip, side_r], facecolor=c_r, zorder=2))
 
@@ -121,7 +128,7 @@ def get_perfect_mercedes_logo():
             format='GIF',
             save_all=True,
             append_images=frames[1:],
-            duration=80,
+            duration=60,
             loop=0,
             disposal=2
         )
@@ -140,7 +147,10 @@ load_preview_data()
 # Clean up expired preview tokens on app start
 cleanup_expired_preview_tokens()
 
-logo_data = get_perfect_mercedes_logo()
+try:
+    logo_data = get_needle_minimalist_logo()
+except Exception:
+    logo_data = None
 
 st.markdown(
     """
@@ -1733,6 +1743,7 @@ except Exception:
 
 highlight_term = None
 preview_page = None
+preview_token = None
 if "preview_token" in query_params and query_params["preview_token"]:
     preview_value = query_params["preview_token"]
     if isinstance(preview_value, list):
@@ -2009,7 +2020,6 @@ with st.sidebar:
 # -------------------------------
 # TEXT EXTRACTION
 # -------------------------------
-@st.cache_data(show_spinner=False)
 @st.cache_data(show_spinner=False)
 def extract_excel_data(file_name, file_bytes):
     data = []
@@ -2435,7 +2445,6 @@ def build_highlighted_search_results(file_name, text, query):
 
 
 @st.cache_data(show_spinner=False)
-@st.cache_data(show_spinner=False)
 def extract_login_name_from_html(file_bytes):
     soup = BeautifulSoup(BytesIO(file_bytes), "html.parser")
     text = soup.get_text(" ", strip=True)
@@ -2766,9 +2775,9 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
 
         else:
             st.error(
-                "For creator: use username 'creator' and password 'creatorpass'. For users: username >3 chars, password empty.")
+                "For creator: use username 'Vignesh' and password 'Rider@100'. For users: username >3 chars, password empty.")
 
-    # st.info("Creator should use creator/creatorpass; others use any login. Creator sees admin features.")
+    # st.info("Creator should use Vignesh/Rider@100; others use any login. Creator sees admin features.")
     st.stop()
 
 
@@ -4016,6 +4025,7 @@ with tab2:
                                         key="test_case_mode")
 
                         if fixture_info["test_cases"]:
+                            test_cases_df = pd.DataFrame()
                             if mode == "All":
                                 test_cases_to_show = fixture_info["test_cases"]
                                 heading = "Test Cases (All)"
@@ -4051,13 +4061,13 @@ with tab2:
                                 return ""
 
 
-                            if "verdict" in test_cases_df.columns:
+                            if not test_cases_df.empty and "verdict" in test_cases_df.columns:
                                 styled_df = test_cases_df.style.map(
                                     lambda x: color_verdict(x) if isinstance(x, str) else "",
                                     subset=["verdict"]
                                 )
                                 st.dataframe(styled_df, use_container_width=True, hide_index=True)
-                            else:
+                            elif not test_cases_df.empty:
                                 st.dataframe(test_cases_df, use_container_width=True, hide_index=True)
 
                         verdict_counts = {
