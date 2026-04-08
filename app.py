@@ -255,8 +255,8 @@ if logo_data:
         f"""
         <div class="brand-hero">
             <img src="data:image/gif;base64,{logo_data}" alt="Mercedes-Benz logo" />
-            <h1 class="brand-title">Vignesh_AI</h1>
             <p class="brand-subtitle">Mercedes-Benz</p>
+            <h1 class="brand-title">Vignesh_AI</h1>
         </div>
         """,
         unsafe_allow_html=True,
