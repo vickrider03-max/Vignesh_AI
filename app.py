@@ -78,6 +78,7 @@ def cleanup_expired_preview_tokens():
     save_preview_data()
 
 
+@st.cache_data(show_spinner=False)
 def get_needle_minimalist_logo():
     try:
         import matplotlib.pyplot as plt
@@ -93,7 +94,7 @@ def get_needle_minimalist_logo():
     STAR_LIGHT = '#DCDCDC'
     STAR_SHADOW = '#B8B8B8'
 
-    for angle_deg in range(360, 0, -10):
+    for angle_deg in range(360, 0, -15):
         fig, ax = plt.subplots(figsize=(4, 4), facecolor='none')
         ax.set_xlim(-1.1, 1.1)
         ax.set_ylim(-1.1, 1.1)
@@ -318,7 +319,47 @@ for key, default_value in [
     if key not in st.session_state:
         st.session_state[key] = default_value
 
-col_logo, col_status = st.columns([3, 1])
+
+def render_status_strip():
+    if not st.session_state.get("is_authenticated"):
+        return
+
+    if 'start_time' not in st.session_state or st.session_state.start_time is None:
+        st.session_state.start_time = time.time()
+
+    elapsed = int(time.time() - st.session_state.start_time)
+    hours, rem = divmod(elapsed, 3600)
+    mins, secs = divmod(rem, 60)
+    timer_str = f"{hours:02d}:{mins:02d}:{secs:02d}"
+
+    username = st.session_state.get("logged_in_username") or "Vignesh"
+    role = st.session_state.get("user_role") or "User"
+    available_files = len(st.session_state.get("selected_files", []))
+
+    status_html = f"""
+    <div class="dashboard-grid">
+        <div class="metric-card">
+            <span class="card-label">User</span>
+            <span class="card-value">{html.escape(username)}</span>
+        </div>
+        <div class="metric-card">
+            <span class="card-label">Role</span>
+            <span class="card-value">{html.escape(str(role).title())}</span>
+        </div>
+        <div class="metric-card">
+            <span class="card-label">Available Files</span>
+            <span class="card-value">{available_files}</span>
+        </div>
+        <div class="metric-card">
+            <span class="card-label">Usage Time</span>
+            <span class="card-value">{timer_str}</span>
+        </div>
+    </div>
+    """
+
+    st.markdown(status_html, unsafe_allow_html=True)
+
+col_logo, col_status = st.columns([2, 4])
 with col_logo:
     if logo_data:
         st.markdown(
@@ -344,6 +385,8 @@ with col_logo:
 
 with col_status:
     if st.session_state.is_authenticated:
+        render_status_strip()
+
         creator_timestamp = None
         if st.session_state.user_role == "creator" and st.session_state.login_history:
             creator_entries = [
@@ -357,7 +400,7 @@ with col_status:
         if creator_timestamp:
             status_message += f"\nLogin time: {creator_timestamp}"
 
-        st.success(status_message)
+        st.markdown(f"**{status_message}**")
         logout_clicked = st.button("Logout", key="logout_button", use_container_width=True)
         if logout_clicked:
             active_file = "active_users.json"
@@ -3404,97 +3447,6 @@ def show_current_sidebar_selection():
         st.info("No sidebar files selected yet. Upload and select files from the sidebar first.")
 
 
-def render_status_strip():
-    # 1. Check Authentication
-    if not st.session_state.get("is_authenticated"):
-        return
-
-    # 2. Inject the CSS Styles
-    st.markdown("""
-        <style>
-        .dashboard-grid {
-            display: flex;
-            justify-content: space-between;
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        .metric-card {
-            flex: 1;
-            background: #ffffff;
-            padding: 18px;
-            border-radius: 12px;
-            border: 1px solid #f0f2f6;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-            text-align: center;
-            transition: all 0.3s ease;
-        }
-        .card-label {
-            display: block;
-            font-size: 0.75rem;
-            font-weight: 600;
-            color: #808495;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 8px;
-        }
-        .card-value {
-            display: block;
-            font-size: 1.15rem;
-            font-weight: 700;
-            color: #1E88E5;
-        }
-        .metric-card:hover {
-            border-color: #1E88E5;
-            box-shadow: 0 4px 12px rgba(30, 136, 229, 0.1);
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
-    # 3. Initialize dynamic data and placeholder
-    placeholder = st.empty()
-    
-    if 'start_time' not in st.session_state:
-        st.session_state.start_time = time.time()
-
-    # 4. The Live Update Loop
-    # This loop updates the placeholder every second with fresh state data
-    while True:
-        # Fetch fresh data from session state on every iteration
-        available_files = len(st.session_state.get("selected_files", []))
-        role = (st.session_state.get("user_role") or "User").title()
-        username = st.session_state.get("logged_in_username") or "Vignesh"
-        
-        # Calculate Time
-        elapsed = int(time.time() - st.session_state.start_time)
-        hours, rem = divmod(elapsed, 3600)
-        mins, secs = divmod(rem, 60)
-        timer_str = f"{hours:02d}:{mins:02d}:{secs:02d}"
-
-        # Update the UI
-        placeholder.markdown(f"""
-            <div class="dashboard-grid">
-                <div class="metric-card">
-                    <span class="card-label">User</span>
-                    <span class="card-value">{html.escape(username)}</span>
-                </div>
-                <div class="metric-card">
-                    <span class="card-label">Role</span>
-                    <span class="card-value">{html.escape(role)}</span>
-                </div>
-                <div class="metric-card">
-                    <span class="card-label">Available Files</span>
-                    <span class="card-value">{available_files}</span>
-                </div>
-                <div class="metric-card">
-                    <span class="card-label">Usage Time</span>
-                    <span class="card-value">{timer_str}</span>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-        
-        time.sleep(1)
-
-
 def render_file_context_card(title, available_files, active_files=None):
     active_files = active_files or []
     chips_html = "".join(
@@ -3595,8 +3547,6 @@ def show_help_popup(tab_name, selected_files):
 # Main application tabs:
 # Each block below owns one visible area of the app. If you want to change a
 # feature, start in the matching tab block and then follow the helper comments above.
-
-render_status_strip()
 
 # Session-backed main navigation:
 # 1. Premium "Soft-Glow" Navigation CSS
