@@ -29,6 +29,10 @@ PREVIEW_STORE = {}   # token -> file_dict
 
 PREVIEW_DATA_FILE = "preview_data.pkl"
 
+# Preview token helpers:
+# Used by the document preview flow opened in a separate browser tab/window.
+# These functions persist preview state so a selected file can still be rendered
+# even after Streamlit reruns the main app script.
 def load_preview_data():
     """Load preview data from file"""
     global PREVIEW_TOKENS, PREVIEW_STORE
@@ -228,20 +232,20 @@ st.markdown(
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 8px;
+            gap: 4px;
             width: 100%;
-            margin: 0 0 22px 0;
+            margin: -18px 0 12px 0;
             text-align: center;
         }
         .brand-hero img {
-            width: 180px;
+            width: 120px;
             max-width: 100%;
             height: auto;
             display: block;
         }
         .brand-title {
             color: #173152;
-            font-size: 2rem;
+            font-size: 1.85rem;
             font-weight: 700;
             line-height: 1.1;
             margin: 0;
@@ -249,11 +253,27 @@ st.markdown(
         .brand-subtitle {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             color: #666;
-            font-size: 0.82rem;
+            font-size: 0.68rem;
             margin: 0;
             font-weight: 500;
-            letter-spacing: 0.22rem;
+            letter-spacing: 0.18rem;
             text-transform: uppercase;
+        }
+        div[data-baseweb="select"] span[data-baseweb="tag"] {
+            background: #dff3e4 !important;
+            border: 1px solid #b7dec1 !important;
+            border-radius: 999px !important;
+            color: #2f5d3a !important;
+        }
+        div[data-baseweb="select"] span[data-baseweb="tag"] * {
+            color: #2f5d3a !important;
+        }
+        div[data-baseweb="select"] span[data-baseweb="tag"] svg {
+            fill: #4c7a57 !important;
+        }
+        div[data-baseweb="select"] span[data-baseweb="tag"]:hover {
+            background: #d3edd9 !important;
+            border-color: #a7d2b2 !important;
         }
     </style>
     """,
@@ -556,6 +576,9 @@ README_TEXT = load_readme_text()
 # -------------------------------
 # DOCUMENT PREVIEW FUNCTION
 # -------------------------------
+# Preview processing helpers:
+# These functions support the standalone preview page and also provide extracted
+# text/data reused by Chat, Dashboard, Compare, and CAPL when files are selected.
 def ensure_file_processed(file_name):
     file_info = get_uploaded_file_entry(file_name)
     if not file_info:
@@ -1444,6 +1467,23 @@ def parse_extracted_content(content):
     lines = content.split('\n')
     current_section = None
     current_content = []
+
+    def flush_section():
+        nonlocal current_section, current_content
+        if not current_section:
+            return
+
+        section_type, section_title, section_value = current_section
+        if section_type in ("TEXT", "TABLE"):
+            sections.append((section_type, section_title, '\n'.join(current_content).strip()))
+        else:
+            final_value = section_value
+            if current_content:
+                final_value = '\n'.join(current_content).strip()
+            sections.append((section_type, section_title, final_value))
+
+        current_section = None
+        current_content = []
     
     for line in lines:
         line = line.strip()
@@ -1453,8 +1493,7 @@ def parse_extracted_content(content):
         # Check for section markers
         if line.startswith('TABLE:'):
             # Save previous section
-            if current_section:
-                sections.append(current_section)
+            flush_section()
             
             # Start new table section
             current_section = ("TABLE", "Table Content", "")
@@ -1462,8 +1501,7 @@ def parse_extracted_content(content):
             
         elif line.startswith('[IMAGE:'):
             # Save previous section
-            if current_section:
-                sections.append(current_section)
+            flush_section()
             
             # Add image info
             sections.append(("IMAGE", "Images", line))
@@ -1472,8 +1510,7 @@ def parse_extracted_content(content):
             
         elif line.startswith('[EMBEDDED_IMAGE:'):
             # Save previous section
-            if current_section:
-                sections.append(current_section)
+            flush_section()
             
             # Add embedded image info
             image_info = line.replace('[EMBEDDED_IMAGE: ', '').replace(']', '')
@@ -1483,8 +1520,7 @@ def parse_extracted_content(content):
             
         elif line.startswith('PDF Metadata:') or line.startswith('Document Metadata:') or line.startswith('Meta Tags:') or line.startswith('Title:') or 'Pages:' in line or 'Slides:' in line or 'sheets:' in line:
             # Save previous section
-            if current_section:
-                sections.append(current_section)
+            flush_section()
             
             # Start metadata section
             if 'Metadata:' in line or 'Tags:' in line:
@@ -1497,8 +1533,7 @@ def parse_extracted_content(content):
             
         elif line.startswith('Heading:'):
             # Save previous section
-            if current_section:
-                sections.append(current_section)
+            flush_section()
             
             heading_title = line.replace('Heading:', '', 1).strip()
             current_section = ("TEXT", heading_title or "Heading", "")
@@ -1506,8 +1541,7 @@ def parse_extracted_content(content):
 
         elif line.startswith('Page ') and 'Text:' in line:
             # Save previous section
-            if current_section and current_content:
-                sections.append(current_section)
+            flush_section()
             
             # Start new text section
             current_section = ("TEXT", f"Page {line.split()[1]} Content", "")
@@ -1515,8 +1549,7 @@ def parse_extracted_content(content):
             
         elif line.startswith('Slide ') and ':' in line:
             # Save previous section
-            if current_section and current_content:
-                sections.append(current_section)
+            flush_section()
             
             # Start new slide section
             slide_num = line.split(':')[0]
@@ -1525,8 +1558,7 @@ def parse_extracted_content(content):
             
         elif line.startswith('Sheet ') and ':' in line:
             # Save previous section
-            if current_section and current_content:
-                sections.append(current_section)
+            flush_section()
             
             # Start new sheet section
             sheet_name = line.split(':')[0].replace("'", "")
@@ -1548,12 +1580,7 @@ def parse_extracted_content(content):
             current_content.append(line)
     
     # Save final section
-    if current_section:
-        if current_section[0] == "TEXT" or current_section[0] == "TABLE":
-            content_text = '\n'.join(current_content)
-            sections.append((current_section[0], current_section[1], content_text))
-        else:
-            sections.append(current_section)
+    flush_section()
     
     # If no sections were created but we have content, create a default text section
     if not sections and content.strip():
@@ -1724,7 +1751,9 @@ def render_extracted_assets_preview(file_name, file_entry):
             )
 
 
-# Handle browser tab preview links
+# Preview route handling:
+# If a preview token is present in the query params, the app short-circuits into
+# a dedicated document preview screen instead of rendering the main multi-tab UI.
 preview_file_from_url = None
 query_params = {}
 
@@ -1794,6 +1823,9 @@ if preview_file_from_url:
 # -------------------------------
 # FILE UPLOAD & MANAGEMENT (SIDEBAR)
 # -------------------------------
+# Sidebar area:
+# This block manages login state, file upload/delete, global file selection, and
+# preview launch links. Files selected here become available to the individual tabs.
 with st.sidebar:
     if st.session_state.is_authenticated:
         creator_timestamp = None
@@ -2020,6 +2052,9 @@ with st.sidebar:
 # -------------------------------
 # TEXT EXTRACTION
 # -------------------------------
+# Excel extraction helper:
+# Primarily used by Dashboard previews/charts, but cached so other tabs can reuse
+# the parsed spreadsheet rows without re-reading the uploaded file each rerun.
 @st.cache_data(show_spinner=False)
 def extract_excel_data(file_name, file_bytes):
     data = []
@@ -2044,6 +2079,9 @@ def extract_excel_data(file_name, file_bytes):
 # -------------------------------
 # PROCESS FILES & BUILD VECTOR STORES
 # -------------------------------
+# AI/vector helpers:
+# These are mainly used by the Chat tab for semantic retrieval and LLM answers.
+# They also centralize file preprocessing so each tab can rely on the same cache.
 @st.cache_data(show_spinner=False)
 def create_vector_store(text):
     splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
@@ -2146,6 +2184,9 @@ def get_document_asset_counts(file_name, file_bytes, extracted_text):
     return page_count, image_count, table_count
 
 
+# Chat summary helper:
+# Used only in the Chat tab after summarize/analyze actions to expose extracted
+# images and tables as downloads for the files currently selected in chat.
 def render_chat_summary_downloads():
     downloads = st.session_state.get("chat_summary_downloads", {"images": [], "tables": []})
     image_items = downloads.get("images", [])
@@ -2244,6 +2285,9 @@ def build_detailed_document_summary(file_name, file_bytes, text):
     """
 
 
+# Document structure helpers:
+# Used by the Chat "overview" flow and preview links to identify headings,
+# table-of-contents entries, and likely page numbers inside uploaded documents.
 def extract_page_text(text, page_number=1):
     text = str(text)
     pattern = rf"Page {page_number}\s+Text:\s*(.*?)(?=Page \d+\s+Text:|\Z)"
@@ -2696,6 +2740,9 @@ def extract_test_results_grouped_from_html(file_bytes):
 CREATOR_USERNAME = "Vignesh"
 CREATOR_PASSWORD = "Rider@100"
 
+# Login gate:
+# This runs before the main app tabs are shown. It keeps the creator/user access
+# flow in one place so authentication checks do not have to be repeated per tab.
 if not st.session_state.is_authenticated and "preview_token" not in query_params:
     st.subheader("Login")
     login_username = st.text_input("Username")
@@ -2787,6 +2834,9 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
 # -------------------------------
 # HELPER CHART FUNCTIONS
 # -------------------------------
+# Dashboard chart helpers:
+# These are used by the Dashboard tab when an XLSX/HTML file is selected and the
+# user wants counts shown as bar or pie charts.
 def get_column_counts(data, column):
     counts = defaultdict(int)
     for row in data:
@@ -2815,6 +2865,9 @@ def plot_bar_chart(counts, title, horizontal=False):
 # -------------------------------
 # INLINE MULTI-FILE DIFF (HTML)
 # -------------------------------
+# Compare tab HTML diff helper:
+# Generates the inline visual comparison shown in the Compare tab and also reused
+# from Chat when the user asks to compare multiple selected documents.
 @st.cache_data(show_spinner=False)
 def highlight_multi_file_differences_cached(file_items):
     if len(file_items) < 2:
@@ -2888,6 +2941,9 @@ def highlight_multi_file_differences(file_texts):
 # -------------------------------
 # COMPARE EXCEL HIGHLIGHT
 # -------------------------------
+# Compare tab Excel export helper:
+# Builds the downloadable workbook used in the Compare tab so users can inspect
+# mismatches outside the Streamlit UI.
 @st.cache_data(show_spinner=False)
 def generate_word_level_comparison_excel_cached(file_items):
     wb = openpyxl.Workbook()
@@ -2946,7 +3002,9 @@ def generate_word_level_comparison_excel(file_texts):
 # -------------------------------
 # CAPL Complier
 # -------------------------------
-
+# CAPL analyzer helpers:
+# These functions are used only by the CAPL tab for syntax checking, issue
+# listing, and highlighted code rendering inside the CAPL editor/viewer panels.
 @st.cache_data(show_spinner=False)
 def analyze_capl_code_with_suggestions_cached(code):
     issues = []
@@ -3182,6 +3240,9 @@ def get_combined_vector_store(file_names):
     return st.session_state.vector_stores[selection_key]
 
 
+# Shared UI helpers:
+# These small functions are reused across multiple tabs to show the current
+# sidebar selection, tab-level file context, and floating helper popups.
 def show_current_sidebar_selection():
     selected = st.session_state.get("selected_files", [])
     if selected:
@@ -3391,6 +3452,9 @@ def show_help_popup(tab_name, selected_files):
 # -------------------------------
 # TABS
 # -------------------------------
+# Main application tabs:
+# Each block below owns one visible area of the app. If you want to change a
+# feature, start in the matching tab block and then follow the helper comments above.
 render_status_strip()
 
 # All authenticated users get full panel tabs; content can still be permission-aware.
@@ -3399,6 +3463,9 @@ tab1, tab2, tab3, tab4 = st.tabs(["💬 Chat", "📊 Dashboard", "📂 Compare",
 # -------------------------------
 # TAB 1: CHAT
 # -------------------------------
+# Chat tab:
+# Handles per-tab file selection, direct commands like summarize/find/count,
+# semantic Q&A via vector search, and chat-specific download assets.
 with tab1:
     chat_header_col, chat_reset_col = st.columns([8, 1])
     with chat_header_col:
@@ -3551,6 +3618,9 @@ with tab1:
 # -------------------------------
 # TAB 2: DASHBOARD
 # -------------------------------
+# Dashboard tab:
+# Focused on structured HTML/XLSX analysis, charts, login/stat extraction, and
+# grouped test fixture reporting for uploaded report files.
 with tab2:
     dashboard_header_col, dashboard_reset_col = st.columns([8, 1])
     with dashboard_header_col:
@@ -4091,6 +4161,9 @@ with tab2:
 # -------------------------------
 # TAB 3: COMPARE
 # -------------------------------
+# Compare tab:
+# Lets users pick 2+ selected files, generate inline word-level differences,
+# and download the comparison results as an Excel file.
 with tab3:
     compare_header_col, compare_reset_col = st.columns([8, 1])
     with compare_header_col:
@@ -4160,7 +4233,9 @@ with tab3:
 # -------------------------------
 # TAB 4: CAPL
 # -------------------------------
-
+# CAPL tab:
+# Dedicated to CAPL file selection, live editing, compile/analyze checks, issue
+# reporting, and optional AI-assisted fix generation for CAPL scripts.
 with tab4:
     capl_header_col, capl_reset_col = st.columns([8, 1])
     with capl_header_col:
