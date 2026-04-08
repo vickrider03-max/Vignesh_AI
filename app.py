@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from difflib import SequenceMatcher
 from io import BytesIO
 from pytz import timezone
+import time
 
 import docx, openpyxl, pdfplumber, streamlit as st
 from docx.text.paragraph import Paragraph
@@ -198,17 +199,17 @@ st.markdown(
             background: #ffffff;
             padding: 18px;
             border-radius: 12px;
-            border: 1px solid #f0f2f6;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            border: 1px solid #e2e5ed;
+            box-shadow: 0 2px 6px rgba(30, 64, 175, 0.08);
             text-align: center;
-            transition: all 0.3s ease;
+            transition: all 0.25s ease;
         }
 
         .card-label {
             display: block;
             font-size: 0.75rem;
             font-weight: 600;
-            color: #808495;
+            color: #9ca3af;
             text-transform: uppercase;
             letter-spacing: 0.5px;
             margin-bottom: 8px;
@@ -216,14 +217,14 @@ st.markdown(
 
         .card-value {
             display: block;
-            font-size: 1.15rem;
+            font-size: 1.35rem;
             font-weight: 700;
-            color: #1E88E5;
+            color: #1e40af;
         }
 
         .metric-card:hover {
-            border-color: #1E88E5;
-            box-shadow: 0 4px 12px rgba(30, 136, 229, 0.1);
+            border-color: #1e40af;
+            box-shadow: 0 6px 18px rgba(30, 64, 175, 0.12);
         }
             font-weight: 600;
             line-height: 1.1;
@@ -436,6 +437,8 @@ if "llm_task" not in st.session_state:
     st.session_state.llm_task = None
 if "user_session_start_time" not in st.session_state:
     st.session_state.user_session_start_time = None
+if "start_time" not in st.session_state:
+    st.session_state.start_time = None
 if "active_main_tab" not in st.session_state:
     st.session_state.active_main_tab = "💬 Chat"
 
@@ -2839,6 +2842,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             st.session_state.logged_in_username = cleaned_username
             st.session_state.user_role = "creator"
             st.session_state.user_session_start_time = datetime.now().isoformat()
+            st.session_state.start_time = time.time()
             ist_tz = timezone('Asia/Kolkata')
             ist_time = datetime.now(ist_tz).strftime("%Y-%m-%d %H:%M:%S %Z")
             st.session_state.login_history.append({
@@ -2869,6 +2873,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             st.session_state.logged_in_username = cleaned_username
             st.session_state.user_role = "user"
             st.session_state.user_session_start_time = datetime.now().isoformat()
+            st.session_state.start_time = time.time()
             ist_tz = timezone('Asia/Kolkata')
             ist_time = datetime.now(ist_tz).strftime("%Y-%m-%d %H:%M:%S %Z")
             st.session_state.login_history.append({
@@ -3403,21 +3408,17 @@ def render_status_strip():
     if not st.session_state.get("is_authenticated"):
         return
 
+    placeholder = st.empty()
     available_files = st.session_state.get("selected_files", [])
-    role = st.session_state.get("user_role") or "-"
-    username = st.session_state.get("logged_in_username") or "-"
-    session_start = st.session_state.get("user_session_start_time")
+    role = st.session_state.get("user_role") or "User"
+    username = st.session_state.get("logged_in_username") or "Vignesh"
+    start_time = st.session_state.get("start_time")
 
-    if isinstance(session_start, str):
-        try:
-            session_start = datetime.fromisoformat(session_start)
-        except ValueError:
-            session_start = None
+    if start_time is None:
+        start_time = time.time()
+        st.session_state.start_time = start_time
 
-    elapsed_seconds = 0
-    if isinstance(session_start, datetime):
-        elapsed_seconds = max(0, int((datetime.now() - session_start).total_seconds()))
-
+    elapsed_seconds = max(0, int(time.time() - start_time))
     status_value = f"{elapsed_seconds // 3600:02d}:{(elapsed_seconds % 3600) // 60:02d}:{elapsed_seconds % 60:02d}"
 
     status_html = f"""
@@ -3439,9 +3440,6 @@ def render_status_strip():
             <span id="usage-time-value" class="card-value">{html.escape(status_value)}</span>
         </div>
     </div>
-    """
-
-    status_html += f"""
     <script>
         const timerEl = document.getElementById("usage-time-value");
         let elapsedSeconds = {elapsed_seconds};
@@ -3462,7 +3460,7 @@ def render_status_strip():
     </script>
     """
 
-    st.components.v1.html(status_html, height=132)
+    placeholder.html(status_html, height=132, unsafe_allow_html=True)
 
 
 def render_file_context_card(title, available_files, active_files=None):
