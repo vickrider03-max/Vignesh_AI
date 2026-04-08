@@ -3460,7 +3460,7 @@ def render_status_strip():
     </script>
     """
 
-    placeholder.html(status_html, height=132, unsafe_allow_html=True)
+    placeholder.html(status_html, height=132)
 
 
 def render_file_context_card(title, available_files, active_files=None):
