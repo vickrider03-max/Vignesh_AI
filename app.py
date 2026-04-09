@@ -747,37 +747,47 @@ def apply_theme():
 # Apply theme
 apply_theme()
 
-# === HEADER WITH INTEGRATED LOGO & DARK MODE TOGGLE ===
-header_cols = st.columns([0.5, 3, 0.5, 1])
+# === HEADER WITH INTEGRATED LOGO & DARK MODE TOGGLE - ONLY SHOW AFTER LOGIN ===
+if st.session_state.is_authenticated:
+    header_cols = st.columns([0.5, 3, 0.5, 1])
 
-with header_cols[0]:
-    st.markdown(
-        """
-        <div style="text-align: center; padding: 8px;">
-            <div style="font-size: 40px; animation: spin 20s linear infinite;">🧠</div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+    with header_cols[0]:
+        if logo_data:
+            st.markdown(
+                f"""
+                <div style="text-align: center; padding: 8px;">
+                    <img src="data:image/gif;base64,{logo_data}" style="width: 50px; height: 50px; animation: spin 20s linear infinite;">
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                """
+                <div style="text-align: center; padding: 8px;">
+                    <div style="font-size: 40px; animation: spin 20s linear infinite;">🧠</div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
-with header_cols[1]:
-    st.markdown(
-        f"""
-        <div class="brand-hero" style="gap: 2px;">
-            <h1 class="brand-title">🧠 IntelliDoc AI</h1>
-            <p class="brand-subtitle">Smart Document Assistant</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    with header_cols[1]:
+        st.markdown(
+            f"""
+            <div class="brand-hero" style="gap: 2px;">
+                <h1 class="brand-title">IntelliDoc AI</h1>
+                <p class="brand-subtitle">Smart Document Assistant</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-with header_cols[2]:
-    if st.button("🌙" if not st.session_state.dark_mode else "☀️", key="theme_toggle", help="Toggle Dark Mode"):
-        toggle_dark_mode()
-        st.rerun()
+    with header_cols[2]:
+        if st.button("🌙" if not st.session_state.dark_mode else "☀️", key="theme_toggle", help="Toggle Dark Mode"):
+            toggle_dark_mode()
+            st.rerun()
 
-with header_cols[3]:
-    if st.session_state.is_authenticated:
+    with header_cols[3]:
         creator_timestamp = None
         if st.session_state.user_role == "creator" and st.session_state.login_history:
             creator_entries = [
@@ -828,9 +838,8 @@ with header_cols[3]:
             st.success("Logged out successfully.")
             st.rerun()
 
-st.divider()
+    st.divider()
 
-if st.session_state.is_authenticated:
     if not st.session_state.get('welcome_shown', False):
         st.toast(f"🎉 Welcome back, {st.session_state.logged_in_username}! We're thrilled to have you here.", icon="🎉")
         st.session_state.welcome_shown = True
@@ -2365,21 +2374,32 @@ if preview_file_from_url:
 # Sidebar area:
 # This block manages login state, file upload/delete, global file selection, and
 # preview launch links. Files selected here become available to the individual tabs.
-with st.sidebar:
-    # === SIDEBAR LOGO ===
-    st.markdown(
-        """
-        <div class="sidebar-logo">
-            <div style="font-size: 32px;">🧠</div>
-            <h3>IntelliDoc</h3>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-    
-    st.divider()
-    
-    if st.session_state.is_authenticated:
+# NOTE: Entire sidebar is hidden before authentication for clean login flow
+if st.session_state.is_authenticated:
+    with st.sidebar:
+        # === SIDEBAR LOGO WITH MERCEDES ===
+        if logo_data:
+            st.markdown(
+                f"""
+                <div class="sidebar-logo">
+                    <img src="data:image/gif;base64,{logo_data}" style="width: 40px; height: 40px; animation: spin 20s linear infinite; margin-right: 10px;">
+                    <h3>IntelliDoc</h3>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                """
+                <div class="sidebar-logo">
+                    <div style="font-size: 32px;">🧠</div>
+                    <h3>IntelliDoc</h3>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        
+        st.divider()
         creator_timestamp = None
         if st.session_state.user_role == "creator" and st.session_state.login_history:
             creator_entries = [
