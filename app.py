@@ -9,6 +9,7 @@ from pytz import timezone
 import time
 
 import docx, openpyxl, pdfplumber, streamlit as st
+import streamlit.components.v1 as components
 from docx.text.paragraph import Paragraph
 from docx.table import Table
 import pandas as pd
@@ -427,9 +428,10 @@ def render_status_strip():
     if not st.session_state.get("is_authenticated"):
         return
 
+    # Get current elapsed time
     if 'start_time' not in st.session_state or st.session_state.start_time is None:
         st.session_state.start_time = time.time()
-
+    
     elapsed = int(time.time() - st.session_state.start_time)
     hours, rem = divmod(elapsed, 3600)
     mins, secs = divmod(rem, 60)
@@ -439,42 +441,73 @@ def render_status_strip():
     role = st.session_state.get("user_role") or "User"
     available_files = len(st.session_state.get("selected_files", []))
 
+    # Create a placeholder for the live timer
+    timer_placeholder = st.empty()
+    
+    # JavaScript for live timer
+    live_timer_js = f"""
+    <script>
+        // Get the start time from Python
+        var startTime = {st.session_state.start_time * 1000}; // Convert to milliseconds
+        
+        function updateTimer() {{
+            var now = new Date().getTime();
+            var elapsed = Math.floor((now - startTime) / 1000);
+            
+            var hours = Math.floor(elapsed / 3600);
+            var minutes = Math.floor((elapsed % 3600) / 60);
+            var seconds = elapsed % 60;
+            
+            var timerStr = 
+                hours.toString().padStart(2, '0') + ':' +
+                minutes.toString().padStart(2, '0') + ':' +
+                seconds.toString().padStart(2, '0');
+            
+            // Update the timer display
+            var timerElement = document.getElementById('live-timer');
+            if (timerElement) {{
+                timerElement.textContent = timerStr;
+            }}
+        }}
+        
+        // Update immediately and then every second
+        updateTimer();
+        setInterval(updateTimer, 1000);
+    </script>
+    """
+
     status_html = f"""
+    {live_timer_js}
     <div class="dashboard-grid">
-        <div class="metric-card">
-            <span class="card-label">User</span>
-            <span class="card-value">{html.escape(username)}</span>
+        <div class="metric-card" style="background: linear-gradient(135deg, #e8eaf6 0%, #c5cae9 100%); color: #3c4f7e; border: 1px solid #e8eaf6;">
+            <span class="card-label" style="color: #666;">👤 User</span>
+            <span class="card-value" style="color: #3c4f7e;">{html.escape(username)}</span>
         </div>
-        <div class="metric-card">
-            <span class="card-label">Role</span>
-            <span class="card-value">{html.escape(str(role).title())}</span>
+        <div class="metric-card" style="background: linear-gradient(135deg, #fce4ec 0%, #f8bbd9 100%); color: #7b1fa2; border: 1px solid #fce4ec;">
+            <span class="card-label" style="color: #666;">🔑 Role</span>
+            <span class="card-value" style="color: #7b1fa2;">{html.escape(str(role).title())}</span>
         </div>
-        <div class="metric-card">
-            <span class="card-label">Available Files</span>
-            <span class="card-value">{available_files}</span>
+        <div class="metric-card" style="background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); color: #1565c0; border: 1px solid #e3f2fd;">
+            <span class="card-label" style="color: #666;">📁 Available Files</span>
+            <span class="card-value" style="color: #1565c0;">{available_files}</span>
         </div>
-        <div class="metric-card">
-            <span class="card-label">Usage Time</span>
-            <span class="card-value">{timer_str}</span>
+        <div class="metric-card" style="background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%); color: #2e7d32; border: 1px solid #e8f5e8;">
+            <span class="card-label" style="color: #666;">⏱️ Usage Time</span>
+            <span class="card-value" id="live-timer" style="color: #2e7d32; font-family: 'Courier New', monospace;">{timer_str}</span>
         </div>
     </div>
     """
 
-    st.markdown(status_html, unsafe_allow_html=True)
+    components.html(status_html, height=145)
 
 # ============================================
 # SIMPLE HEADER
 # ============================================
 if st.session_state.is_authenticated:
-    col1, col2, col3 = st.columns([2, 3, 1])
+    col1, col2, col3 = st.columns([1, 3, 1])
     
     with col1:
-        if logo_data:
-            st.markdown(
-                f'<img src="data:image/gif;base64,{logo_data}" style="width: 50px; height: 50px;">',
-                unsafe_allow_html=True,
-            )
-            st.markdown('<div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Mercedes-Benz</div>', unsafe_allow_html=True)
+        st.write("")  # Empty column for spacing
     
     with col2:
         st.markdown("### 🧠 IntelliDoc AI")
@@ -516,10 +549,14 @@ else:
     with col1:
         if logo_data:
             st.markdown(
-                f'<img src="data:image/gif;base64,{logo_data}" style="width: 50px; height: 50px;">',
+                f'''
+                <div style="text-align: left;">
+                    <img src="data:image/gif;base64,{logo_data}" style="width: 50px; height: 50px;">
+                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px; font-weight: 500;">Mercedes-Benz</div>
+                </div>
+                ''',
                 unsafe_allow_html=True,
             )
-            st.markdown('<div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Mercedes-Benz</div>', unsafe_allow_html=True)
     with col2:
         st.markdown("### 🧠 IntelliDoc AI– Smart Document Assistant")
 
@@ -588,7 +625,7 @@ if "active_main_tab" not in st.session_state:
 # Load README.txt from file system
 def load_readme_text():
     """Load README from file if it exists, otherwise use default"""
-    readme_path = "README.txt"
+    readme_path = os.path.join(os.path.dirname(__file__), "README.txt")
     if os.path.exists(readme_path):
         try:
             with open(readme_path, "r", encoding="utf-8", errors="ignore") as f:
@@ -797,6 +834,11 @@ For support or feedback, contact vigneshs075@gmail.com.
 """
 
 README_TEXT = load_readme_text()
+
+def render_readme_help_panel(expanded=False):
+    """Render the README as a collapsible help panel."""
+    with st.expander("Help & README", expanded=expanded):
+        st.markdown(README_TEXT)
 
 # -------------------------------
 # DOCUMENT PREVIEW FUNCTION
@@ -2137,7 +2179,12 @@ with st.sidebar:
         # Mercedes Logo in Sidebar
         if logo_data:
             st.markdown(
-                f'<div style="text-align: center; margin-bottom: 20px;"><img src="data:image/gif;base64,{logo_data}" style="width: 40px; height: 40px;"></div>',
+                f'''
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <img src="data:image/gif;base64,{logo_data}" style="width: 40px; height: 40px;">
+                    <div style="font-size: 10px; color: var(--text-secondary); margin-top: 4px; font-weight: 500;">Mercedes-Benz</div>
+                </div>
+                ''',
                 unsafe_allow_html=True,
             )
         
@@ -2977,7 +3024,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         st.write("")
 
     st.markdown("### Read Me First")
-    st.text_area("README", value=README_TEXT, height=360, disabled=True)
+    render_readme_help_panel(expanded=False)
 
     if access_clicked:
         if not has_read_readme:
