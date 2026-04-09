@@ -9,7 +9,6 @@ from pytz import timezone
 import time
 
 import docx, openpyxl, pdfplumber, streamlit as st
-import streamlit.components.v1 as components
 from docx.text.paragraph import Paragraph
 from docx.table import Table
 import pandas as pd
@@ -447,53 +446,37 @@ def render_status_strip():
     # JavaScript for live timer
     live_timer_js = f"""
     <script>
-        (function() {{
-            'use strict';
+        // Get the start time from Python
+        var startTime = {st.session_state.start_time * 1000}; // Convert to milliseconds
+        
+        function updateTimer() {{
+            var now = new Date().getTime();
+            var elapsed = Math.floor((now - startTime) / 1000);
             
-            // Get the start time from Python
-            var startTime = {st.session_state.start_time * 1000}; // Convert to milliseconds
+            var hours = Math.floor(elapsed / 3600);
+            var minutes = Math.floor((elapsed % 3600) / 60);
+            var seconds = elapsed % 60;
             
-            function updateTimer() {{
-                try {{
-                    var now = new Date().getTime();
-                    var elapsed = Math.floor((now - startTime) / 1000);
-                    
-                    var hours = Math.floor(elapsed / 3600);
-                    var minutes = Math.floor((elapsed % 3600) / 60);
-                    var seconds = elapsed % 60;
-                    
-                    var timerStr = 
-                        hours.toString().padStart(2, '0') + ':' +
-                        minutes.toString().padStart(2, '0') + ':' +
-                        seconds.toString().padStart(2, '0');
-                    
-                    // Update the timer display
-                    var timerElement = document.getElementById('live-timer');
-                    if (timerElement) {{
-                        timerElement.textContent = timerStr;
-                    }}
-                }} catch (e) {{
-                    console.error('Timer update error:', e);
-                }}
+            var timerStr = 
+                hours.toString().padStart(2, '0') + ':' +
+                minutes.toString().padStart(2, '0') + ':' +
+                seconds.toString().padStart(2, '0');
+            
+            // Update the timer display
+            var timerElement = document.getElementById('live-timer');
+            if (timerElement) {{
+                timerElement.textContent = timerStr;
             }}
-            
-            // Start updating immediately
-            updateTimer();
-            
-            // Update every second
-            setInterval(updateTimer, 1000);
-            
-            // Also update on page visibility change (when user comes back to tab)
-            document.addEventListener('visibilitychange', function() {{
-                if (!document.hidden) {{
-                    updateTimer();
-                }}
-            }});
-        }})();
+        }}
+        
+        // Update immediately and then every second
+        updateTimer();
+        setInterval(updateTimer, 1000);
     </script>
     """
 
     status_html = f"""
+    {live_timer_js}
     <div class="dashboard-grid">
         <div class="metric-card" style="background: linear-gradient(135deg, #e8eaf6 0%, #c5cae9 100%); color: #3c4f7e; border: 1px solid #e8eaf6;">
             <span class="card-label" style="color: #666;">👤 User</span>
@@ -514,8 +497,7 @@ def render_status_strip():
     </div>
     """
 
-    # Use components.html for better JavaScript execution
-    components.html(status_html + live_timer_js, height=200)
+    st.markdown(status_html, unsafe_allow_html=True)
 
 # ============================================
 # SIMPLE HEADER
@@ -650,84 +632,164 @@ def load_readme_text():
         except Exception as e:
             st.warning(f"Could not load README.txt: {e}")
     # Return default README if file not found
-    return """# 🧠 IntelliDoc AI – Smart Document Assistant
+    return """README.txt
+==========
 
-![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
-![Streamlit](https://img.shields.io/badge/Framework-Streamlit-red.svg)
-![AI](https://img.shields.io/badge/AI-RAG%20%7C%20LLM-green.svg)
-![License](https://img.shields.io/badge/License-MIT-yellow.svg)
+Multi-Utility File & CAPL Analyzer Tool
+=======================================
 
----
-
-## 🚀 Overview
-
-**IntelliDoc AI** is a powerful **multi-utility document analyzer** built with Streamlit.  
-It enables users to **upload, analyze, compare, and interact with files using AI**, along with specialized support for **CAPL script analysis and auto-fixing**.
+Overview
+--------
+This Streamlit-based application helps manage, analyze, and compare files, with special support for CAPL scripts. It combines file dashboards, comparisons, CAPL analysis, and AI-assisted code fixing in a single platform.
 
 ---
 
-## 🧩 Features
+App Layout & Workflow
+---------------------
 
-### 📂 File Management
-- Upload multiple formats:
-  `PDF, DOCX, PPTX, XLSX, TXT, HTML, CAPL (.can)`
-- Multi-file selection & filtering
-- Persistent preview system
++----------------------+
+| Sidebar              |
+|----------------------|
+| Upload Files         |
+| Select Files         |
+| Filter CAPL (.can)   |
++----------------------+
+          |
+          v
++------------------------------------------+
+| Main Tabs:                               |
+|------------------------------------------|
+| [ Chat ] [ Dashboard ] [ Compare ] [ CAPL ] |
++------------------------------------------+
+
+Tab Workflow:
+-------------
+
+1. Chat Tab
+   +-----------------------------+
+   | Ask questions about files   |
+   | Semantic / AI answers       |
+   +-----------------------------+
+          |
+          v
+   (Uses uploaded files & AI backend)
+
+2. Dashboard Tab
+   +------------------------------+
+   | Select a file from sidebar   |
+   | Visualize trends (Excel/CSV) |
+   | Aggregated stats             |
+   +------------------------------+
+          |
+          v
+   (Optional download of analyzed results)
+
+3. Compare Tab
+   +--------------------------------+
+   | Multi-file selection           |
+   | Inline word-level differences  |
+   | Download comparison Excel      |
+   +--------------------------------+
+          |
+          v
+   (At least 2 files required)
+
+4. CAPL Tab
+   +-------------------------------------------+
+   | Select existing CAPL file or create new   |
+   | Compile & analyze code                    |
+   | View issues / suggestions                 |
+   | AI-assisted fix / Apply fix / Save file   |
+   +-------------------------------------------+
+          |
+          v
+   (Updates session state & file texts)
 
 ---
 
-### 🔍 Smart Document Preview
-- Open preview in new tab
-- Keyword highlighting
-- Page-level PDF preview
-- Extract:
-  - Text
-  - Tables
-  - Images
-  - Metadata
+Feature Summary
+---------------
+
+1. Chat / RAG Interface
+   - Ask questions about selected files.
+   - Context-aware AI responses.
+
+2. File Dashboard
+   - Test report analysis and visualization.
+   - Downloadable Excel summaries.
+
+3. Compare Files
+   - Multi-file comparison.
+   - Inline word-level differences.
+   - Downloadable Excel comparison.
+
+4. CAPL Compiler & Analyzer
+   - Upload or create CAPL scripts (.can/.txt).
+   - Syntax highlighting & code analysis.
+   - AI-assisted code fixes.
+   - Save new or corrected CAPL files.
+
+5. Interactive UI
+   - Tabs for workflows.
+   - Reset buttons for selections and results.
+   - Expandable live editor for CAPL scripts.
+
+6. AI Integration
+   - Auto-correct CAPL code.
+   - Chat-based file analysis.
+
+7. Session Management
+   - Tracks uploaded files and selected files per tab.
+   - Maintains last analyzed CAPL file and issues.
 
 ---
 
-### 🧠 AI Chat (RAG System)
-- Ask questions about uploaded files
-- Context-aware responses
-- Multi-file semantic understanding
-- Powered by:
-  - FAISS (vector DB)
-  - HuggingFace models
+How to Use
+----------
+
+1. Setup
+   - Python >= 3.10
+   - Install dependencies:
+     pip install streamlit openai pandas plotly
+   - Configure AI backend / API keys if using AI features.
+
+2. Run
+   - streamlit run app.py
+
+3. Sidebar
+   - Upload files.
+   - Select files to be available in tabs.
+   - Optionally filter CAPL scripts.
+
+4. Tabs
+   - Chat: Ask questions about uploaded files.
+   - Dashboard: Visualize file content, trends, and statistics.
+   - Compare: Choose 2+ files and see word-level differences.
+   - CAPL: Edit, compile, analyze CAPL scripts, AI fixes, save.
+
+5. CAPL AI Fix
+   - Click "Suggest Fix" -> review AI suggestion -> click "Use Suggested Fix".
+
+6. Reset Buttons
+   - Clear selections and results in each tab.
 
 ---
 
-### 📊 Dashboard & Analytics
-- Excel/CSV visualization
-- Trends & statistics
-- Interactive charts (Plotly)
-- Export insights
+Tips & Notes
+------------
+
+- Limit comparisons to <2000 lines for performance.
+- CAPL files must end with .can.
+- AI features require backend availability.
+- Use "Include all .txt files as CAPL" cautiously.
 
 ---
 
-### 🔄 File Comparison
-- Compare 2+ files
-- Word-level diff
-- Inline visual comparison
-- Export results to Excel
+ASCII Workflow Example
+----------------------
 
----
-
-### 🚗 CAPL Script Analyzer
-- Upload or create `.can` files
-- Built-in CAPL editor
-- Code analysis & issue detection
-- Suggestions & improvements
-
----
-
-### 🤖 AI CAPL Auto-Fix
-```text
-Analyze → Suggest Fix → Apply Fix → Save
-
-🧭 Application Flow
 Sidebar:
+--------
 +----------------------+
 | Upload Files         |
 | Select Files         |
@@ -735,38 +797,39 @@ Sidebar:
 +----------------------+
 
 Tabs:
-[ Chat ] → AI Q&A  
-[ Dashboard ] → Analytics  
-[ Compare ] → Diff  
-[ CAPL ] → Editor + AI Fix  
+-----
+[ Chat ] -> AI Q&A using uploaded files
+[ Dashboard ] -> File stats & trends -> Excel download
+[ Compare ] -> Multi-file diff -> HTML + Excel
+[ CAPL ] -> Edit/Compile/Analyze -> AI Fix -> Save
 
-🛠️ CAPL Workflow
-Create/Edit Script
-        ↓
-Analyze Code
-        ↓
-AI Suggest Fix?
-    ↓        ↓
-   Yes       No
-    ↓         ↓
-Apply Fix    Save
-    ↓
-Update Editor
+CAPL AI Flow:
+-------------
+Create/Edit CAPL
+    |
+    v
+Compile & Analyze
+    |
+    v
+AI Suggest Fix? -- Yes --> Review & Apply --> Update Editor
+    |
+    No
+    v
+Save CAPL Script
 
+---
 
-⚠️ Notes
-CAPL files must use .can extension
-AI features require configured models/API
-Limit large file comparisons for better performance
+Credits
+-------
+- Built with Streamlit, Pandas, Plotly, OpenAI API
+- CAPL analysis inspired by automotive testing
+- AI auto-fix powered by LLMs
 
-🙌 Credits
-Built with ❤️ using Streamlit
-AI powered by HuggingFace + LangChain
-Visualization via Plotly
+---
 
-
-📧 Contact
-📩 vigneshs075@gmail.com
+Contact
+-------
+For support or feedback, contact vigneshs075@gmail.com.
 """
 
 README_TEXT = load_readme_text()
@@ -2954,8 +3017,8 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
     with col2:
         st.write("")
 
-    with st.expander("📖 Read Me First (Click to expand)", expanded=False):
-        st.markdown(README_TEXT)
+    st.markdown("### Read Me First")
+    st.text_area("README", value=README_TEXT, height=360, disabled=True)
 
     if access_clicked:
         if not has_read_readme:
