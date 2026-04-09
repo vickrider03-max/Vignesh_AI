@@ -173,19 +173,9 @@ st.markdown(
             --success: #10b981;
             --warning: #f59e0b;
             --error: #ef4444;
-        }
-        
-        [data-theme="dark"] {
-            --primary: #3b82f6;
-            --secondary: #94a3b8;
-            --background: #0f172a;
-            --surface: #1e293b;
-            --text: #f1f5f9;
-            --text-secondary: #cbd5e1;
-            --border: #334155;
-            --success: #34d399;
-            --warning: #fbbf24;
-            --error: #f87171;
+            --button-bg: #1f4f91;
+            --button-hover: #153e75;
+            --button-text: #ffffff;
         }
         
         body {
@@ -240,6 +230,66 @@ st.markdown(
             margin: 20px auto;
         }
         
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        .loading-content {
+            text-align: center;
+            padding: 2rem;
+            background: var(--surface);
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            animation: slideUp 0.4s ease;
+        }
+        
+        .loading-dots {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--primary);
+            animation: bounce 1.4s ease-in-out infinite both;
+            margin: 0 2px;
+        }
+        
+        .loading-dots:nth-child(1) { animation-delay: -0.32s; }
+        .loading-dots:nth-child(2) { animation-delay: -0.16s; }
+        
+        /* Button styling */
+        .stButton > button {
+            background: var(--button-bg) !important;
+            color: var(--button-text) !important;
+            border: none !important;
+            border-radius: 6px !important;
+            padding: 0.5rem 1rem !important;
+            font-weight: 500 !important;
+            transition: all 0.2s ease !important;
+            box-shadow: 0 2px 4px rgba(31, 79, 145, 0.2) !important;
+        }
+        
+        .stButton > button:hover {
+            background: var(--button-hover) !important;
+            transform: translateY(-1px) !important;
+            box-shadow: 0 4px 8px rgba(31, 79, 145, 0.3) !important;
+        }
+        
+        .stButton > button:active {
+            transform: translateY(0) !important;
+            box-shadow: 0 2px 4px rgba(31, 79, 145, 0.2) !important;
+        }
+        
+        /* Animations */
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
@@ -250,8 +300,99 @@ st.markdown(
             to { opacity: 1; transform: translateY(0); }
         }
         
+        @keyframes slideUp {
+            from { 
+                opacity: 0; 
+                transform: translateY(20px); 
+            }
+            to { 
+                opacity: 1; 
+                transform: translateY(0); 
+            }
+        }
+        
+        @keyframes bounce {
+            0%, 80%, 100% { 
+                transform: scale(0);
+                opacity: 0.5;
+            } 
+            40% { 
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        @keyframes slideInLeft {
+            from { 
+                opacity: 0; 
+                transform: translateX(-30px); 
+            }
+            to { 
+                opacity: 1; 
+                transform: translateX(0); 
+            }
+        }
+        
+        @keyframes slideInRight {
+            from { 
+                opacity: 0; 
+                transform: translateX(30px); 
+            }
+            to { 
+                opacity: 1; 
+                transform: translateX(0); 
+            }
+        }
+        
+        @keyframes glow {
+            0% { box-shadow: 0 0 5px rgba(31, 79, 145, 0.3); }
+            50% { box-shadow: 0 0 20px rgba(31, 79, 145, 0.6); }
+            100% { box-shadow: 0 0 5px rgba(31, 79, 145, 0.3); }
+        }
+        
+        @keyframes wiggle {
+            0%, 100% { transform: rotate(0deg); }
+            25% { transform: rotate(-3deg); }
+            75% { transform: rotate(3deg); }
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+        
         .fade-in {
             animation: fadeIn 0.5s ease-out;
+        }
+        
+        .slide-in-left {
+            animation: slideInLeft 0.6s ease-out;
+        }
+        
+        .slide-in-right {
+            animation: slideInRight 0.6s ease-out;
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        .glow {
+            animation: glow 3s infinite;
+        }
+        
+        .wiggle {
+            animation: wiggle 1s ease-in-out;
+        }
+        
+        .float {
+            animation: float 3s ease-in-out infinite;
         }
         
         @media (max-width: 768px) {
@@ -280,43 +421,6 @@ for key, default_value in [
 ]:
     if key not in st.session_state:
         st.session_state[key] = default_value
-
-# Add dark mode state if missing
-if "dark_mode" not in st.session_state:
-    st.session_state.dark_mode = False
-
-
-# ============================================
-# SIMPLE UI UTILITY FUNCTIONS
-# ============================================
-
-def toggle_dark_mode():
-    """Toggle dark mode on/off"""
-    st.session_state.dark_mode = not st.session_state.dark_mode
-    apply_theme()
-    st.rerun()
-
-
-def apply_theme():
-    """Apply theme to UI"""
-    theme = "dark" if st.session_state.dark_mode else "light"
-    theme_script = f"""
-    <script>
-        document.documentElement.setAttribute('data-theme', '{theme}');
-    </script>
-    """
-    st.markdown(theme_script, unsafe_allow_html=True)
-
-
-def render_loading_spinner(message="Loading..."):
-    """Render an animated loading spinner"""
-    spinner_html = f"""
-    <div style="text-align: center; padding: 40px;">
-        <div class="spinner"></div>
-        <p style="margin-top: 20px; color: var(--text-secondary);">{message}</p>
-    </div>
-    """
-    st.markdown(spinner_html, unsafe_allow_html=True)
 
 
 def render_status_strip():
@@ -370,15 +474,34 @@ if st.session_state.is_authenticated:
                 f'<img src="data:image/gif;base64,{logo_data}" style="width: 50px; height: 50px;">',
                 unsafe_allow_html=True,
             )
+            st.markdown('<div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Mercedes-Benz</div>', unsafe_allow_html=True)
     
     with col2:
         st.markdown("### 🧠 IntelliDoc AI")
         st.markdown("*Smart Document Assistant*")
     
     with col3:
-        if st.button("🌙" if not st.session_state.dark_mode else "☀️"):
-            toggle_dark_mode()
-        apply_theme()
+        if st.button("🚪 Logout", use_container_width=True):
+            active_file = "active_users.json"
+            if os.path.exists(active_file):
+                with open(active_file, "r") as f:
+                    active_users = json.load(f)
+                active_users = [u for u in active_users if u["username"] != st.session_state.logged_in_username]
+                with open(active_file, "w") as f:
+                    json.dump(active_users, f)
+            st.session_state.is_authenticated = False
+            st.session_state.logged_in_username = ""
+            st.session_state.user_role = None
+            st.session_state.user_session_start_time = None
+            st.session_state.selected_files = []
+            st.session_state.file_texts = {}
+            st.session_state.vector_stores = {}
+            st.session_state.chat_file_selection = []
+            st.session_state.chat_summary_downloads = {"images": [], "tables": []}
+            st.session_state.messages = []
+            st.session_state.welcome_shown = False
+            st.success("Logged out successfully.")
+            st.rerun()
     
     st.divider()
     
@@ -388,6 +511,7 @@ if st.session_state.is_authenticated:
 
     render_status_strip()
 else:
+    # Login page header
     col1, col2 = st.columns([1, 3])
     with col1:
         if logo_data:
@@ -395,10 +519,9 @@ else:
                 f'<img src="data:image/gif;base64,{logo_data}" style="width: 50px; height: 50px;">',
                 unsafe_allow_html=True,
             )
+            st.markdown('<div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Mercedes-Benz</div>', unsafe_allow_html=True)
     with col2:
-        if st.button("🌙" if not st.session_state.dark_mode else "☀️"):
-            toggle_dark_mode()
-        apply_theme()
+        st.markdown("### 🧠 IntelliDoc AI– Smart Document Assistant")
 
 # -------------------------------
 # SESSION STATE INITIALIZATION
