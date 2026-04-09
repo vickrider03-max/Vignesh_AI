@@ -427,9 +427,10 @@ def render_status_strip():
     if not st.session_state.get("is_authenticated"):
         return
 
+    # Get current elapsed time
     if 'start_time' not in st.session_state or st.session_state.start_time is None:
         st.session_state.start_time = time.time()
-
+    
     elapsed = int(time.time() - st.session_state.start_time)
     hours, rem = divmod(elapsed, 3600)
     mins, secs = divmod(rem, 60)
@@ -439,23 +440,59 @@ def render_status_strip():
     role = st.session_state.get("user_role") or "User"
     available_files = len(st.session_state.get("selected_files", []))
 
+    # Create a placeholder for the live timer
+    timer_placeholder = st.empty()
+    
+    # JavaScript for live timer
+    live_timer_js = f"""
+    <script>
+        // Get the start time from Python
+        var startTime = {st.session_state.start_time * 1000}; // Convert to milliseconds
+        
+        function updateTimer() {{
+            var now = new Date().getTime();
+            var elapsed = Math.floor((now - startTime) / 1000);
+            
+            var hours = Math.floor(elapsed / 3600);
+            var minutes = Math.floor((elapsed % 3600) / 60);
+            var seconds = elapsed % 60;
+            
+            var timerStr = 
+                hours.toString().padStart(2, '0') + ':' +
+                minutes.toString().padStart(2, '0') + ':' +
+                seconds.toString().padStart(2, '0');
+            
+            // Update the timer display
+            var timerElement = document.getElementById('live-timer');
+            if (timerElement) {{
+                timerElement.textContent = timerStr;
+            }}
+        }}
+        
+        // Update immediately and then every second
+        updateTimer();
+        setInterval(updateTimer, 1000);
+    </script>
+    """
+
     status_html = f"""
+    {live_timer_js}
     <div class="dashboard-grid">
-        <div class="metric-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
-            <span class="card-label" style="color: rgba(255,255,255,0.8);">👤 User</span>
-            <span class="card-value" style="color: white;">{html.escape(username)}</span>
+        <div class="metric-card" style="background: linear-gradient(135deg, #e8eaf6 0%, #c5cae9 100%); color: #3c4f7e; border: 1px solid #e8eaf6;">
+            <span class="card-label" style="color: #666;">👤 User</span>
+            <span class="card-value" style="color: #3c4f7e;">{html.escape(username)}</span>
         </div>
-        <div class="metric-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white;">
-            <span class="card-label" style="color: rgba(255,255,255,0.8);">🔑 Role</span>
-            <span class="card-value" style="color: white;">{html.escape(str(role).title())}</span>
+        <div class="metric-card" style="background: linear-gradient(135deg, #fce4ec 0%, #f8bbd9 100%); color: #7b1fa2; border: 1px solid #fce4ec;">
+            <span class="card-label" style="color: #666;">🔑 Role</span>
+            <span class="card-value" style="color: #7b1fa2;">{html.escape(str(role).title())}</span>
         </div>
-        <div class="metric-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white;">
-            <span class="card-label" style="color: rgba(255,255,255,0.8);">📁 Available Files</span>
-            <span class="card-value" style="color: white;">{available_files}</span>
+        <div class="metric-card" style="background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); color: #1565c0; border: 1px solid #e3f2fd;">
+            <span class="card-label" style="color: #666;">📁 Available Files</span>
+            <span class="card-value" style="color: #1565c0;">{available_files}</span>
         </div>
-        <div class="metric-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); color: white;">
-            <span class="card-label" style="color: rgba(255,255,255,0.8);">⏱️ Usage Time</span>
-            <span class="card-value" style="color: white; font-family: 'Courier New', monospace;">{timer_str}</span>
+        <div class="metric-card" style="background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%); color: #2e7d32; border: 1px solid #e8f5e8;">
+            <span class="card-label" style="color: #666;">⏱️ Usage Time</span>
+            <span class="card-value" id="live-timer" style="color: #2e7d32; font-family: 'Courier New', monospace;">{timer_str}</span>
         </div>
     </div>
     """
@@ -466,19 +503,10 @@ def render_status_strip():
 # SIMPLE HEADER
 # ============================================
 if st.session_state.is_authenticated:
-    col1, col2, col3 = st.columns([2, 3, 1])
+    col1, col2, col3 = st.columns([1, 3, 1])
     
     with col1:
-        if logo_data:
-            st.markdown(
-                f'''
-                <div style="text-align: center;">
-                    <img src="data:image/gif;base64,{logo_data}" style="width: 50px; height: 50px;">
-                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px; font-weight: 500;">Mercedes-Benz</div>
-                </div>
-                ''',
-                unsafe_allow_html=True,
-            )
+        st.write("")  # Empty column for spacing
     
     with col2:
         st.markdown("### 🧠 IntelliDoc AI")
