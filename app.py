@@ -9,6 +9,7 @@ from pytz import timezone
 import time
 
 import docx, openpyxl, pdfplumber, streamlit as st
+import streamlit.components.v1 as components
 from docx.text.paragraph import Paragraph
 from docx.table import Table
 import pandas as pd
@@ -446,34 +447,49 @@ def render_status_strip():
     # JavaScript for live timer
     live_timer_js = f"""
     <script>
-        document.addEventListener('DOMContentLoaded', function() {{
+        (function() {{
+            'use strict';
+            
             // Get the start time from Python
             var startTime = {st.session_state.start_time * 1000}; // Convert to milliseconds
             
             function updateTimer() {{
-                var now = new Date().getTime();
-                var elapsed = Math.floor((now - startTime) / 1000);
-                
-                var hours = Math.floor(elapsed / 3600);
-                var minutes = Math.floor((elapsed % 3600) / 60);
-                var seconds = elapsed % 60;
-                
-                var timerStr = 
-                    hours.toString().padStart(2, '0') + ':' +
-                    minutes.toString().padStart(2, '0') + ':' +
-                    seconds.toString().padStart(2, '0');
-                
-                // Update the timer display
-                var timerElement = document.getElementById('live-timer');
-                if (timerElement) {{
-                    timerElement.textContent = timerStr;
+                try {{
+                    var now = new Date().getTime();
+                    var elapsed = Math.floor((now - startTime) / 1000);
+                    
+                    var hours = Math.floor(elapsed / 3600);
+                    var minutes = Math.floor((elapsed % 3600) / 60);
+                    var seconds = elapsed % 60;
+                    
+                    var timerStr = 
+                        hours.toString().padStart(2, '0') + ':' +
+                        minutes.toString().padStart(2, '0') + ':' +
+                        seconds.toString().padStart(2, '0');
+                    
+                    // Update the timer display
+                    var timerElement = document.getElementById('live-timer');
+                    if (timerElement) {{
+                        timerElement.textContent = timerStr;
+                    }}
+                }} catch (e) {{
+                    console.error('Timer update error:', e);
                 }}
             }}
             
-            // Update immediately and then every second
+            // Start updating immediately
             updateTimer();
+            
+            // Update every second
             setInterval(updateTimer, 1000);
-        }});
+            
+            // Also update on page visibility change (when user comes back to tab)
+            document.addEventListener('visibilitychange', function() {{
+                if (!document.hidden) {{
+                    updateTimer();
+                }}
+            }});
+        }})();
     </script>
     """
 
@@ -496,10 +512,10 @@ def render_status_strip():
             <span class="card-value" id="live-timer" style="color: #2e7d32; font-family: 'Courier New', monospace;">{timer_str}</span>
         </div>
     </div>
-    {live_timer_js}
     """
 
-    st.markdown(status_html, unsafe_allow_html=True)
+    # Use components.html for better JavaScript execution
+    components.html(status_html + live_timer_js, height=200)
 
 # ============================================
 # SIMPLE HEADER
