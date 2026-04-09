@@ -632,164 +632,84 @@ def load_readme_text():
         except Exception as e:
             st.warning(f"Could not load README.txt: {e}")
     # Return default README if file not found
-    return """README.txt
-==========
+    return """# 🧠 IntelliDoc AI – Smart Document Assistant
 
-Multi-Utility File & CAPL Analyzer Tool
-=======================================
-
-Overview
---------
-This Streamlit-based application helps manage, analyze, and compare files, with special support for CAPL scripts. It combines file dashboards, comparisons, CAPL analysis, and AI-assisted code fixing in a single platform.
+![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
+![Streamlit](https://img.shields.io/badge/Framework-Streamlit-red.svg)
+![AI](https://img.shields.io/badge/AI-RAG%20%7C%20LLM-green.svg)
+![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
 ---
 
-App Layout & Workflow
----------------------
+## 🚀 Overview
 
-+----------------------+
-| Sidebar              |
-|----------------------|
-| Upload Files         |
-| Select Files         |
-| Filter CAPL (.can)   |
-+----------------------+
-          |
-          v
-+------------------------------------------+
-| Main Tabs:                               |
-|------------------------------------------|
-| [ Chat ] [ Dashboard ] [ Compare ] [ CAPL ] |
-+------------------------------------------+
-
-Tab Workflow:
--------------
-
-1. Chat Tab
-   +-----------------------------+
-   | Ask questions about files   |
-   | Semantic / AI answers       |
-   +-----------------------------+
-          |
-          v
-   (Uses uploaded files & AI backend)
-
-2. Dashboard Tab
-   +------------------------------+
-   | Select a file from sidebar   |
-   | Visualize trends (Excel/CSV) |
-   | Aggregated stats             |
-   +------------------------------+
-          |
-          v
-   (Optional download of analyzed results)
-
-3. Compare Tab
-   +--------------------------------+
-   | Multi-file selection           |
-   | Inline word-level differences  |
-   | Download comparison Excel      |
-   +--------------------------------+
-          |
-          v
-   (At least 2 files required)
-
-4. CAPL Tab
-   +-------------------------------------------+
-   | Select existing CAPL file or create new   |
-   | Compile & analyze code                    |
-   | View issues / suggestions                 |
-   | AI-assisted fix / Apply fix / Save file   |
-   +-------------------------------------------+
-          |
-          v
-   (Updates session state & file texts)
+**IntelliDoc AI** is a powerful **multi-utility document analyzer** built with Streamlit.  
+It enables users to **upload, analyze, compare, and interact with files using AI**, along with specialized support for **CAPL script analysis and auto-fixing**.
 
 ---
 
-Feature Summary
----------------
+## 🧩 Features
 
-1. Chat / RAG Interface
-   - Ask questions about selected files.
-   - Context-aware AI responses.
-
-2. File Dashboard
-   - Test report analysis and visualization.
-   - Downloadable Excel summaries.
-
-3. Compare Files
-   - Multi-file comparison.
-   - Inline word-level differences.
-   - Downloadable Excel comparison.
-
-4. CAPL Compiler & Analyzer
-   - Upload or create CAPL scripts (.can/.txt).
-   - Syntax highlighting & code analysis.
-   - AI-assisted code fixes.
-   - Save new or corrected CAPL files.
-
-5. Interactive UI
-   - Tabs for workflows.
-   - Reset buttons for selections and results.
-   - Expandable live editor for CAPL scripts.
-
-6. AI Integration
-   - Auto-correct CAPL code.
-   - Chat-based file analysis.
-
-7. Session Management
-   - Tracks uploaded files and selected files per tab.
-   - Maintains last analyzed CAPL file and issues.
+### 📂 File Management
+- Upload multiple formats:
+  `PDF, DOCX, PPTX, XLSX, TXT, HTML, CAPL (.can)`
+- Multi-file selection & filtering
+- Persistent preview system
 
 ---
 
-How to Use
-----------
-
-1. Setup
-   - Python >= 3.10
-   - Install dependencies:
-     pip install streamlit openai pandas plotly
-   - Configure AI backend / API keys if using AI features.
-
-2. Run
-   - streamlit run app.py
-
-3. Sidebar
-   - Upload files.
-   - Select files to be available in tabs.
-   - Optionally filter CAPL scripts.
-
-4. Tabs
-   - Chat: Ask questions about uploaded files.
-   - Dashboard: Visualize file content, trends, and statistics.
-   - Compare: Choose 2+ files and see word-level differences.
-   - CAPL: Edit, compile, analyze CAPL scripts, AI fixes, save.
-
-5. CAPL AI Fix
-   - Click "Suggest Fix" -> review AI suggestion -> click "Use Suggested Fix".
-
-6. Reset Buttons
-   - Clear selections and results in each tab.
+### 🔍 Smart Document Preview
+- Open preview in new tab
+- Keyword highlighting
+- Page-level PDF preview
+- Extract:
+  - Text
+  - Tables
+  - Images
+  - Metadata
 
 ---
 
-Tips & Notes
-------------
-
-- Limit comparisons to <2000 lines for performance.
-- CAPL files must end with .can.
-- AI features require backend availability.
-- Use "Include all .txt files as CAPL" cautiously.
+### 🧠 AI Chat (RAG System)
+- Ask questions about uploaded files
+- Context-aware responses
+- Multi-file semantic understanding
+- Powered by:
+  - FAISS (vector DB)
+  - HuggingFace models
 
 ---
 
-ASCII Workflow Example
-----------------------
+### 📊 Dashboard & Analytics
+- Excel/CSV visualization
+- Trends & statistics
+- Interactive charts (Plotly)
+- Export insights
 
+---
+
+### 🔄 File Comparison
+- Compare 2+ files
+- Word-level diff
+- Inline visual comparison
+- Export results to Excel
+
+---
+
+### 🚗 CAPL Script Analyzer
+- Upload or create `.can` files
+- Built-in CAPL editor
+- Code analysis & issue detection
+- Suggestions & improvements
+
+---
+
+### 🤖 AI CAPL Auto-Fix
+```text
+Analyze → Suggest Fix → Apply Fix → Save
+
+🧭 Application Flow
 Sidebar:
---------
 +----------------------+
 | Upload Files         |
 | Select Files         |
@@ -797,39 +717,38 @@ Sidebar:
 +----------------------+
 
 Tabs:
------
-[ Chat ] -> AI Q&A using uploaded files
-[ Dashboard ] -> File stats & trends -> Excel download
-[ Compare ] -> Multi-file diff -> HTML + Excel
-[ CAPL ] -> Edit/Compile/Analyze -> AI Fix -> Save
+[ Chat ] → AI Q&A  
+[ Dashboard ] → Analytics  
+[ Compare ] → Diff  
+[ CAPL ] → Editor + AI Fix  
 
-CAPL AI Flow:
--------------
-Create/Edit CAPL
-    |
-    v
-Compile & Analyze
-    |
-    v
-AI Suggest Fix? -- Yes --> Review & Apply --> Update Editor
-    |
-    No
-    v
-Save CAPL Script
+🛠️ CAPL Workflow
+Create/Edit Script
+        ↓
+Analyze Code
+        ↓
+AI Suggest Fix?
+    ↓        ↓
+   Yes       No
+    ↓         ↓
+Apply Fix    Save
+    ↓
+Update Editor
 
----
 
-Credits
--------
-- Built with Streamlit, Pandas, Plotly, OpenAI API
-- CAPL analysis inspired by automotive testing
-- AI auto-fix powered by LLMs
+⚠️ Notes
+CAPL files must use .can extension
+AI features require configured models/API
+Limit large file comparisons for better performance
 
----
+🙌 Credits
+Built with ❤️ using Streamlit
+AI powered by HuggingFace + LangChain
+Visualization via Plotly
 
-Contact
--------
-For support or feedback, contact vigneshs075@gmail.com.
+
+📧 Contact
+📩 vigneshs075@gmail.com
 """
 
 README_TEXT = load_readme_text()
@@ -3017,8 +2936,8 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
     with col2:
         st.write("")
 
-    st.markdown("### Read Me First")
-    st.text_area("README", value=README_TEXT, height=360, disabled=True)
+    with st.expander("📖 Read Me First (Click to expand)", expanded=False):
+        st.markdown(README_TEXT)
 
     if access_clicked:
         if not has_read_readme:
