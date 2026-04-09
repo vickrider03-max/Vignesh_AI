@@ -441,21 +441,21 @@ def render_status_strip():
 
     status_html = f"""
     <div class="dashboard-grid">
-        <div class="metric-card">
-            <span class="card-label">User</span>
-            <span class="card-value">{html.escape(username)}</span>
+        <div class="metric-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+            <span class="card-label" style="color: rgba(255,255,255,0.8);">👤 User</span>
+            <span class="card-value" style="color: white;">{html.escape(username)}</span>
         </div>
-        <div class="metric-card">
-            <span class="card-label">Role</span>
-            <span class="card-value">{html.escape(str(role).title())}</span>
+        <div class="metric-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white;">
+            <span class="card-label" style="color: rgba(255,255,255,0.8);">🔑 Role</span>
+            <span class="card-value" style="color: white;">{html.escape(str(role).title())}</span>
         </div>
-        <div class="metric-card">
-            <span class="card-label">Available Files</span>
-            <span class="card-value">{available_files}</span>
+        <div class="metric-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white;">
+            <span class="card-label" style="color: rgba(255,255,255,0.8);">📁 Available Files</span>
+            <span class="card-value" style="color: white;">{available_files}</span>
         </div>
-        <div class="metric-card">
-            <span class="card-label">Usage Time</span>
-            <span class="card-value">{timer_str}</span>
+        <div class="metric-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); color: white;">
+            <span class="card-label" style="color: rgba(255,255,255,0.8);">⏱️ Usage Time</span>
+            <span class="card-value" style="color: white; font-family: 'Courier New', monospace;">{timer_str}</span>
         </div>
     </div>
     """
@@ -471,10 +471,14 @@ if st.session_state.is_authenticated:
     with col1:
         if logo_data:
             st.markdown(
-                f'<img src="data:image/gif;base64,{logo_data}" style="width: 50px; height: 50px;">',
+                f'''
+                <div style="text-align: center;">
+                    <img src="data:image/gif;base64,{logo_data}" style="width: 50px; height: 50px;">
+                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px; font-weight: 500;">Mercedes-Benz</div>
+                </div>
+                ''',
                 unsafe_allow_html=True,
             )
-            st.markdown('<div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Mercedes-Benz</div>', unsafe_allow_html=True)
     
     with col2:
         st.markdown("### 🧠 IntelliDoc AI")
@@ -516,10 +520,14 @@ else:
     with col1:
         if logo_data:
             st.markdown(
-                f'<img src="data:image/gif;base64,{logo_data}" style="width: 50px; height: 50px;">',
+                f'''
+                <div style="text-align: center;">
+                    <img src="data:image/gif;base64,{logo_data}" style="width: 50px; height: 50px;">
+                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px; font-weight: 500;">Mercedes-Benz</div>
+                </div>
+                ''',
                 unsafe_allow_html=True,
             )
-            st.markdown('<div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Mercedes-Benz</div>', unsafe_allow_html=True)
     with col2:
         st.markdown("### 🧠 IntelliDoc AI– Smart Document Assistant")
 
@@ -2137,7 +2145,12 @@ with st.sidebar:
         # Mercedes Logo in Sidebar
         if logo_data:
             st.markdown(
-                f'<div style="text-align: center; margin-bottom: 20px;"><img src="data:image/gif;base64,{logo_data}" style="width: 40px; height: 40px;"></div>',
+                f'''
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <img src="data:image/gif;base64,{logo_data}" style="width: 40px; height: 40px;">
+                    <div style="font-size: 10px; color: var(--text-secondary); margin-top: 4px; font-weight: 500;">Mercedes-Benz</div>
+                </div>
+                ''',
                 unsafe_allow_html=True,
             )
         
