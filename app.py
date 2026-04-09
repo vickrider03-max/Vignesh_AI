@@ -549,7 +549,7 @@ else:
         if logo_data:
             st.markdown(
                 f'''
-                <div style="text-align: center;">
+                <div style="text-align: left;">
                     <img src="data:image/gif;base64,{logo_data}" style="width: 50px; height: 50px;">
                     <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px; font-weight: 500;">Mercedes-Benz</div>
                 </div>
