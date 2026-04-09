@@ -162,213 +162,102 @@ except Exception:
 st.markdown(
     """
     <style>
-        /* ============================================
-           THEME VARIABLES - LIGHT MODE (DEFAULT)
-           ============================================ */
         :root {
-            /* Primary Brand Colors */
-            --brand: #1f4f91;
-            --brand-soft: #eaf2ff;
-            --brand-lighter: #f5f9ff;
-            /* Neutral Colors */
-            --border: #d7e3f4;
-            --text: #173152;
-            --text-soft: #51627a;
-            --text-muted: #94a3b8;
-            --panel: #f8fbff;
-            --bg: #ffffff;
-            /* Status Colors */
-            --success: #16a34a;
-            --success-bg: #edf8f1;
-            --warning: #ea580c;
-            --warning-bg: #fff8e8;
-            --error: #dc2626;
-            --error-bg: #fee2e2;
-            /* Accent Colors */
-            --accent: #3b82f6;
-            --accent-dark: #1e40af;
-            /* Shadows */
-            --shadow-sm: 0 2px 4px rgba(0,0,0,0.08);
-            --shadow-md: 0 4px 12px rgba(0,0,0,0.12);
-            --shadow-lg: 0 8px 24px rgba(0,0,0,0.15);
-        }
-        
-        /* Dark Mode Variables */
-        [data-theme="dark"] {
-            --brand: #60a5fa;
-            --brand-soft: #1e3a8a;
-            --brand-lighter: #0f172a;
-            --border: #1e293b;
-            --text: #e2e8f0;
-            --text-soft: #cbd5e1;
-            --text-muted: #64748b;
-            --panel: #1e293b;
-            --bg: #0f172a;
-            --success: #22c55e;
-            --success-bg: #0f2818;
-            --warning: #fb923c;
-            --warning-bg: #1f1410;
+            --primary: #1f4f91;
+            --secondary: #64748b;
+            --background: #ffffff;
+            --surface: #f8fafc;
+            --text: #1e293b;
+            --text-secondary: #64748b;
+            --border: #e2e8f0;
+            --success: #10b981;
+            --warning: #f59e0b;
             --error: #ef4444;
-            --error-bg: #1f0a0a;
-            --accent: #60a5fa;
-            --accent-dark: #3b82f6;
-            --shadow-sm: 0 2px 4px rgba(0,0,0,0.3);
-            --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
-            --shadow-lg: 0 8px 24px rgba(0,0,0,0.5);
         }
         
-        /* ============================================
-           ANIMATIONS - 8 TYPES @ 60 FPS
-           ============================================ */
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-        
-        @keyframes slideInUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        @keyframes slideInDown {
-            from { opacity: 0; transform: translateY(-20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-        
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        
-        @keyframes bounce {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-10px); }
-        }
-        
-        @keyframes shimmer {
-            0% { background-position: -1000px 0; }
-            100% { background-position: 1000px 0; }
-        }
-        
-        @keyframes scaleIn {
-            from { opacity: 0; transform: scale(0.95); }
-            to { opacity: 1; transform: scale(1); }
-        }
-        
-        /* ============================================
-           BASE STYLING
-           ============================================ */
-        * {
-            transition: background-color 0.2s ease, color 0.2s ease;
+        [data-theme="dark"] {
+            --primary: #3b82f6;
+            --secondary: #94a3b8;
+            --background: #0f172a;
+            --surface: #1e293b;
+            --text: #f1f5f9;
+            --text-secondary: #cbd5e1;
+            --border: #334155;
+            --success: #34d399;
+            --warning: #fbbf24;
+            --error: #f87171;
         }
         
         body {
-            background: var(--bg);
+            background: var(--background);
             color: var(--text);
-        }
-        
-        .app-card {
-            background: var(--panel);
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 14px 16px;
-            margin: 8px 0 14px 0;
-            animation: fadeIn 0.6s ease-out;
-        }
-        
-        .app-card h4 {
-            margin: 0 0 6px 0;
-            color: var(--brand);
-            font-size: 15px;
-        }
-        
-        .app-muted {
-            color: var(--text-soft);
-            font-size: 13px;
-            margin: 0;
+            transition: background 0.3s ease, color 0.3s ease;
         }
         
         .dashboard-grid {
-            display: flex;
-            justify-content: space-between;
-            gap: 20px;
-            margin-bottom: 30px;
-            flex-wrap: wrap;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin: 1rem 0;
         }
-
+        
         .metric-card {
-            flex: 1;
-            min-width: 200px;
-            background: var(--bg);
-            padding: 20px;
-            border-radius: 12px;
+            background: var(--surface);
             border: 1px solid var(--border);
-            box-shadow: var(--shadow-md);
+            border-radius: 8px;
+            padding: 1.5rem;
             text-align: center;
-            transition: all 0.25s ease;
-            animation: fadeIn 0.6s ease-out;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
-
-        .card-label {
-            display: block;
-            font-size: 0.75rem;
-            font-weight: 600;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 8px;
-        }
-
-        .card-value {
-            display: block;
-            font-size: 1.35rem;
-            font-weight: 700;
-            color: var(--brand);
-        }
-
+        
         .metric-card:hover {
-            border-color: var(--brand);
-            box-shadow: var(--shadow-lg);
             transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
         
-        .file-chip-wrap {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-top: 8px;
+        .card-label {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
         }
         
-        .file-chip {
-            background: var(--brand-soft);
-            color: var(--brand);
-            border: 1px solid var(--border);
-            border-radius: 999px;
-            display: inline-block;
-            font-size: 12px;
-            padding: 5px 10px;
+        .card-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
         }
         
-        .section-note {
-            color: var(--text-soft);
-            font-size: 13px;
-            margin: 0 0 6px 0;
-        }
-        
-        /* Loading Spinner */
         .spinner {
             width: 40px;
             height: 40px;
-            border: 3px solid var(--brand-soft);
-            border-top: 3px solid var(--brand);
+            border: 3px solid var(--border);
+            border-top: 3px solid var(--primary);
             border-radius: 50%;
             animation: spin 1s linear infinite;
             margin: 20px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease-out;
+        }
+        
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
     """,
@@ -398,18 +287,18 @@ if "dark_mode" not in st.session_state:
 
 
 # ============================================
-# ENTERPRISE UI UTILITY FUNCTIONS
+# SIMPLE UI UTILITY FUNCTIONS
 # ============================================
 
 def toggle_dark_mode():
-    """Toggle dark mode on/off and apply theme changes"""
+    """Toggle dark mode on/off"""
     st.session_state.dark_mode = not st.session_state.dark_mode
     apply_theme()
     st.rerun()
 
 
 def apply_theme():
-    """Apply theme to UI using CSS data-theme attribute"""
+    """Apply theme to UI"""
     theme = "dark" if st.session_state.dark_mode else "light"
     theme_script = f"""
     <script>
@@ -420,11 +309,11 @@ def apply_theme():
 
 
 def render_loading_spinner(message="Loading..."):
-    """Render an animated loading spinner with message"""
+    """Render an animated loading spinner"""
     spinner_html = f"""
     <div style="text-align: center; padding: 40px;">
         <div class="spinner"></div>
-        <p style="margin-top: 20px; color: var(--text-soft); font-size: 14px;">{message}</p>
+        <p style="margin-top: 20px; color: var(--text-secondary);">{message}</p>
     </div>
     """
     st.markdown(spinner_html, unsafe_allow_html=True)
@@ -470,121 +359,44 @@ def render_status_strip():
     st.markdown(status_html, unsafe_allow_html=True)
 
 # ============================================
-# ENTERPRISE HEADER (4-COLUMN LAYOUT)
+# SIMPLE HEADER
 # ============================================
 if st.session_state.is_authenticated:
-    header_cols = st.columns([1.5, 2.5, 0.8, 1.2])
+    col1, col2, col3 = st.columns([2, 3, 1])
     
-    # Column 1: Mercedes Logo (50px)
-    with header_cols[0]:
+    with col1:
         if logo_data:
             st.markdown(
-                f"""
-                <div style="display: flex; align-items: center; padding-top: 8px;">
-                    <img src="data:image/gif;base64,{logo_data}" 
-                         alt="Mercedes-Benz" 
-                         style="width: 50px; height: 50px; animation: spin 20s linear infinite;" />
-                </div>
-                """,
+                f'<img src="data:image/gif;base64,{logo_data}" style="width: 50px; height: 50px;">',
                 unsafe_allow_html=True,
             )
     
-    # Column 2: Title
-    with header_cols[1]:
-        st.markdown(
-            """
-            <div style="padding: 10px 0;">
-                <h2 style="margin: 0; font-size: 20px; color: var(--text);">🧠 IntelliDoc AI</h2>
-                <p style="margin: 0; font-size: 12px; color: var(--text-soft);">Smart Document Assistant</p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+    with col2:
+        st.markdown("### 🧠 IntelliDoc AI")
+        st.markdown("*Smart Document Assistant*")
     
-    # Column 3: Dark Mode Toggle
-    with header_cols[2]:
-        if st.button("🌙" if not st.session_state.dark_mode else "☀️", 
-                    key="theme_toggle",
-                    help="Toggle dark/light mode",
-                    use_container_width=True):
+    with col3:
+        if st.button("🌙" if not st.session_state.dark_mode else "☀️"):
             toggle_dark_mode()
         apply_theme()
-    
-    # Column 4: User Status & Logout
-    with header_cols[3]:
-        st.markdown(
-            f"""
-            <div style="padding: 10px 0; text-align: right;">
-                <p style="margin: 0; font-size: 11px; font-weight: 600; color: var(--brand);">
-                    {st.session_state.logged_in_username}
-                </p>
-                <p style="margin: 0; font-size: 10px; color: var(--text-muted);">
-                    {st.session_state.user_role}
-                </p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        logout_clicked = st.button("🚪 Logout", key="logout_button", use_container_width=True)
-        if logout_clicked:
-            active_file = "active_users.json"
-            if os.path.exists(active_file):
-                with open(active_file, "r") as f:
-                    active_users = json.load(f)
-                active_users = [u for u in active_users if u["username"] != st.session_state.logged_in_username]
-                with open(active_file, "w") as f:
-                    json.dump(active_users, f)
-            st.session_state.is_authenticated = False
-            st.session_state.logged_in_username = ""
-            st.session_state.user_role = None
-            st.session_state.user_session_start_time = None
-            st.session_state.selected_files = []
-            st.session_state.file_texts = {}
-            st.session_state.vector_stores = {}
-            st.session_state.chat_file_selection = []
-            st.session_state.chat_summary_downloads = {"images": [], "tables": []}
-            st.session_state.messages = []
-            st.session_state.welcome_shown = False
-            st.success("Logged out successfully.")
-            st.rerun()
     
     st.divider()
     
     if not st.session_state.get('welcome_shown', False):
-        st.toast(f"🎉 Welcome back, {st.session_state.logged_in_username}! We're thrilled to have you here.", icon="🎉")
+        st.toast("Welcome back!", icon="🎉")
         st.session_state.welcome_shown = True
 
     render_status_strip()
 else:
-    # Non-authenticated header
-    header_cols = st.columns([1.5, 2.5, 1])
-    with header_cols[0]:
+    col1, col2 = st.columns([1, 3])
+    with col1:
         if logo_data:
             st.markdown(
-                f"""
-                <div style="display: flex; align-items: center; padding-top: 8px;">
-                    <img src="data:image/gif;base64,{logo_data}" 
-                         alt="Mercedes-Benz" 
-                         style="width: 50px; height: 50px;" />
-                </div>
-                """,
+                f'<img src="data:image/gif;base64,{logo_data}" style="width: 50px; height: 50px;">',
                 unsafe_allow_html=True,
             )
-    with header_cols[1]:
-        st.markdown(
-            """
-            <div style="padding: 10px 0;">
-                <h2 style="margin: 0; font-size: 20px; color: var(--text);">🧠 IntelliDoc AI</h2>
-                <p style="margin: 0; font-size: 12px; color: var(--text-soft);">Smart Document Assistant</p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with header_cols[2]:
-        if st.button("🌙" if not st.session_state.dark_mode else "☀️", 
-                    key="theme_toggle_login",
-                    help="Toggle dark/light mode",
-                    use_container_width=True):
+    with col2:
+        if st.button("🌙" if not st.session_state.dark_mode else "☀️"):
             toggle_dark_mode()
         apply_theme()
 
@@ -2202,14 +2014,7 @@ with st.sidebar:
         # Mercedes Logo in Sidebar
         if logo_data:
             st.markdown(
-                f"""
-                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding: 12px; background: var(--brand-soft); border-radius: 8px;">
-                    <img src="data:image/gif;base64,{logo_data}" 
-                         alt="Mercedes-Benz" 
-                         style="width: 40px; height: 40px; animation: spin 25s linear infinite;" />
-                    <div style="color: var(--brand); font-weight: 600; font-size: 14px;">IntelliDoc</div>
-                </div>
-                """,
+                f'<div style="text-align: center; margin-bottom: 20px;"><img src="data:image/gif;base64,{logo_data}" style="width: 40px; height: 40px;"></div>',
                 unsafe_allow_html=True,
             )
         
