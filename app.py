@@ -9,6 +9,7 @@ from pytz import timezone
 import time
 
 import docx, openpyxl, pdfplumber, streamlit as st
+import streamlit.components.v1 as components
 from docx.text.paragraph import Paragraph
 from docx.table import Table
 import pandas as pd
@@ -497,7 +498,7 @@ def render_status_strip():
     </div>
     """
 
-    st.markdown(status_html, unsafe_allow_html=True)
+    components.html(status_html, height=145)
 
 # ============================================
 # SIMPLE HEADER
