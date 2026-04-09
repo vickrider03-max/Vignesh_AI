@@ -368,7 +368,7 @@ with col_logo:
             <div class="brand-hero">
                 <img src="data:image/gif;base64,{logo_data}" alt="Mercedes-Benz logo" />
                 <p class="brand-subtitle">Mercedes-Benz</p>
-                <h1 class="brand-title">Vignesh_AI🧠 IntelliDoc AI– Smart Document Assistant</h1>
+                <h1 class="brand-title">🧠 IntelliDoc AI– Smart Document Assistant</h1>
             </div>
             """,
             unsafe_allow_html=True,
