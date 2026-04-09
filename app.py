@@ -221,81 +221,43 @@ st.markdown(
            ANIMATIONS - 8 TYPES @ 60 FPS
            ============================================ */
         @keyframes fadeIn {
-            from {
-                opacity: 0;
-            }
-            to {
-                opacity: 1;
-            }
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
         
         @keyframes slideInUp {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         
         @keyframes slideInDown {
-            from {
-                opacity: 0;
-                transform: translateY(-20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         
         @keyframes spin {
-            from {
-                transform: rotate(0deg);
-            }
-            to {
-                transform: rotate(360deg);
-            }
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
         }
         
         @keyframes pulse {
-            0%, 100% {
-                opacity: 1;
-            }
-            50% {
-                opacity: 0.5;
-            }
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
         }
         
         @keyframes bounce {
-            0%, 100% {
-                transform: translateY(0);
-            }
-            50% {
-                transform: translateY(-10px);
-            }
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
         }
         
         @keyframes shimmer {
-            0% {
-                background-position: -1000px 0;
-            }
-            100% {
-                background-position: 1000px 0;
-            }
+            0% { background-position: -1000px 0; }
+            100% { background-position: 1000px 0; }
         }
         
         @keyframes scaleIn {
-            from {
-                opacity: 0;
-                transform: scale(0.95);
-            }
-            to {
-                opacity: 1;
-                transform: scale(1);
-            }
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
         }
         
         /* ============================================
@@ -309,34 +271,41 @@ st.markdown(
             background: var(--bg);
             color: var(--text);
         }
+        
         .app-card {
             background: var(--panel);
             border: 1px solid var(--border);
             border-radius: 14px;
             padding: 14px 16px;
             margin: 8px 0 14px 0;
+            animation: fadeIn 0.6s ease-out;
         }
+        
         .app-card h4 {
             margin: 0 0 6px 0;
             color: var(--brand);
             font-size: 15px;
         }
+        
         .app-muted {
             color: var(--text-soft);
             font-size: 13px;
             margin: 0;
         }
+        
         .dashboard-grid {
             display: flex;
             justify-content: space-between;
             gap: 20px;
             margin-bottom: 30px;
+            flex-wrap: wrap;
         }
 
         .metric-card {
             flex: 1;
+            min-width: 200px;
             background: var(--bg);
-            padding: 18px;
+            padding: 20px;
             border-radius: 12px;
             border: 1px solid var(--border);
             box-shadow: var(--shadow-md);
@@ -367,15 +336,14 @@ st.markdown(
             box-shadow: var(--shadow-lg);
             transform: translateY(-2px);
         }
-            font-weight: 600;
-            line-height: 1.1;
-        }
+        
         .file-chip-wrap {
             display: flex;
             flex-wrap: wrap;
             gap: 8px;
             margin-top: 8px;
         }
+        
         .file-chip {
             background: var(--brand-soft);
             color: var(--brand);
@@ -385,10 +353,22 @@ st.markdown(
             font-size: 12px;
             padding: 5px 10px;
         }
+        
         .section-note {
             color: var(--text-soft);
             font-size: 13px;
             margin: 0 0 6px 0;
+        }
+        
+        /* Loading Spinner */
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--brand-soft);
+            border-top: 3px solid var(--brand);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
         }
         .brand-hero {
             display: flex;
@@ -444,58 +424,6 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# ============================================
-# UTILITY FUNCTIONS - ENTERPRISE FEATURES
-# ============================================
-
-def toggle_dark_mode():
-    """Toggle dark mode on/off"""
-    if "dark_mode" not in st.session_state:
-        st.session_state.dark_mode = False
-    st.session_state.dark_mode = not st.session_state.dark_mode
-
-
-def apply_theme():
-    """Apply the current theme (light/dark mode)"""
-    if "dark_mode" not in st.session_state:
-        st.session_state.dark_mode = False
-    
-    theme = "dark" if st.session_state.dark_mode else "light"
-    st.markdown(
-        f"""
-        <script>
-            document.documentElement.setAttribute('data-theme', '{theme}');
-        </script>
-        """,
-        unsafe_allow_html=True
-    )
-
-
-def render_loading_spinner():
-    """Render an animated loading spinner"""
-    st.markdown(
-        """
-        <div style="text-align: center; padding: 40px;">
-            <div style="
-                width: 50px;
-                height: 50px;
-                border: 3px solid var(--brand-soft);
-                border-top: 3px solid var(--brand);
-                border-radius: 50%;
-                animation: spin 1s linear infinite;
-                margin: 0 auto;
-            "></div>
-            <p style="margin-top: 20px; color: var(--text-soft);">Loading...</p>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-
-# Initialize dark mode session state
-if "dark_mode" not in st.session_state:
-    st.session_state.dark_mode = False
-
 # Ensure session state keys exist before rendering login status
 for key, default_value in [
     ("is_authenticated", False),
@@ -512,6 +440,43 @@ for key, default_value in [
 ]:
     if key not in st.session_state:
         st.session_state[key] = default_value
+
+# Add dark mode state if missing
+if "dark_mode" not in st.session_state:
+    st.session_state.dark_mode = False
+
+
+# ============================================
+# ENTERPRISE UI UTILITY FUNCTIONS
+# ============================================
+
+def toggle_dark_mode():
+    """Toggle dark mode on/off and apply theme changes"""
+    st.session_state.dark_mode = not st.session_state.dark_mode
+    apply_theme()
+    st.rerun()
+
+
+def apply_theme():
+    """Apply theme to UI using CSS data-theme attribute"""
+    theme = "dark" if st.session_state.dark_mode else "light"
+    theme_script = f"""
+    <script>
+        document.documentElement.setAttribute('data-theme', '{theme}');
+    </script>
+    """
+    st.markdown(theme_script, unsafe_allow_html=True)
+
+
+def render_loading_spinner(message="Loading..."):
+    """Render an animated loading spinner with message"""
+    spinner_html = f"""
+    <div style="text-align: center; padding: 40px;">
+        <div class="spinner"></div>
+        <p style="margin-top: 20px; color: var(--text-soft); font-size: 14px;">{message}</p>
+    </div>
+    """
+    st.markdown(spinner_html, unsafe_allow_html=True)
 
 
 def render_status_strip():
@@ -553,82 +518,63 @@ def render_status_strip():
 
     st.markdown(status_html, unsafe_allow_html=True)
 
-# Apply theme system
-apply_theme()
-
-# === HEADER WITH INTEGRATED LOGO & DARK MODE TOGGLE - ONLY SHOW AFTER LOGIN ===
+# ============================================
+# ENTERPRISE HEADER (4-COLUMN LAYOUT)
+# ============================================
 if st.session_state.is_authenticated:
-    header_cols = st.columns([0.5, 3, 0.5, 1])
-
-    # Column 1: Mercedes Logo (Animated)
+    header_cols = st.columns([1.5, 2.5, 0.8, 1.2])
+    
+    # Column 1: Mercedes Logo (50px)
     with header_cols[0]:
         if logo_data:
             st.markdown(
                 f"""
-                <div style="text-align: center; padding: 8px;">
-                    <img src="data:image/gif;base64,{logo_data}" style="width: 50px; height: 50px; animation: spin 20s linear infinite;">
+                <div style="display: flex; align-items: center; padding-top: 8px;">
+                    <img src="data:image/gif;base64,{logo_data}" 
+                         alt="Mercedes-Benz" 
+                         style="width: 50px; height: 50px; animation: spin 20s linear infinite;" />
                 </div>
                 """,
-                unsafe_allow_html=True
+                unsafe_allow_html=True,
             )
-        else:
-            st.markdown(
-                """
-                <div style="text-align: center; padding: 8px;">
-                    <div style="font-size: 40px; animation: spin 20s linear infinite;">🧠</div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
+    
     # Column 2: Title
     with header_cols[1]:
         st.markdown(
-            f"""
-            <div class="brand-hero" style="gap: 2px;">
-                <h1 class="brand-title">IntelliDoc AI</h1>
-                <p class="brand-subtitle">Smart Document Assistant</p>
+            """
+            <div style="padding: 10px 0;">
+                <h2 style="margin: 0; font-size: 20px; color: var(--text);">🧠 IntelliDoc AI</h2>
+                <p style="margin: 0; font-size: 12px; color: var(--text-soft);">Smart Document Assistant</p>
             </div>
             """,
             unsafe_allow_html=True,
         )
-
+    
     # Column 3: Dark Mode Toggle
     with header_cols[2]:
-        if st.button("🌙" if not st.session_state.dark_mode else "☀️", key="theme_toggle", help="Toggle Dark Mode"):
+        if st.button("🌙" if not st.session_state.dark_mode else "☀️", 
+                    key="theme_toggle",
+                    help="Toggle dark/light mode",
+                    use_container_width=True):
             toggle_dark_mode()
-            st.rerun()
-
+        apply_theme()
+    
     # Column 4: User Status & Logout
     with header_cols[3]:
-        creator_timestamp = None
-        if st.session_state.user_role == "creator" and st.session_state.login_history:
-            creator_entries = [
-                entry for entry in st.session_state.login_history
-                if entry.get("username") == st.session_state.logged_in_username and entry.get("role") == "creator"
-            ]
-            if creator_entries:
-                creator_timestamp = creator_entries[-1].get("timestamp")
-
-        status_message = f"👤 {st.session_state.logged_in_username}"
-        role_badge = st.session_state.user_role or "User"
-        
         st.markdown(
             f"""
-            <div style="text-align: right; font-size: 12px; color: var(--text-soft); line-height: 1.4;">
-                <div style="font-weight: 600; margin-bottom: 4px;">{html.escape(status_message)}</div>
-                <div style="background: linear-gradient(135deg, var(--brand-soft), var(--accent)); 
-                           color: var(--brand); padding: 3px 8px; border-radius: 12px; 
-                           font-size: 10px; font-weight: 600; display: inline-block; 
-                           text-transform: uppercase;">
-                    {html.escape(role_badge)}
-                </div>
+            <div style="padding: 10px 0; text-align: right;">
+                <p style="margin: 0; font-size: 11px; font-weight: 600; color: var(--brand);">
+                    {st.session_state.logged_in_username}
+                </p>
+                <p style="margin: 0; font-size: 10px; color: var(--text-muted);">
+                    {st.session_state.user_role}
+                </p>
             </div>
             """,
-            unsafe_allow_html=True
+            unsafe_allow_html=True,
         )
-        
-        logout_clicked = st.button("🚪 Logout", key="logout_button", use_container_width=False)
+        logout_clicked = st.button("🚪 Logout", key="logout_button", use_container_width=True)
         if logout_clicked:
             active_file = "active_users.json"
             if os.path.exists(active_file):
@@ -650,45 +596,50 @@ if st.session_state.is_authenticated:
             st.session_state.welcome_shown = False
             st.success("Logged out successfully.")
             st.rerun()
-
+    
     st.divider()
-
+    
     if not st.session_state.get('welcome_shown', False):
         st.toast(f"🎉 Welcome back, {st.session_state.logged_in_username}! We're thrilled to have you here.", icon="🎉")
         st.session_state.welcome_shown = True
 
     render_status_strip()
-
-# === SIDEBAR - ONLY SHOW AFTER LOGIN WITH MERCEDES LOGO ===
-if st.session_state.is_authenticated:
-    with st.sidebar:
-        # === SIDEBAR LOGO WITH MERCEDES ===
+else:
+    # Non-authenticated header
+    header_cols = st.columns([1.5, 2.5, 1])
+    with header_cols[0]:
         if logo_data:
             st.markdown(
                 f"""
-                <div class="sidebar-logo">
-                    <img src="data:image/gif;base64,{logo_data}" style="width: 40px; height: 40px; animation: spin 20s linear infinite; margin-right: 10px; display: inline-block;">
-                    <h3 style="display: inline-block; margin: 0;">IntelliDoc</h3>
+                <div style="display: flex; align-items: center; padding-top: 8px;">
+                    <img src="data:image/gif;base64,{logo_data}" 
+                         alt="Mercedes-Benz" 
+                         style="width: 50px; height: 50px;" />
                 </div>
                 """,
-                unsafe_allow_html=True
+                unsafe_allow_html=True,
             )
-        else:
-            st.markdown(
-                """
-                <div class="sidebar-logo">
-                    <div style="font-size: 32px;">🧠</div>
-                    <h3>IntelliDoc</h3>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-        
-        st.divider()
+    with header_cols[1]:
+        st.markdown(
+            """
+            <div style="padding: 10px 0;">
+                <h2 style="margin: 0; font-size: 20px; color: var(--text);">🧠 IntelliDoc AI</h2>
+                <p style="margin: 0; font-size: 12px; color: var(--text-soft);">Smart Document Assistant</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with header_cols[2]:
+        if st.button("🌙" if not st.session_state.dark_mode else "☀️", 
+                    key="theme_toggle_login",
+                    help="Toggle dark/light mode",
+                    use_container_width=True):
+            toggle_dark_mode()
+        apply_theme()
 
-# ============================================
+# -------------------------------
 # SESSION STATE INITIALIZATION
-# ============================================------------------------
+# -------------------------------
 for key in ["uploaded_files", "selected_files", "file_texts", "excel_data_by_file", "vector_stores", "messages",
             "ask_messages", "extracted_images"]:
     if key not in st.session_state:
@@ -2297,6 +2248,20 @@ with st.sidebar:
             unsafe_allow_html=True
         )
 
+        # Mercedes Logo in Sidebar
+        if logo_data:
+            st.markdown(
+                f"""
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding: 12px; background: var(--brand-soft); border-radius: 8px;">
+                    <img src="data:image/gif;base64,{logo_data}" 
+                         alt="Mercedes-Benz" 
+                         style="width: 40px; height: 40px; animation: spin 25s linear infinite;" />
+                    <div style="color: var(--brand); font-weight: 600; font-size: 14px;">IntelliDoc</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        
         st.header("Upload Documents")
         st.info("1) Upload files." \
         " 2) Click the file cards you need. " \
