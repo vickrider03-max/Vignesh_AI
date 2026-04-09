@@ -162,14 +162,152 @@ except Exception:
 st.markdown(
     """
     <style>
+        /* ============================================
+           THEME VARIABLES - LIGHT MODE (DEFAULT)
+           ============================================ */
         :root {
+            /* Primary Brand Colors */
             --brand: #1f4f91;
             --brand-soft: #eaf2ff;
+            --brand-lighter: #f5f9ff;
+            /* Neutral Colors */
             --border: #d7e3f4;
+            --text: #173152;
             --text-soft: #51627a;
+            --text-muted: #94a3b8;
             --panel: #f8fbff;
+            --bg: #ffffff;
+            /* Status Colors */
+            --success: #16a34a;
             --success-bg: #edf8f1;
+            --warning: #ea580c;
             --warning-bg: #fff8e8;
+            --error: #dc2626;
+            --error-bg: #fee2e2;
+            /* Accent Colors */
+            --accent: #3b82f6;
+            --accent-dark: #1e40af;
+            /* Shadows */
+            --shadow-sm: 0 2px 4px rgba(0,0,0,0.08);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.12);
+            --shadow-lg: 0 8px 24px rgba(0,0,0,0.15);
+        }
+        
+        /* Dark Mode Variables */
+        [data-theme="dark"] {
+            --brand: #60a5fa;
+            --brand-soft: #1e3a8a;
+            --brand-lighter: #0f172a;
+            --border: #1e293b;
+            --text: #e2e8f0;
+            --text-soft: #cbd5e1;
+            --text-muted: #64748b;
+            --panel: #1e293b;
+            --bg: #0f172a;
+            --success: #22c55e;
+            --success-bg: #0f2818;
+            --warning: #fb923c;
+            --warning-bg: #1f1410;
+            --error: #ef4444;
+            --error-bg: #1f0a0a;
+            --accent: #60a5fa;
+            --accent-dark: #3b82f6;
+            --shadow-sm: 0 2px 4px rgba(0,0,0,0.3);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+            --shadow-lg: 0 8px 24px rgba(0,0,0,0.5);
+        }
+        
+        /* ============================================
+           ANIMATIONS - 8 TYPES @ 60 FPS
+           ============================================ */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+        
+        @keyframes slideInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        @keyframes slideInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        @keyframes spin {
+            from {
+                transform: rotate(0deg);
+            }
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+        
+        @keyframes bounce {
+            0%, 100% {
+                transform: translateY(0);
+            }
+            50% {
+                transform: translateY(-10px);
+            }
+        }
+        
+        @keyframes shimmer {
+            0% {
+                background-position: -1000px 0;
+            }
+            100% {
+                background-position: 1000px 0;
+            }
+        }
+        
+        @keyframes scaleIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+        
+        /* ============================================
+           BASE STYLING
+           ============================================ */
+        * {
+            transition: background-color 0.2s ease, color 0.2s ease;
+        }
+        
+        body {
+            background: var(--bg);
+            color: var(--text);
         }
         .app-card {
             background: var(--panel);
@@ -197,20 +335,21 @@ st.markdown(
 
         .metric-card {
             flex: 1;
-            background: #ffffff;
+            background: var(--bg);
             padding: 18px;
             border-radius: 12px;
-            border: 1px solid #e2e5ed;
-            box-shadow: 0 2px 6px rgba(30, 64, 175, 0.08);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-md);
             text-align: center;
             transition: all 0.25s ease;
+            animation: fadeIn 0.6s ease-out;
         }
 
         .card-label {
             display: block;
             font-size: 0.75rem;
             font-weight: 600;
-            color: #9ca3af;
+            color: var(--text-muted);
             text-transform: uppercase;
             letter-spacing: 0.5px;
             margin-bottom: 8px;
@@ -220,12 +359,13 @@ st.markdown(
             display: block;
             font-size: 1.35rem;
             font-weight: 700;
-            color: #1e40af;
+            color: var(--brand);
         }
 
         .metric-card:hover {
-            border-color: #1e40af;
-            box-shadow: 0 6px 18px rgba(30, 64, 175, 0.12);
+            border-color: var(--brand);
+            box-shadow: var(--shadow-lg);
+            transform: translateY(-2px);
         }
             font-weight: 600;
             line-height: 1.1;
@@ -304,6 +444,58 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# ============================================
+# UTILITY FUNCTIONS - ENTERPRISE FEATURES
+# ============================================
+
+def toggle_dark_mode():
+    """Toggle dark mode on/off"""
+    if "dark_mode" not in st.session_state:
+        st.session_state.dark_mode = False
+    st.session_state.dark_mode = not st.session_state.dark_mode
+
+
+def apply_theme():
+    """Apply the current theme (light/dark mode)"""
+    if "dark_mode" not in st.session_state:
+        st.session_state.dark_mode = False
+    
+    theme = "dark" if st.session_state.dark_mode else "light"
+    st.markdown(
+        f"""
+        <script>
+            document.documentElement.setAttribute('data-theme', '{theme}');
+        </script>
+        """,
+        unsafe_allow_html=True
+    )
+
+
+def render_loading_spinner():
+    """Render an animated loading spinner"""
+    st.markdown(
+        """
+        <div style="text-align: center; padding: 40px;">
+            <div style="
+                width: 50px;
+                height: 50px;
+                border: 3px solid var(--brand-soft);
+                border-top: 3px solid var(--brand);
+                border-radius: 50%;
+                animation: spin 1s linear infinite;
+                margin: 0 auto;
+            "></div>
+            <p style="margin-top: 20px; color: var(--text-soft);">Loading...</p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
+# Initialize dark mode session state
+if "dark_mode" not in st.session_state:
+    st.session_state.dark_mode = False
+
 # Ensure session state keys exist before rendering login status
 for key, default_value in [
     ("is_authenticated", False),
@@ -361,32 +553,54 @@ def render_status_strip():
 
     st.markdown(status_html, unsafe_allow_html=True)
 
-header_cols = st.columns([3, 1])
-with header_cols[0]:
-    if logo_data:
+# Apply theme system
+apply_theme()
+
+# === HEADER WITH INTEGRATED LOGO & DARK MODE TOGGLE - ONLY SHOW AFTER LOGIN ===
+if st.session_state.is_authenticated:
+    header_cols = st.columns([0.5, 3, 0.5, 1])
+
+    # Column 1: Mercedes Logo (Animated)
+    with header_cols[0]:
+        if logo_data:
+            st.markdown(
+                f"""
+                <div style="text-align: center; padding: 8px;">
+                    <img src="data:image/gif;base64,{logo_data}" style="width: 50px; height: 50px; animation: spin 20s linear infinite;">
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                """
+                <div style="text-align: center; padding: 8px;">
+                    <div style="font-size: 40px; animation: spin 20s linear infinite;">🧠</div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+    # Column 2: Title
+    with header_cols[1]:
         st.markdown(
             f"""
-            <div class="brand-hero">
-                <img src="data:image/gif;base64,{logo_data}" alt="Mercedes-Benz logo" />
-                <p class="brand-subtitle">Mercedes-Benz</p>
-                <h1 class="brand-title">🧠 IntelliDoc AI– Smart Document Assistant</h1>
+            <div class="brand-hero" style="gap: 2px;">
+                <h1 class="brand-title">IntelliDoc AI</h1>
+                <p class="brand-subtitle">Smart Document Assistant</p>
             </div>
             """,
             unsafe_allow_html=True,
         )
-    else:
-        st.markdown(
-            """
-            <div class="brand-hero">
-                <h1 class="brand-title">🧠 IntelliDoc AI– Smart Document Assistant</h1>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        st.info("Mercedes logo generation requires matplotlib and numpy. Install these packages to view the animated logo.")
 
-with header_cols[1]:
-    if st.session_state.is_authenticated:
+    # Column 3: Dark Mode Toggle
+    with header_cols[2]:
+        if st.button("🌙" if not st.session_state.dark_mode else "☀️", key="theme_toggle", help="Toggle Dark Mode"):
+            toggle_dark_mode()
+            st.rerun()
+
+    # Column 4: User Status & Logout
+    with header_cols[3]:
         creator_timestamp = None
         if st.session_state.user_role == "creator" and st.session_state.login_history:
             creator_entries = [
@@ -396,12 +610,25 @@ with header_cols[1]:
             if creator_entries:
                 creator_timestamp = creator_entries[-1].get("timestamp")
 
-        status_message = f"Logged in as {st.session_state.logged_in_username} ({st.session_state.user_role})"
-        if creator_timestamp:
-            status_message += f"\nLogin time: {creator_timestamp}"
-
-        st.markdown(f"**{status_message}**")
-        logout_clicked = st.button("Logout", key="logout_button")
+        status_message = f"👤 {st.session_state.logged_in_username}"
+        role_badge = st.session_state.user_role or "User"
+        
+        st.markdown(
+            f"""
+            <div style="text-align: right; font-size: 12px; color: var(--text-soft); line-height: 1.4;">
+                <div style="font-weight: 600; margin-bottom: 4px;">{html.escape(status_message)}</div>
+                <div style="background: linear-gradient(135deg, var(--brand-soft), var(--accent)); 
+                           color: var(--brand); padding: 3px 8px; border-radius: 12px; 
+                           font-size: 10px; font-weight: 600; display: inline-block; 
+                           text-transform: uppercase;">
+                    {html.escape(role_badge)}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        logout_clicked = st.button("🚪 Logout", key="logout_button", use_container_width=False)
         if logout_clicked:
             active_file = "active_users.json"
             if os.path.exists(active_file):
@@ -424,16 +651,44 @@ with header_cols[1]:
             st.success("Logged out successfully.")
             st.rerun()
 
-if st.session_state.is_authenticated:
+    st.divider()
+
     if not st.session_state.get('welcome_shown', False):
         st.toast(f"🎉 Welcome back, {st.session_state.logged_in_username}! We're thrilled to have you here.", icon="🎉")
         st.session_state.welcome_shown = True
 
     render_status_strip()
 
-# -------------------------------
+# === SIDEBAR - ONLY SHOW AFTER LOGIN WITH MERCEDES LOGO ===
+if st.session_state.is_authenticated:
+    with st.sidebar:
+        # === SIDEBAR LOGO WITH MERCEDES ===
+        if logo_data:
+            st.markdown(
+                f"""
+                <div class="sidebar-logo">
+                    <img src="data:image/gif;base64,{logo_data}" style="width: 40px; height: 40px; animation: spin 20s linear infinite; margin-right: 10px; display: inline-block;">
+                    <h3 style="display: inline-block; margin: 0;">IntelliDoc</h3>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                """
+                <div class="sidebar-logo">
+                    <div style="font-size: 32px;">🧠</div>
+                    <h3>IntelliDoc</h3>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        
+        st.divider()
+
+# ============================================
 # SESSION STATE INITIALIZATION
-# -------------------------------
+# ============================================------------------------
 for key in ["uploaded_files", "selected_files", "file_texts", "excel_data_by_file", "vector_stores", "messages",
             "ask_messages", "extracted_images"]:
     if key not in st.session_state:
