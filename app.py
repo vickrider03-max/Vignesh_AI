@@ -370,55 +370,6 @@ st.markdown(
             animation: spin 1s linear infinite;
             margin: 20px auto;
         }
-        .brand-hero {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-            justify-content: center;
-            gap: 4px;
-            width: 100%;
-            margin: 0 0 8px 0;
-            text-align: left;
-        }
-        .brand-hero img {
-            width: 120px;
-            max-width: 100%;
-            height: auto;
-            display: block;
-        }
-        .brand-title {
-            color: #173152;
-            font-size: 1.85rem;
-            font-weight: 700;
-            line-height: 1.1;
-            margin: 0;
-            white-space: nowrap;
-        }
-        .brand-subtitle {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            color: #666;
-            font-size: 0.68rem;
-            margin: 0;
-            font-weight: 500;
-            letter-spacing: 0.18rem;
-            text-transform: uppercase;
-        }
-        div[data-baseweb="select"] span[data-baseweb="tag"] {
-            background: #dff3e4 !important;
-            border: 1px solid #b7dec1 !important;
-            border-radius: 999px !important;
-            color: #2f5d3a !important;
-        }
-        div[data-baseweb="select"] span[data-baseweb="tag"] * {
-            color: #2f5d3a !important;
-        }
-        div[data-baseweb="select"] span[data-baseweb="tag"] svg {
-            fill: #4c7a57 !important;
-        }
-        div[data-baseweb="select"] span[data-baseweb="tag"]:hover {
-            background: #d3edd9 !important;
-            border-color: #a7d2b2 !important;
-        }
     </style>
     """,
     unsafe_allow_html=True
