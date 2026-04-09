@@ -1,0 +1,24 @@
+name: Streamlit Keep Alive
+
+on:
+  schedule:
+    - cron: '0 */6 * * *' # Runs every 6 hours
+  workflow_dispatch:      # Allows you to click a button to run it manually
+
+jobs:
+  ping_app:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: pip install selenium webdriver-manager
+
+      - name: Run wake up script
+        run: python wake_up.py
