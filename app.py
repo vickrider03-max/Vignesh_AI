@@ -446,37 +446,38 @@ def render_status_strip():
     # JavaScript for live timer
     live_timer_js = f"""
     <script>
-        // Get the start time from Python
-        var startTime = {st.session_state.start_time * 1000}; // Convert to milliseconds
-        
-        function updateTimer() {{
-            var now = new Date().getTime();
-            var elapsed = Math.floor((now - startTime) / 1000);
+        document.addEventListener('DOMContentLoaded', function() {{
+            // Get the start time from Python
+            var startTime = {st.session_state.start_time * 1000}; // Convert to milliseconds
             
-            var hours = Math.floor(elapsed / 3600);
-            var minutes = Math.floor((elapsed % 3600) / 60);
-            var seconds = elapsed % 60;
-            
-            var timerStr = 
-                hours.toString().padStart(2, '0') + ':' +
-                minutes.toString().padStart(2, '0') + ':' +
-                seconds.toString().padStart(2, '0');
-            
-            // Update the timer display
-            var timerElement = document.getElementById('live-timer');
-            if (timerElement) {{
-                timerElement.textContent = timerStr;
+            function updateTimer() {{
+                var now = new Date().getTime();
+                var elapsed = Math.floor((now - startTime) / 1000);
+                
+                var hours = Math.floor(elapsed / 3600);
+                var minutes = Math.floor((elapsed % 3600) / 60);
+                var seconds = elapsed % 60;
+                
+                var timerStr = 
+                    hours.toString().padStart(2, '0') + ':' +
+                    minutes.toString().padStart(2, '0') + ':' +
+                    seconds.toString().padStart(2, '0');
+                
+                // Update the timer display
+                var timerElement = document.getElementById('live-timer');
+                if (timerElement) {{
+                    timerElement.textContent = timerStr;
+                }}
             }}
-        }}
-        
-        // Update immediately and then every second
-        updateTimer();
-        setInterval(updateTimer, 1000);
+            
+            // Update immediately and then every second
+            updateTimer();
+            setInterval(updateTimer, 1000);
+        }});
     </script>
     """
 
     status_html = f"""
-    {live_timer_js}
     <div class="dashboard-grid">
         <div class="metric-card" style="background: linear-gradient(135deg, #e8eaf6 0%, #c5cae9 100%); color: #3c4f7e; border: 1px solid #e8eaf6;">
             <span class="card-label" style="color: #666;">👤 User</span>
@@ -495,6 +496,7 @@ def render_status_strip():
             <span class="card-value" id="live-timer" style="color: #2e7d32; font-family: 'Courier New', monospace;">{timer_str}</span>
         </div>
     </div>
+    {live_timer_js}
     """
 
     st.markdown(status_html, unsafe_allow_html=True)
