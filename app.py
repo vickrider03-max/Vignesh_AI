@@ -146,7 +146,7 @@ def get_needle_minimalist_logo():
 # -------------------------------
 # STREAMLIT PAGE CONFIG
 # -------------------------------
-st.set_page_config(page_title="Vignesh_AI", layout="wide")
+st.set_page_config(page_title="🧠 IntelliDoc AI– Smart Document Assistant", layout="wide")
 
 # Load preview data from file
 load_preview_data()
@@ -4624,4 +4624,3 @@ if active_main_tab == "🧠 CAPL":
                                 render_capl_issue_table(issues)
                             except Exception as exc:
                                 st.error(f"AI suggestion failed: {exc}")
-
