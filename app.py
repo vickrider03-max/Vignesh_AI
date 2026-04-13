@@ -256,7 +256,7 @@ st.markdown(
     """
     <style>
         :root {
-            --primary: #a8d8f0;
+            --primary: #e8f6ff;
             --secondary: #64748b;
             --background: #ffffff;
             --surface: #f8fafc;
@@ -266,8 +266,8 @@ st.markdown(
             --success: #10b981;
             --warning: #f59e0b;
             --error: #ef4444;
-            --button-bg: #a8d8f0;
-            --button-hover: #7fc5e8;
+            --button-bg: #e8f6ff;
+            --button-hover: #d0e8f8;
             --button-text: #1e293b;
         }
         
@@ -363,23 +363,24 @@ st.markdown(
         .stButton > button {
             background: var(--button-bg) !important;
             color: var(--button-text) !important;
-            border: none !important;
+            border: 2px solid #c0dff0 !important;
             border-radius: 6px !important;
             padding: 0.5rem 1rem !important;
-            font-weight: 500 !important;
+            font-weight: 600 !important;
             transition: all 0.2s ease !important;
-            box-shadow: 0 2px 4px rgba(168, 216, 240, 0.3) !important;
+            box-shadow: 0 2px 4px rgba(200, 230, 250, 0.2) !important;
         }
         
         .stButton > button:hover {
             background: var(--button-hover) !important;
             transform: translateY(-1px) !important;
-            box-shadow: 0 4px 8px rgba(127, 197, 232, 0.4) !important;
+            box-shadow: 0 4px 8px rgba(175, 215, 245, 0.3) !important;
+            border-color: #a0c8e8 !important;
         }
         
         .stButton > button:active {
             transform: translateY(0) !important;
-            box-shadow: 0 2px 4px rgba(168, 216, 240, 0.3) !important;
+            box-shadow: 0 2px 4px rgba(200, 230, 250, 0.2) !important;
         }
         
         /* Animations */
@@ -2714,13 +2715,13 @@ with st.sidebar:
                     line-height: 1.4;
                 }
                 [data-testid="stSidebar"] [class*="st-key-select_file_"] button[kind="secondary"] {
-                    background: #f0f7ff;
-                    border: 1px solid #c4e0f5;
+                    background: #f5fbff;
+                    border: 1px solid #d0e8f8;
                     color: #1e293b;
                 }
                 [data-testid="stSidebar"] [class*="st-key-select_file_"] button[kind="primary"] {
-                    background: #d4edff;
-                    border: 1px solid #a8d8f0;
+                    background: #e8f6ff;
+                    border: 2px solid #c0dff0;
                     color: #1e293b;
                 }
                 .file-icon-button {
@@ -2731,12 +2732,12 @@ with st.sidebar:
                     height: 38px;
                     border-radius: 12px;
                     background: transparent;
-                    color: #a8d8f0;
+                    color: #5a9fd4;
                     text-decoration: none;
                     font-size: 18px;
                 }
                 .file-icon-button:hover {
-                    background: #d4edff;
+                    background: #f0faff;
                 }
                 [data-testid="stSidebar"] [class*="st-key-del_file_"] button[kind="tertiary"] {
                     background: transparent;
@@ -4379,7 +4380,7 @@ if active_main_tab == "💬 Chat":
     with chat_header_col:
         st.subheader("Chat with Selected Documents")
     with chat_reset_col:
-        if st.button("🔄 Reset", key="reset_chat_selection", use_container_width=True):
+        if st.button("🌊 🧼 Reset", key="reset_chat_selection", use_container_width=True):
             st.session_state.chat_file_selection = []
             st.session_state.chat_summary_downloads = {"images": [], "tables": []}
             st.session_state.messages = []
