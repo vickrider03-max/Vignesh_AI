@@ -421,6 +421,38 @@ st.markdown(
             pointer-events: none !important;
         }
     </style>
+    <script>
+        const hideStreamlitFooter = () => {
+            const selectors = [
+                'footer',
+                'footer *',
+                '[data-testid="stFooter"]',
+                '[data-testid="stDecoration"]',
+                'a[href*="streamlit.io"]',
+                'a[href*="github.com"]',
+                'a[href*="github"]',
+                '[aria-label*="GitHub"]',
+                '[aria-label*="Streamlit"]',
+                '[title*="GitHub"]',
+                '[title*="Streamlit"]'
+            ];
+            selectors.forEach(selector => {
+                document.querySelectorAll(selector).forEach(el => {
+                    el.style.setProperty('display', 'none', 'important');
+                    el.style.setProperty('visibility', 'hidden', 'important');
+                    el.style.setProperty('opacity', '0', 'important');
+                    el.style.setProperty('height', '0', 'important');
+                    el.style.setProperty('width', '0', 'important');
+                    el.style.setProperty('pointer-events', 'none', 'important');
+                });
+            });
+        };
+
+        const footerObserver = new MutationObserver(() => hideStreamlitFooter());
+        footerObserver.observe(document.body, { childList: true, subtree: true });
+        hideStreamlitFooter();
+        setInterval(hideStreamlitFooter, 1000);
+    </script>
     """,
     unsafe_allow_html=True
 )
