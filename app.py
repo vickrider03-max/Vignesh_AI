@@ -453,13 +453,35 @@ st.markdown(
             document.querySelectorAll('*').forEach(el => {
                 try {
                     const text = (el.innerText || el.textContent || '').trim();
-                    if (text.includes('Made with Streamlit') || text.includes('GitHub')) {
+                    const hasIcon = el.querySelector('img[src*="streamlit"], img[src*="github"], svg');
+                    if (text.includes('Made with Streamlit') || text.includes('GitHub') || hasIcon) {
                         el.style.setProperty('display', 'none', 'important');
                         el.style.setProperty('visibility', 'hidden', 'important');
                         el.style.setProperty('opacity', '0', 'important');
                         el.style.setProperty('height', '0', 'important');
                         el.style.setProperty('width', '0', 'important');
                         el.style.setProperty('pointer-events', 'none', 'important');
+                    }
+                } catch (err) {
+                    // ignore inaccessible nodes
+                }
+            });
+
+            document.querySelectorAll('body *').forEach(el => {
+                try {
+                    const style = window.getComputedStyle(el);
+                    if (style.position === 'fixed') {
+                        const rect = el.getBoundingClientRect();
+                        if (rect.bottom >= window.innerHeight - 90 && rect.right >= window.innerWidth - 90 && rect.width <= 90 && rect.height <= 90) {
+                            if (el.querySelector('img, svg') || /Streamlit|GitHub/i.test(el.innerText || el.textContent || '')) {
+                                el.style.setProperty('display', 'none', 'important');
+                                el.style.setProperty('visibility', 'hidden', 'important');
+                                el.style.setProperty('opacity', '0', 'important');
+                                el.style.setProperty('height', '0', 'important');
+                                el.style.setProperty('width', '0', 'important');
+                                el.style.setProperty('pointer-events', 'none', 'important');
+                            }
+                        }
                     }
                 } catch (err) {
                     // ignore inaccessible nodes
