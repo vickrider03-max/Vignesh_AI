@@ -2742,11 +2742,11 @@ with st.sidebar:
                 }
                 [data-testid="stSidebar"] [class*="st-key-select_file_"] button[kind="primary"] {
                     background: #ffe7d6;
-                    border: 2px solid #ffcdb2;
-                    color: #4d2c16;
+                    border: 2px solid #ffbea3;
+                    color: #5f351c;
                 }
                 [data-testid="stSidebar"] [class*="st-key-select_file_"] button[kind="primary"]:hover {
-                    background: #ffd6b4;
+                    background: #ffd0b8;
                 }
                 .file-icon-button {
                     display: inline-flex;
@@ -4409,11 +4409,14 @@ def show_help_popup(tab_name, selected_files):
     if not selected_files:
         st.markdown(
             f"""
-            <div style='position:fixed; bottom:14px; right:14px; width:360px; padding:16px; background:linear-gradient(135deg, #f8fbff 0%, #f0f7ff 100%); border:1px solid #d0e8f0; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.12); z-index:9999;'>
-                <h4 style='margin:0 0 8px 0; font-size:14px; font-weight:600; color:#1e293b;'>📘 {tab_name.capitalize()} Get Started</h4>
-                <p style='margin:0 0 6px 0; font-size:12px; color:#475569;'>💡 <strong>You're at: {skill_level.title()} Level</strong></p>
-                <p style='margin:0; font-size:12px; color:#64748b;'>Select a document first to unlock targeted query guidance and smart suggestions.</p>
-                <p style='margin:5px 0 0 0; font-size:11px; color:#94a3b8;'>Keywords: {', '.join(keywords)}</p>
+            <div style='position:fixed; bottom:14px; right:14px; width:360px; padding:18px; background:#fff5ef; border:1px solid #ffd3bc; border-radius:16px; box-shadow:0 16px 36px rgba(0,0,0,0.12); z-index:9999;'>
+                <h4 style='margin:0 0 10px 0; font-size:15px; font-weight:700; color:#7a3f23;'>🧠 {tab_name.capitalize()} Helper</h4>
+                <p style='margin:0 0 10px 0; font-size:12px; color:#5f3c2a;'>Upload and select documents to get tailored guidance for this section.</p>
+                <div style='margin:0 0 12px 0; padding:10px; background:rgba(255, 230, 216, 0.85); border-left:3px solid #ffb38f; border-radius:10px;'>
+                    <p style='margin:0; font-size:12px; color:#5f3c2a;'>💡 <strong>Skill Level: {skill_level.title()}</strong> | Queries: {tracker.get("queries", 0)}</p>
+                </div>
+                <p style='margin:0 0 6px 0; font-size:12px; color:#7a5d4f;'>This helper will show relevant suggestions once you pick files for the active tab.</p>
+                <p style='margin:0; font-size:11px; color:#9b7c68;'>Try: {', '.join(keywords)}</p>
             </div>
             """,
             unsafe_allow_html=True
@@ -4451,25 +4454,26 @@ def show_help_popup(tab_name, selected_files):
 
     st.markdown(
         f"""
-        <div style='position:fixed; bottom:14px; right:14px; width:380px; padding:16px; background:linear-gradient(135deg, #f8fbff 0%, #f0f7ff 100%); border:1px solid #d0e8f0; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.12); z-index:9999; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;'>
-            <h4 style='margin:0 0 10px 0; font-size:14px; font-weight:600; color:#1e293b;'>📘 {tab_name.capitalize()} Assistant</h4>
-            
-            <div style='margin:0 0 10px 0; padding:8px; background:rgba(168, 216, 240, 0.1); border-left:3px solid #a8d8f0; border-radius:4px;'>
-                <p style='margin:0; font-size:12px; color:#475569;'>💡 <strong>Skill Level: {skill_level.title()}</strong> | Queries: {tracker.get("queries", 0)}</p>
+        <div style='position:fixed; bottom:14px; right:14px; width:380px; padding:18px; background:#fff5ef; border:1px solid #ffd3bc; border-radius:16px; box-shadow:0 16px 36px rgba(0,0,0,0.12); z-index:9999; font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;'>
+            <h4 style='margin:0 0 10px 0; font-size:15px; font-weight:700; color:#7a3f23;'>🧠 {tab_name.capitalize()} Helper</h4>
+            <p style='margin:0 0 12px 0; font-size:12px; color:#5f3c2a;'>Quick guidance for the active section, based on your selected files and workflow.</p>
+
+            <div style='margin:0 0 12px 0; padding:10px; background:rgba(255, 230, 216, 0.85); border-left:3px solid #ffb38f; border-radius:10px;'>
+                <p style='margin:0; font-size:12px; color:#5f3c2a;'>💡 <strong>Skill Level: {skill_level.title()}</strong> | Queries: {tracker.get("queries", 0)}</p>
             </div>
-            
-            <div style='margin:0 0 8px 0;'>
-                <p style='margin:0 0 4px 0; font-size:11px; font-weight:600; color:#64748b;'>✨ Suggested Queries:</p>
+
+            <div style='margin:0 0 10px 0;'>
+                <p style='margin:0 0 5px 0; font-size:11px; font-weight:700; color:#8a5e49;'>✨ Suggested Queries:</p>
                 {suggestions_html}
             </div>
-            
-            <div style='margin:0 0 8px 0; padding:8px; background:rgba(30, 41, 59, 0.05); border-radius:4px;'>
-                <p style='margin:0; font-size:12px; color:#1e293b;'>{next_action}</p>
+
+            <div style='margin:0 0 12px 0; padding:10px; background:rgba(255,255,255,0.92); border-radius:10px; border:1px solid #ffe1d2;'>
+                <p style='margin:0; font-size:12px; color:#5f3c2a;'>{next_action}</p>
             </div>
-            
-            <p style='margin:0 0 6px 0; font-size:12px; color:#64748b;'><strong>File Types:</strong> {', '.join(sorted(selected_types))}</p>
-            <p style='margin:0 0 6px 0; font-size:12px; color:#64748b;'>{type_hint}</p>
-            <p style='margin:0; font-size:11px; color:#94a3b8;'>{extra}</p>
+
+            <p style='margin:0 0 6px 0; font-size:12px; color:#7a5d4f;'><strong>File Types:</strong> {', '.join(sorted(selected_types))}</p>
+            <p style='margin:0 0 6px 0; font-size:12px; color:#7a5d4f;'>{type_hint}</p>
+            <p style='margin:0; font-size:11px; color:#9b7c68;'>{extra}</p>
         </div>
         """,
         unsafe_allow_html=True
