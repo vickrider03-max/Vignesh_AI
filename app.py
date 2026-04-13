@@ -814,11 +814,22 @@ if st.session_state.is_authenticated:
             now = datetime.now()
             ist_tz = timezone('Asia/Kolkata')
             ist_time = now.astimezone(ist_tz).strftime("%Y-%m-%d %H:%M:%S %Z")
+            
+            # Calculate usage time
+            usage_seconds = 0
+            if st.session_state.start_time is not None:
+                usage_seconds = int(time.time() - st.session_state.start_time)
+            
+            hours, remainder = divmod(usage_seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            usage_time_str = f"{hours}h {minutes}m {seconds}s"
+            
             st.session_state.login_history.append({
                 "username": st.session_state.logged_in_username,
                 "role": st.session_state.user_role,
                 "action": "logout",
-                "timestamp": ist_time
+                "timestamp": ist_time,
+                "usage_time": usage_time_str
             })
             active_file = "active_users.json"
             if os.path.exists(active_file):
@@ -3613,7 +3624,8 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 "username": cleaned_username,
                 "role": "creator",
                 "action": "login",
-                "timestamp": ist_time
+                "timestamp": ist_time,
+                "usage_time": "-"
             })
             # Update active users
             active_file = "active_users.json"
@@ -3645,7 +3657,8 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 "username": cleaned_username,
                 "role": "user",
                 "action": "login",
-                "timestamp": ist_time
+                "timestamp": ist_time,
+                "usage_time": "-"
             })
             # Update active users
             active_file = "active_users.json"
