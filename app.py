@@ -404,15 +404,30 @@ st.markdown(
         
         /* Hide Streamlit footer and GitHub icon */
         footer,
+        body > footer,
         footer *,
+        [data-testid="stFooter"],
+        [data-testid="stFooter"] *,
         [data-testid="stDecoration"],
         [data-testid="stDecoration"] *,
+        [data-testid="stToolbar"],
+        [data-testid="stHeader"],
+        [data-testid="stStatusWidget"],
+        #MainMenu,
+        #MainMenu *,
         a[href*="streamlit.io"],
         a[href*="github.com"],
         a[href*="github"],
         [title*="GitHub"],
         [aria-label*="GitHub"],
-        [aria-label*="Streamlit"] {
+        [aria-label*="Streamlit"],
+        [role="complementary"] img,
+        [role="complementary"] svg,
+        [style*="position: fixed"][style*="bottom: 0px"][style*="right: 0px"],
+        [style*="position: fixed"][style*="bottom: 1px"][style*="right: 1px"],
+        [style*="position: fixed"][style*="bottom: 10px"][style*="right: 10px"],
+        [style*="position: fixed"][style*="bottom: 8px"][style*="right: 8px"],
+        [data-testid="stDecoration"][style*="position: fixed"] {
             display: none !important;
             visibility: hidden !important;
             opacity: 0 !important;
