@@ -647,6 +647,29 @@ st.markdown(
         footerObserver.observe(document.body, { childList: true, subtree: true });
         hideStreamlitFooter();
         setInterval(hideStreamlitFooter, 1000);
+
+        const applyLightButtonStyles = () => {
+            const selectors = [
+                'button',
+                'input[type="button"]',
+                'input[type="submit"]',
+                '[role="button"]',
+                '.stButton > button',
+                'div[data-testid="stBaseButton"] button'
+            ];
+            document.querySelectorAll(selectors.join(',')).forEach(el => {
+                el.style.setProperty('background-color', '#e8f6ff', 'important');
+                el.style.setProperty('color', '#1e293b', 'important');
+                el.style.setProperty('border-color', '#c0dff0', 'important');
+                el.style.setProperty('border-style', 'solid', 'important');
+                el.style.setProperty('border-width', '2px', 'important');
+                el.style.setProperty('box-shadow', '0 2px 4px rgba(200, 230, 250, 0.2)', 'important');
+            });
+        };
+
+        const buttonObserver = new MutationObserver(() => applyLightButtonStyles());
+        buttonObserver.observe(document.body, { childList: true, subtree: true });
+        applyLightButtonStyles();
     </script>
     """,
     unsafe_allow_html=True
@@ -4365,7 +4388,7 @@ if active_main_tab == "💬 Chat":
     with chat_header_col:
         st.subheader("Chat with Selected Documents")
     with chat_reset_col:
-        if st.button("🌊 🧼 Reset", key="reset_chat_selection", use_container_width=True, help="Reset chat selection"):
+        if st.button(" 🧼 Reset", key="reset_chat_selection", use_container_width=True, help="Reset chat selection"):
             st.session_state.chat_file_selection = []
             st.session_state.chat_summary_downloads = {"images": [], "tables": []}
             st.session_state.messages = []
@@ -4520,7 +4543,7 @@ if active_main_tab == "📊 Dashboard":
     with dashboard_header_col:
         st.subheader("Dashboard")
     with dashboard_reset_col:
-        if st.button("🌊 🧼 Reset", key="reset_dashboard_selection", use_container_width=True):
+        if st.button("🧼 Reset", key="reset_dashboard_selection", use_container_width=True):
             st.session_state.file_dropdown = "--Select File--"
             st.rerun()
 
@@ -5067,7 +5090,7 @@ if active_main_tab == "📂 Compare":
     with compare_header_col:
         st.subheader("Compare Files")
     with compare_reset_col:
-        if st.button("🌊 🧼 Reset", key="reset_compare_selection", use_container_width=True):
+        if st.button("🧼 Reset", key="reset_compare_selection", use_container_width=True):
             st.session_state.compare_file_selection = []
             st.session_state.compare_result_html = None
             st.session_state.compare_result_excel_bytes = None
@@ -5164,7 +5187,7 @@ if active_main_tab == "🧠 CAPL":
     with capl_header_col:
         st.subheader("⚙️ CAPL Compiler & Analyzer")
     with capl_reset_col:
-        if st.button("🌊 🧼 Reset", key="reset_capl_selection", use_container_width=True):
+        if st.button("🧼 Reset", key="reset_capl_selection", use_container_width=True):
             st.session_state.selected_capl_file = "--Select CAPL file--"
             st.session_state.capl_last_analyzed_file = None
             st.session_state.capl_last_issues = None
