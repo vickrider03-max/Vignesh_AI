@@ -4288,7 +4288,7 @@ def set_help_popup_state(tab_name, is_open):
 
 def render_help_floating_icon(tab_name, is_open):
     button_key = f"help_fab_button_{tab_name}"
-    button_label = "✕" if is_open else "💡"
+    button_label = "🧠"
     button_help = "Close query helper" if is_open else f"Open {tab_name.capitalize()} query helper"
 
     if st.button(button_label, key=button_key, help=button_help):
@@ -4301,7 +4301,7 @@ def render_help_floating_icon(tab_name, is_open):
         .st-key-{button_key} {{
             position: fixed;
             right: 22px;
-            top: 92px;
+            bottom: 22px;
             z-index: 10050;
         }}
 
@@ -4337,7 +4337,7 @@ def render_help_floating_icon(tab_name, is_open):
         @media (max-width: 768px) {{
             .st-key-{button_key} {{
                 right: 14px;
-                top: 138px;
+                bottom: 14px;
             }}
         }}
         </style>
