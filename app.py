@@ -428,6 +428,9 @@ st.markdown(
                 'footer *',
                 '[data-testid="stFooter"]',
                 '[data-testid="stDecoration"]',
+                '[data-testid="stToolbar"]',
+                '[data-testid="stHeader"]',
+                '#MainMenu',
                 'a[href*="streamlit.io"]',
                 'a[href*="github.com"]',
                 'a[href*="github"]',
@@ -445,6 +448,22 @@ st.markdown(
                     el.style.setProperty('width', '0', 'important');
                     el.style.setProperty('pointer-events', 'none', 'important');
                 });
+            });
+
+            document.querySelectorAll('*').forEach(el => {
+                try {
+                    const text = (el.innerText || el.textContent || '').trim();
+                    if (text.includes('Made with Streamlit') || text.includes('GitHub')) {
+                        el.style.setProperty('display', 'none', 'important');
+                        el.style.setProperty('visibility', 'hidden', 'important');
+                        el.style.setProperty('opacity', '0', 'important');
+                        el.style.setProperty('height', '0', 'important');
+                        el.style.setProperty('width', '0', 'important');
+                        el.style.setProperty('pointer-events', 'none', 'important');
+                    }
+                } catch (err) {
+                    // ignore inaccessible nodes
+                }
             });
         };
 
