@@ -909,7 +909,16 @@ if st.session_state.is_authenticated:
         brain_col, title_col = st.columns([0.7, 7.3])
         with brain_col:
             if st.button("🧠", key="header_brain_icon", help="Click to show/hide helper tips"):
-                st.session_state.header_help_request = True
+                helper_tab_map = {
+                    "💬 Chat": "chat",
+                    "📊 Dashboard": "dashboard",
+                    "📂 Compare": "compare",
+                    "🧠 CAPL": "capl"
+                }
+                current_helper_tab = helper_tab_map.get(st.session_state.get("active_main_tab", "💬 Chat"), "chat")
+                state_key = _help_state_key(current_helper_tab)
+                st.session_state[state_key] = not st.session_state.get(state_key, False)
+                st.experimental_rerun()
         with title_col:
             st.markdown("### IntelliDoc AI")
             st.markdown("*Smart Document Assistant*")
@@ -4424,50 +4433,42 @@ def show_help_popup(tab_name, selected_files):
         )
         return
 
+    helper_defs = {
+        "chat": {
+            "title": "Chat Help",
+            "text": "Chat with selected documents. Ask for summaries, overviews, keyword search, or word counts. Select files in the sidebar first, then choose one or more files in this tab.",
+            "hint": "Use this tab to interact with the selected documents using simple commands or natural questions."
+        },
+        "dashboard": {
+            "title": "Dashboard Help",
+            "text": "Analyze HTML and Excel-style report files. View metrics, totals, trends, charts, and grouped insights from structured data.",
+            "hint": "Use this tab to analyze structured report files and view metrics, trends, and insights. Best for .html, .htm, and .xlsx files."
+        },
+        "compare": {
+            "title": "Compare Help",
+            "text": "Compare multiple files with inline diff, side-by-side diff, or word presence summary. Download the comparison as Excel after running the check.",
+            "hint": "Use this tab to compare two or more files and inspect differences across documents. Select at least two files to compare."
+        },
+        "capl": {
+            "title": "CAPL Help",
+            "text": "Analyze CAPL files, highlight issues, review detected problems, and optionally apply AI-assisted corrections.",
+            "hint": "Use this tab to inspect, analyze, and improve CAPL scripts. Choose a .can CAPL file, run Compile & Analyze, and review detected issues."
+        }
+    }
+
+    helper_def = helper_defs.get(tab_name, helper_defs["chat"])
     selected_types = {os.path.splitext(f)[1].lower() for f in selected_files}
-    dynamic_suggestions = get_dynamic_suggestions(tab_name, skill_level)
-    next_action = get_next_best_action(tab_name, skill_level)
-    
-    if tab_name == "chat":
-        extra = "Try count('Approved'), find('Error'), summarize(), or specific queries like 'How many tests passed?'"
-    elif tab_name == "dashboard":
-        extra = "If *.xlsx selected, ask for columns and trend counts; *.html can be parsed for test verdicts."
-    elif tab_name == "compare":
-        extra = "Choose inline or side-by-side diff, select a reference file, and download results for PDF, DOCX, PPTX, XLSX, HTML, TXT, CAN, and CAPL files."
-    elif tab_name == "capl":
-        extra = "For CAPL code, use 'find missing semicolon' or 'show unused variables' style queries."
-    else:
-        extra = "Use text queries about the document content."
-
-    type_hint = ""
-    if ".xlsx" in selected_types:
-        type_hint = "For spreadsheets, reference specific columns like 'column 2' or 'total defects'."
-    elif ".html" in selected_types or ".htm" in selected_types:
-        type_hint = "For HTML, ask about login name, pass/fail stats, and fixture totals."
-    elif any(ext in selected_types for ext in [".txt", ".pdf", ".docx", ".pptx"]):
-        type_hint = "For full text files, use keywords and exact phrase search in your query."
-    elif any(ext in selected_types for ext in [".capl", ".can"]):
-        type_hint = "CAPL scripts are analyzed for syntax issues; ask for code fixes or suggestions."
-
-    suggestions_html = "\n".join(f"- {suggestion}" for suggestion in dynamic_suggestions[:3])
 
     st.markdown(
         f"""
-        ### 🧠 {tab_name.capitalize()} Helper
+        ### {helper_def['title']}
         💡 **Skill Level:** {skill_level.title()} | **Queries:** {tracker.get("queries", 0)}
 
-        Quick guidance for the active section, based on your selected files and workflow.
+        {helper_def['text']}
 
-        **Suggested Queries:**
-        {suggestions_html}
+        {helper_def['hint']}
 
-        🎯 **Next Step:** {next_action}
-
-        **File Types:** {', '.join(sorted(selected_types))}
-
-        {type_hint}
-
-        {extra}
+        **Selected Files:** {', '.join(sorted(selected_types))}
         """
     )
 
@@ -4554,20 +4555,6 @@ st.markdown("""
 # 2. Your Tab Logic
 main_tab_options = ["💬 Chat", "📊 Dashboard", "📂 Compare", "🧠 CAPL"]
 active_main_tab = st.radio("Open Section", main_tab_options, horizontal=True, key="active_main_tab", label_visibility="collapsed")
-
-helper_tab_map = {
-    "💬 Chat": "chat",
-    "📊 Dashboard": "dashboard",
-    "📂 Compare": "compare",
-    "🧠 CAPL": "capl"
-}
-if st.session_state.get("header_help_request", False):
-    current_helper_tab = helper_tab_map.get(active_main_tab)
-    if current_helper_tab:
-        state_key = _help_state_key(current_helper_tab)
-        st.session_state[state_key] = not st.session_state.get(state_key, False)
-    st.session_state.header_help_request = False
-    st.experimental_rerun()
 
 # -------------------------------
 # TAB 1: CHAT
