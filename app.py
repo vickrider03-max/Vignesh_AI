@@ -403,8 +403,22 @@ st.markdown(
         }
         
         /* Hide Streamlit footer and GitHub icon */
-        footer {
+        footer,
+        footer *,
+        [data-testid="stDecoration"],
+        [data-testid="stDecoration"] *,
+        a[href*="streamlit.io"],
+        a[href*="github.com"],
+        a[href*="github"],
+        [title*="GitHub"],
+        [aria-label*="GitHub"],
+        [aria-label*="Streamlit"] {
             display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            height: 0 !important;
+            width: 0 !important;
+            pointer-events: none !important;
         }
     </style>
     """,
