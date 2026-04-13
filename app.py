@@ -256,7 +256,7 @@ st.markdown(
     """
     <style>
         :root {
-            --primary: #1f4f91;
+            --primary: #a8d8f0;
             --secondary: #64748b;
             --background: #ffffff;
             --surface: #f8fafc;
@@ -266,9 +266,9 @@ st.markdown(
             --success: #10b981;
             --warning: #f59e0b;
             --error: #ef4444;
-            --button-bg: #1f4f91;
-            --button-hover: #153e75;
-            --button-text: #ffffff;
+            --button-bg: #a8d8f0;
+            --button-hover: #7fc5e8;
+            --button-text: #1e293b;
         }
         
         body {
@@ -368,18 +368,18 @@ st.markdown(
             padding: 0.5rem 1rem !important;
             font-weight: 500 !important;
             transition: all 0.2s ease !important;
-            box-shadow: 0 2px 4px rgba(31, 79, 145, 0.2) !important;
+            box-shadow: 0 2px 4px rgba(168, 216, 240, 0.3) !important;
         }
         
         .stButton > button:hover {
             background: var(--button-hover) !important;
             transform: translateY(-1px) !important;
-            box-shadow: 0 4px 8px rgba(31, 79, 145, 0.3) !important;
+            box-shadow: 0 4px 8px rgba(127, 197, 232, 0.4) !important;
         }
         
         .stButton > button:active {
             transform: translateY(0) !important;
-            box-shadow: 0 2px 4px rgba(31, 79, 145, 0.2) !important;
+            box-shadow: 0 2px 4px rgba(168, 216, 240, 0.3) !important;
         }
         
         /* Animations */
@@ -444,9 +444,9 @@ st.markdown(
         }
         
         @keyframes glow {
-            0% { box-shadow: 0 0 5px rgba(31, 79, 145, 0.3); }
-            50% { box-shadow: 0 0 20px rgba(31, 79, 145, 0.6); }
-            100% { box-shadow: 0 0 5px rgba(31, 79, 145, 0.3); }
+            0% { box-shadow: 0 0 5px rgba(168, 216, 240, 0.3); }
+            50% { box-shadow: 0 0 20px rgba(127, 197, 232, 0.6); }
+            100% { box-shadow: 0 0 5px rgba(168, 216, 240, 0.3); }
         }
         
         @keyframes wiggle {
@@ -810,7 +810,7 @@ if st.session_state.is_authenticated:
         st.markdown("*Smart Document Assistant*")
 
     with logout_col:
-        if st.button("🚪 Logout", use_container_width=True):
+        if st.button("🚶 Logout", use_container_width=True):
             now = datetime.now()
             ist_tz = timezone('Asia/Kolkata')
             ist_time = now.astimezone(ist_tz).strftime("%Y-%m-%d %H:%M:%S %Z")
@@ -1255,9 +1255,9 @@ def build_animated_readme_html(readme_text):
             overflow: hidden;
             padding: 20px;
             border-radius: 22px;
-            border: 1px solid rgba(31, 79, 145, 0.12);
+            border: 1px solid rgba(168, 216, 240, 0.12);
             background:
-                radial-gradient(circle at top right, rgba(31, 79, 145, 0.16), transparent 32%),
+                radial-gradient(circle at top right, rgba(168, 216, 240, 0.16), transparent 32%),
                 radial-gradient(circle at bottom left, rgba(16, 185, 129, 0.18), transparent 28%),
                 rgba(255, 255, 255, 0.84);
             box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
@@ -1269,7 +1269,7 @@ def build_animated_readme_html(readme_text):
             width: 200px;
             height: 200px;
             border-radius: 50%;
-            background: rgba(31, 79, 145, 0.08);
+            background: rgba(168, 216, 240, 0.08);
             filter: blur(10px);
             animation: orbDrift 12s ease-in-out infinite;
         }}
@@ -1283,7 +1283,7 @@ def build_animated_readme_html(readme_text):
             margin-bottom: 18px;
             padding: 14px 16px;
             border-radius: 16px;
-            background: linear-gradient(135deg, rgba(31, 79, 145, 0.12), rgba(16, 185, 129, 0.12));
+            background: linear-gradient(135deg, rgba(168, 216, 240, 0.12), rgba(16, 185, 129, 0.12));
             animation: panelIn 0.65s ease-out;
         }}
         .readme-kicker {{
@@ -1291,7 +1291,7 @@ def build_animated_readme_html(readme_text):
             text-transform: uppercase;
             letter-spacing: 0.12em;
             font-weight: 700;
-            color: #1f4f91;
+            color: #a8d8f0;
         }}
         .readme-subtitle {{
             font-size: 0.95rem;
@@ -1306,7 +1306,7 @@ def build_animated_readme_html(readme_text):
             align-items: center;
             justify-content: center;
             background: rgba(255, 255, 255, 0.72);
-            box-shadow: 0 8px 18px rgba(31, 79, 145, 0.16);
+            box-shadow: 0 8px 18px rgba(168, 216, 240, 0.2);
             font-size: 22px;
             animation: pulseIcon 2.6s ease-in-out infinite;
         }}
@@ -1343,7 +1343,7 @@ def build_animated_readme_html(readme_text):
         .readme-divider {{
             height: 1px;
             margin: 18px 0;
-            background: linear-gradient(90deg, transparent, rgba(31, 79, 145, 0.26), transparent);
+            background: linear-gradient(90deg, transparent, rgba(168, 216, 240, 0.3), transparent);
         }}
         .readme-code {{
             overflow-x: auto;
@@ -1372,8 +1372,8 @@ def build_animated_readme_html(readme_text):
         code {{
             padding: 2px 6px;
             border-radius: 6px;
-            background: rgba(31, 79, 145, 0.08);
-            color: #1f4f91;
+            background: rgba(168, 216, 240, 0.08);
+            color: #a8d8f0;
         }}
         a {{
             color: #1565c0;
@@ -2714,14 +2714,14 @@ with st.sidebar:
                     line-height: 1.4;
                 }
                 [data-testid="stSidebar"] [class*="st-key-select_file_"] button[kind="secondary"] {
-                    background: #f8fbff;
-                    border: 1px solid #d7e3f4;
-                    color: #173152;
+                    background: #f0f7ff;
+                    border: 1px solid #c4e0f5;
+                    color: #1e293b;
                 }
                 [data-testid="stSidebar"] [class*="st-key-select_file_"] button[kind="primary"] {
-                    background: #eaf2ff;
-                    border: 1px solid #1f4f91;
-                    color: #173152;
+                    background: #d4edff;
+                    border: 1px solid #a8d8f0;
+                    color: #1e293b;
                 }
                 .file-icon-button {
                     display: inline-flex;
@@ -2731,12 +2731,12 @@ with st.sidebar:
                     height: 38px;
                     border-radius: 12px;
                     background: transparent;
-                    color: #1f4f91;
+                    color: #a8d8f0;
                     text-decoration: none;
                     font-size: 18px;
                 }
                 .file-icon-button:hover {
-                    background: #eaf2ff;
+                    background: #d4edff;
                 }
                 [data-testid="stSidebar"] [class*="st-key-del_file_"] button[kind="tertiary"] {
                     background: transparent;
@@ -3322,7 +3322,7 @@ def build_highlighted_search_results(file_name, text, query):
 
     return (
         f"<div style='margin-bottom:14px;'>"
-        f"<h4 style='margin:0 0 8px 0; color:#1f4f91;'>{html.escape(file_name)} ({len(matches)} matches)</h4>"
+        f"<h4 style='margin:0 0 8px 0; color:#a8d8f0;'>{html.escape(file_name)} ({len(matches)} matches)</h4>"
         f"{''.join(matches)}"
         f"</div>"
     )
@@ -4239,8 +4239,8 @@ def show_help_popup(tab_name, selected_files):
     if not selected_files:
         st.markdown(
             f"""
-            <div style='position:fixed; bottom:14px; right:14px; width:340px; padding:14px; background:#ffffff; border:1px solid #1f4f91; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.24); z-index:9999;'>
-                <h4 style='margin:0 0 6px 0; font-size:15px; color:#1f4f91;'>📘 {tab_name.capitalize()} Query Keywords</h4>
+            <div style='position:fixed; bottom:14px; right:14px; width:340px; padding:14px; background:#ffffff; border:1px solid #a8d8f0; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.24); z-index:9999;'>
+                <h4 style='margin:0 0 6px 0; font-size:15px; color:#a8d8f0;'>📘 {tab_name.capitalize()} Query Keywords</h4>
                 <p style='margin:0; font-size:13px; color:#253659;'>Select a document first to see targeted query guidance.</p>
                 <p style='margin:5px 0 0 0; font-size:13px; color:#253659;'>Suggested keywords: {', '.join(keywords)}</p>
             </div>
@@ -4273,8 +4273,8 @@ def show_help_popup(tab_name, selected_files):
 
     st.markdown(
         f"""
-        <div style='position:fixed; bottom:14px; right:14px; width:340px; padding:14px; background:#ffffff; border:1px solid #1f4f91; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.24); z-index:9999;'>
-            <h4 style='margin:0 0 6px 0; font-size:15px; color:#1f4f91;'>📘 {tab_name.capitalize()} Query Keywords</h4>
+        <div style='position:fixed; bottom:14px; right:14px; width:340px; padding:14px; background:#ffffff; border:1px solid #a8d8f0; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.24); z-index:9999;'>
+            <h4 style='margin:0 0 6px 0; font-size:15px; color:#a8d8f0;'>📘 {tab_name.capitalize()} Query Keywords</h4>
             <p style='margin:0 0 8px 0; font-size:13px; color:#253659;'>Support for selected file types: {', '.join(sorted(selected_types))}</p>
             <p style='margin:0 0 8px 0; font-size:13px; color:#253659;'>Suggested keywords: {', '.join(keywords)}</p>
             <p style='margin:0; font-size:12px; color:#3c4f7e;'>{extra}</p>
