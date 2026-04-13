@@ -401,6 +401,11 @@ st.markdown(
                 grid-template-columns: 1fr;
             }
         }
+        
+        /* Hide Streamlit footer and GitHub icon */
+        footer {
+            display: none !important;
+        }
     </style>
     """,
     unsafe_allow_html=True
