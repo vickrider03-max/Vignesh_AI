@@ -811,6 +811,15 @@ if st.session_state.is_authenticated:
 
     with logout_col:
         if st.button("🚪 Logout", use_container_width=True):
+            now = datetime.now()
+            ist_tz = timezone('Asia/Kolkata')
+            ist_time = now.astimezone(ist_tz).strftime("%Y-%m-%d %H:%M:%S %Z")
+            st.session_state.login_history.append({
+                "username": st.session_state.logged_in_username,
+                "role": st.session_state.user_role,
+                "action": "logout",
+                "timestamp": ist_time
+            })
             active_file = "active_users.json"
             if os.path.exists(active_file):
                 with open(active_file, "r") as f:
@@ -2657,7 +2666,7 @@ with st.sidebar:
         if st.session_state.user_role == "creator" and st.session_state.login_history:
             creator_entries = [
                 entry for entry in st.session_state.login_history
-                if entry.get("username") == st.session_state.logged_in_username and entry.get("role") == "creator"
+                if entry.get("username") == st.session_state.logged_in_username and entry.get("role") == "creator" and entry.get("action") == "login"
             ]
             if creator_entries:
                 creator_timestamp = creator_entries[-1].get("timestamp")
@@ -2833,7 +2842,7 @@ with st.sidebar:
 
         if st.session_state.user_role == "creator":
             st.markdown("---")
-            st.subheader("Creator Login History")
+            st.subheader("Creator Login / Logout History")
             if st.session_state.login_history:
                 st.table(pd.DataFrame(st.session_state.login_history))
             st.markdown("---")
@@ -3603,6 +3612,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             st.session_state.login_history.append({
                 "username": cleaned_username,
                 "role": "creator",
+                "action": "login",
                 "timestamp": ist_time
             })
             # Update active users
@@ -3634,6 +3644,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             st.session_state.login_history.append({
                 "username": cleaned_username,
                 "role": "user",
+                "action": "login",
                 "timestamp": ist_time
             })
             # Update active users
