@@ -486,18 +486,18 @@ def render_status_strip():
         .dashboard-grid {{
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 14px;
-            padding: 6px 2px;
+            gap: 10px;
+            padding: 4px 2px;
         }}
         .metric-card {{
             position: relative;
             overflow: hidden;
-            min-height: 96px;
-            border-radius: 20px;
-            padding: 18px;
+            min-height: 70px;
+            border-radius: 16px;
+            padding: 12px;
             border: 1px solid rgba(255, 255, 255, 0.5) !important;
-            box-shadow: 0 14px 30px rgba(15, 23, 42, 0.16);
-            transform: translateY(18px) scale(0.98);
+            box-shadow: 0 10px 20px rgba(15, 23, 42, 0.16);
+            transform: translateY(12px) scale(0.98);
             opacity: 0;
             animation: riseIn 0.65s ease-out forwards, cardFloat 4.5s ease-in-out infinite;
         }}
@@ -508,10 +508,10 @@ def render_status_strip():
         .metric-card::before {{
             content: "";
             position: absolute;
-            width: 140px;
-            height: 140px;
-            top: -55px;
-            right: -28px;
+            width: 100px;
+            height: 100px;
+            top: -40px;
+            right: -20px;
             border-radius: 50%;
             background: rgba(255, 255, 255, 0.22);
             filter: blur(4px);
@@ -520,10 +520,10 @@ def render_status_strip():
         .metric-card::after {{
             content: "";
             position: absolute;
-            width: 90px;
-            height: 90px;
-            bottom: -28px;
-            left: -10px;
+            width: 60px;
+            height: 60px;
+            bottom: -20px;
+            left: -8px;
             border-radius: 50%;
             background: rgba(255, 255, 255, 0.16);
         }}
@@ -533,15 +533,15 @@ def render_status_strip():
             display: block;
         }}
         .card-label {{
-            font-size: 0.78rem !important;
+            font-size: 0.65rem !important;
             font-weight: 700 !important;
             letter-spacing: 0.08em;
             text-transform: uppercase;
             color: rgba(15, 23, 42, 0.68) !important;
-            margin-bottom: 10px;
+            margin-bottom: 6px;
         }}
         .card-value {{
-            font-size: 1.46rem !important;
+            font-size: 1.2rem !important;
             font-weight: 800 !important;
             line-height: 1.2;
             word-break: break-word;
@@ -551,20 +551,20 @@ def render_status_strip():
             animation: timerGlow 1.8s ease-in-out infinite;
         }}
         @keyframes riseIn {{
-            from {{ opacity: 0; transform: translateY(18px) scale(0.98); }}
+            from {{ opacity: 0; transform: translateY(12px) scale(0.98); }}
             to {{ opacity: 1; transform: translateY(0) scale(1); }}
         }}
         @keyframes cardFloat {{
             0%, 100% {{ transform: translateY(0); }}
-            50% {{ transform: translateY(-4px); }}
+            50% {{ transform: translateY(-3px); }}
         }}
         @keyframes bubbleDrift {{
             0%, 100% {{ transform: translate(0, 0); }}
-            50% {{ transform: translate(-10px, 12px); }}
+            50% {{ transform: translate(-8px, 10px); }}
         }}
         @keyframes timerGlow {{
             0%, 100% {{ text-shadow: 0 0 0 rgba(46, 125, 50, 0); }}
-            50% {{ text-shadow: 0 0 16px rgba(46, 125, 50, 0.25); }}
+            50% {{ text-shadow: 0 0 12px rgba(46, 125, 50, 0.25); }}
         }}
         @media (max-width: 900px) {{
             .dashboard-grid {{
@@ -598,7 +598,7 @@ def render_status_strip():
     </div>
     """
 
-    components.html(status_html, height=170)
+    components.html(status_html, height=120)
 
 # ============================================
 # SIMPLE HEADER
