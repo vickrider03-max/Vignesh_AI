@@ -2741,12 +2741,12 @@ with st.sidebar:
                     color: #1e293b;
                 }
                 [data-testid="stSidebar"] [class*="st-key-select_file_"] button[kind="primary"] {
-                    background: #ffe7d6;
-                    border: 2px solid #ffbea3;
-                    color: #5f351c;
+                    background: #ffe7d6 !important;
+                    border: 2px solid #ffbea3 !important;
+                    color: #5f351c !important;
                 }
                 [data-testid="stSidebar"] [class*="st-key-select_file_"] button[kind="primary"]:hover {
-                    background: #ffd0b8;
+                    background: #ffd0b8 !important;
                 }
                 .file-icon-button {
                     display: inline-flex;
