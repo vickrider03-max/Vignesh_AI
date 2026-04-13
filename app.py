@@ -149,6 +149,98 @@ def get_needle_minimalist_logo():
 # -------------------------------
 st.set_page_config(page_title="🧠 IntelliDoc AI– Smart Document Assistant", layout="wide")
 
+# Hide Streamlit footer and branding overlays
+st.markdown(
+    """
+    <style>
+        #MainMenu,
+        header,
+        footer,
+        [data-testid="stToolbar"],
+        [data-testid="stFooter"],
+        [data-testid="stDecoration"],
+        [data-testid="stStatusWidget"],
+        .viewerBadge_container__1QSob,
+        .css-1lsmgbg,
+        .css-rtg1gx,
+        .stAppDeployButton {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            height: 0 !important;
+            width: 0 !important;
+            pointer-events: none !important;
+        }
+    </style>
+    <script>
+        const hideStreamlitBranding = () => {
+            const selectors = [
+                '#MainMenu',
+                'header',
+                'footer',
+                '[data-testid="stToolbar"]',
+                '[data-testid="stFooter"]',
+                '[data-testid="stDecoration"]',
+                '[data-testid="stStatusWidget"]',
+                '.viewerBadge_container__1QSob',
+                '.css-1lsmgbg',
+                '.css-rtg1gx',
+                '.stAppDeployButton'
+            ];
+
+            selectors.forEach(selector => {
+                document.querySelectorAll(selector).forEach(el => {
+                    el.style.setProperty('display', 'none', 'important');
+                    el.style.setProperty('visibility', 'hidden', 'important');
+                    el.style.setProperty('opacity', '0', 'important');
+                    el.style.setProperty('height', '0', 'important');
+                    el.style.setProperty('width', '0', 'important');
+                    el.style.setProperty('pointer-events', 'none', 'important');
+                });
+            });
+
+            document.querySelectorAll('*').forEach(el => {
+                try {
+                    const text = (el.innerText || el.textContent || '').trim();
+                    if (/made with streamlit/i.test(text) || /github/i.test(text)) {
+                        el.style.setProperty('display', 'none', 'important');
+                        el.style.setProperty('visibility', 'hidden', 'important');
+                        el.style.setProperty('opacity', '0', 'important');
+                        el.style.setProperty('height', '0', 'important');
+                        el.style.setProperty('width', '0', 'important');
+                        el.style.setProperty('pointer-events', 'none', 'important');
+                    }
+                } catch (err) {
+                    // ignore inaccessible nodes
+                }
+            });
+
+            document.querySelectorAll('img, svg').forEach(el => {
+                try {
+                    const src = (el.src || '') + (el.outerHTML || '');
+                    if (/streamlit/i.test(src) || /github/i.test(src)) {
+                        el.style.setProperty('display', 'none', 'important');
+                        el.style.setProperty('visibility', 'hidden', 'important');
+                        el.style.setProperty('opacity', '0', 'important');
+                        el.style.setProperty('height', '0', 'important');
+                        el.style.setProperty('width', '0', 'important');
+                        el.style.setProperty('pointer-events', 'none', 'important');
+                    }
+                } catch (err) {
+                    // ignore inaccessible nodes
+                }
+            });
+        };
+
+        const observer = new MutationObserver(hideStreamlitBranding);
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+        hideStreamlitBranding();
+        setInterval(hideStreamlitBranding, 1000);
+    </script>
+    """,
+    unsafe_allow_html=True,
+)
+
 # Load preview data from file
 load_preview_data()
 
