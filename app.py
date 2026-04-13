@@ -906,15 +906,10 @@ if st.session_state.is_authenticated:
     header_col, logout_col = st.columns([8, 1])
 
     with header_col:
-        brain_col, title_col = st.columns([0.8, 7.2])
+        brain_col, title_col = st.columns([0.7, 7.3])
         with brain_col:
-            # 🧠 icon as helper trigger - will be used in show_help_popup_header()
             if st.button("🧠", key="header_brain_icon", help="Click to show/hide helper tips"):
-                state_key = "show_header_helper_popup"
-                if state_key not in st.session_state:
-                    st.session_state[state_key] = False
-                st.session_state[state_key] = not st.session_state[state_key]
-                st.rerun()
+                st.session_state.header_help_request = True
         with title_col:
             st.markdown("### IntelliDoc AI")
             st.markdown("*Smart Document Assistant*")
@@ -2746,9 +2741,12 @@ with st.sidebar:
                     color: #1e293b;
                 }
                 [data-testid="stSidebar"] [class*="st-key-select_file_"] button[kind="primary"] {
-                    background: #e8f6ff;
-                    border: 2px solid #c0dff0;
-                    color: #1e293b;
+                    background: #ffe7d6;
+                    border: 2px solid #ffcdb2;
+                    color: #4d2c16;
+                }
+                [data-testid="stSidebar"] [class*="st-key-select_file_"] button[kind="primary"]:hover {
+                    background: #ffd6b4;
                 }
                 .file-icon-button {
                     display: inline-flex;
@@ -4560,6 +4558,20 @@ st.markdown("""
 # 2. Your Tab Logic
 main_tab_options = ["💬 Chat", "📊 Dashboard", "📂 Compare", "🧠 CAPL"]
 active_main_tab = st.radio("Open Section", main_tab_options, horizontal=True, key="active_main_tab", label_visibility="collapsed")
+
+helper_tab_map = {
+    "💬 Chat": "chat",
+    "📊 Dashboard": "dashboard",
+    "📂 Compare": "compare",
+    "🧠 CAPL": "capl"
+}
+if st.session_state.get("header_help_request", False):
+    current_helper_tab = helper_tab_map.get(active_main_tab)
+    if current_helper_tab:
+        state_key = _help_state_key(current_helper_tab)
+        st.session_state[state_key] = not st.session_state.get(state_key, False)
+    st.session_state.header_help_request = False
+    st.experimental_rerun()
 
 # -------------------------------
 # TAB 1: CHAT
