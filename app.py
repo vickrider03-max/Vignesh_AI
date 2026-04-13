@@ -477,6 +477,106 @@ def render_status_strip():
     """
 
     status_html = f"""
+    <style>
+        body {{
+            margin: 0;
+            background: transparent;
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+        }}
+        .dashboard-grid {{
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 14px;
+            padding: 6px 2px;
+        }}
+        .metric-card {{
+            position: relative;
+            overflow: hidden;
+            min-height: 96px;
+            border-radius: 20px;
+            padding: 18px;
+            border: 1px solid rgba(255, 255, 255, 0.5) !important;
+            box-shadow: 0 14px 30px rgba(15, 23, 42, 0.16);
+            transform: translateY(18px) scale(0.98);
+            opacity: 0;
+            animation: riseIn 0.65s ease-out forwards, cardFloat 4.5s ease-in-out infinite;
+        }}
+        .metric-card:nth-child(1) {{ animation-delay: 0.05s, 0.9s; }}
+        .metric-card:nth-child(2) {{ animation-delay: 0.15s, 1.05s; }}
+        .metric-card:nth-child(3) {{ animation-delay: 0.25s, 1.2s; }}
+        .metric-card:nth-child(4) {{ animation-delay: 0.35s, 1.35s; }}
+        .metric-card::before {{
+            content: "";
+            position: absolute;
+            width: 140px;
+            height: 140px;
+            top: -55px;
+            right: -28px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.22);
+            filter: blur(4px);
+            animation: bubbleDrift 8s ease-in-out infinite;
+        }}
+        .metric-card::after {{
+            content: "";
+            position: absolute;
+            width: 90px;
+            height: 90px;
+            bottom: -28px;
+            left: -10px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.16);
+        }}
+        .card-label, .card-value {{
+            position: relative;
+            z-index: 1;
+            display: block;
+        }}
+        .card-label {{
+            font-size: 0.78rem !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: rgba(15, 23, 42, 0.68) !important;
+            margin-bottom: 10px;
+        }}
+        .card-value {{
+            font-size: 1.46rem !important;
+            font-weight: 800 !important;
+            line-height: 1.2;
+            word-break: break-word;
+        }}
+        #live-timer {{
+            letter-spacing: 0.06em;
+            animation: timerGlow 1.8s ease-in-out infinite;
+        }}
+        @keyframes riseIn {{
+            from {{ opacity: 0; transform: translateY(18px) scale(0.98); }}
+            to {{ opacity: 1; transform: translateY(0) scale(1); }}
+        }}
+        @keyframes cardFloat {{
+            0%, 100% {{ transform: translateY(0); }}
+            50% {{ transform: translateY(-4px); }}
+        }}
+        @keyframes bubbleDrift {{
+            0%, 100% {{ transform: translate(0, 0); }}
+            50% {{ transform: translate(-10px, 12px); }}
+        }}
+        @keyframes timerGlow {{
+            0%, 100% {{ text-shadow: 0 0 0 rgba(46, 125, 50, 0); }}
+            50% {{ text-shadow: 0 0 16px rgba(46, 125, 50, 0.25); }}
+        }}
+        @media (max-width: 900px) {{
+            .dashboard-grid {{
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }}
+        }}
+        @media (max-width: 560px) {{
+            .dashboard-grid {{
+                grid-template-columns: 1fr;
+            }}
+        }}
+    </style>
     {live_timer_js}
     <div class="dashboard-grid">
         <div class="metric-card" style="background: linear-gradient(135deg, #e8eaf6 0%, #c5cae9 100%); color: #3c4f7e; border: 1px solid #e8eaf6;">
@@ -498,7 +598,7 @@ def render_status_strip():
     </div>
     """
 
-    components.html(status_html, height=145)
+    components.html(status_html, height=170)
 
 # ============================================
 # SIMPLE HEADER
@@ -835,10 +935,272 @@ For support or feedback, contact vigneshs075@gmail.com.
 
 README_TEXT = load_readme_text()
 
+def _format_readme_inline(text):
+    text = html.escape(text)
+    text = re.sub(r'`([^`]+)`', r'<code>\1</code>', text)
+    text = re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', r'<img alt="\1" src="\2" class="readme-badge">', text)
+    text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2" target="_blank">\1</a>', text)
+    return text
+
+def build_animated_readme_html(readme_text):
+    """Render README text into animated HTML for the help panel."""
+    lines = readme_text.splitlines()
+    parts = []
+    in_list = False
+    in_code = False
+
+    for raw_line in lines:
+        line = raw_line.rstrip()
+        stripped = line.strip()
+
+        if stripped.startswith("```"):
+            if in_list:
+                parts.append("</ul>")
+                in_list = False
+            parts.append("</pre>" if in_code else "<pre class='readme-code'>")
+            in_code = not in_code
+            continue
+
+        if in_code:
+            parts.append(html.escape(line))
+            continue
+
+        if not stripped:
+            if in_list:
+                parts.append("</ul>")
+                in_list = False
+            continue
+
+        if stripped in {"---", "***"}:
+            if in_list:
+                parts.append("</ul>")
+                in_list = False
+            parts.append("<div class='readme-divider'></div>")
+            continue
+
+        if stripped.startswith("# "):
+            if in_list:
+                parts.append("</ul>")
+                in_list = False
+            parts.append(f"<h1 class='readme-h1'>{_format_readme_inline(stripped[2:])}</h1>")
+            continue
+
+        if stripped.startswith("## "):
+            if in_list:
+                parts.append("</ul>")
+                in_list = False
+            parts.append(f"<h2 class='readme-h2'>{_format_readme_inline(stripped[3:])}</h2>")
+            continue
+
+        if stripped.startswith("### "):
+            if in_list:
+                parts.append("</ul>")
+                in_list = False
+            parts.append(f"<h3 class='readme-h3'>{_format_readme_inline(stripped[4:])}</h3>")
+            continue
+
+        if stripped.startswith("- "):
+            if not in_list:
+                parts.append("<ul class='readme-list'>")
+                in_list = True
+            parts.append(f"<li>{_format_readme_inline(stripped[2:])}</li>")
+            continue
+
+        if stripped.endswith(".svg)") and "![" in stripped:
+            if in_list:
+                parts.append("</ul>")
+                in_list = False
+            parts.append(f"<div class='readme-badges'>{_format_readme_inline(stripped)}</div>")
+            continue
+
+        if in_list:
+            parts.append("</ul>")
+            in_list = False
+
+        parts.append(f"<p class='readme-p'>{_format_readme_inline(stripped)}</p>")
+
+    if in_list:
+        parts.append("</ul>")
+
+    if in_code:
+        parts.append("</pre>")
+
+    content_html = "".join(parts)
+    return f"""
+    <style>
+        body {{
+            margin: 0;
+            background: linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%);
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            color: #1e293b;
+        }}
+        .readme-shell {{
+            position: relative;
+            overflow: hidden;
+            padding: 20px;
+            border-radius: 22px;
+            border: 1px solid rgba(31, 79, 145, 0.12);
+            background:
+                radial-gradient(circle at top right, rgba(31, 79, 145, 0.16), transparent 32%),
+                radial-gradient(circle at bottom left, rgba(16, 185, 129, 0.18), transparent 28%),
+                rgba(255, 255, 255, 0.84);
+            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+        }}
+        .readme-shell::before {{
+            content: "";
+            position: absolute;
+            inset: -30% auto auto -10%;
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            background: rgba(31, 79, 145, 0.08);
+            filter: blur(10px);
+            animation: orbDrift 12s ease-in-out infinite;
+        }}
+        .readme-titlebar {{
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 18px;
+            padding: 14px 16px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, rgba(31, 79, 145, 0.12), rgba(16, 185, 129, 0.12));
+            animation: panelIn 0.65s ease-out;
+        }}
+        .readme-kicker {{
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            font-weight: 700;
+            color: #1f4f91;
+        }}
+        .readme-subtitle {{
+            font-size: 0.95rem;
+            color: #475569;
+            margin-top: 4px;
+        }}
+        .readme-icon {{
+            width: 46px;
+            height: 46px;
+            border-radius: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.72);
+            box-shadow: 0 8px 18px rgba(31, 79, 145, 0.16);
+            font-size: 22px;
+            animation: pulseIcon 2.6s ease-in-out infinite;
+        }}
+        .readme-content > * {{
+            position: relative;
+            z-index: 1;
+            animation: itemIn 0.45s ease-out;
+        }}
+        .readme-h1, .readme-h2, .readme-h3 {{
+            margin: 18px 0 10px;
+            color: #102a43;
+        }}
+        .readme-h1 {{ font-size: 1.7rem; }}
+        .readme-h2 {{
+            font-size: 1.18rem;
+            padding-left: 12px;
+            border-left: 4px solid #1f4f91;
+        }}
+        .readme-h3 {{ font-size: 1rem; color: #1565c0; }}
+        .readme-p {{
+            margin: 10px 0;
+            line-height: 1.65;
+            color: #334155;
+        }}
+        .readme-list {{
+            margin: 8px 0 14px;
+            padding-left: 24px;
+            color: #334155;
+        }}
+        .readme-list li {{
+            margin: 8px 0;
+            line-height: 1.55;
+        }}
+        .readme-divider {{
+            height: 1px;
+            margin: 18px 0;
+            background: linear-gradient(90deg, transparent, rgba(31, 79, 145, 0.26), transparent);
+        }}
+        .readme-code {{
+            overflow-x: auto;
+            padding: 14px;
+            border-radius: 14px;
+            background: #0f172a;
+            color: #e2e8f0;
+            line-height: 1.5;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+        }}
+        .readme-badges {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 12px 0 18px;
+        }}
+        .readme-badge {{
+            height: 24px;
+            border-radius: 999px;
+            box-shadow: 0 8px 16px rgba(15, 23, 42, 0.1);
+            animation: badgeFloat 3.4s ease-in-out infinite;
+        }}
+        .readme-badge:nth-child(2) {{ animation-delay: 0.25s; }}
+        .readme-badge:nth-child(3) {{ animation-delay: 0.5s; }}
+        .readme-badge:nth-child(4) {{ animation-delay: 0.75s; }}
+        code {{
+            padding: 2px 6px;
+            border-radius: 6px;
+            background: rgba(31, 79, 145, 0.08);
+            color: #1f4f91;
+        }}
+        a {{
+            color: #1565c0;
+            text-decoration: none;
+            font-weight: 600;
+        }}
+        @keyframes panelIn {{
+            from {{ opacity: 0; transform: translateY(10px); }}
+            to {{ opacity: 1; transform: translateY(0); }}
+        }}
+        @keyframes itemIn {{
+            from {{ opacity: 0; transform: translateY(8px); }}
+            to {{ opacity: 1; transform: translateY(0); }}
+        }}
+        @keyframes pulseIcon {{
+            0%, 100% {{ transform: scale(1); }}
+            50% {{ transform: scale(1.06); }}
+        }}
+        @keyframes badgeFloat {{
+            0%, 100% {{ transform: translateY(0); }}
+            50% {{ transform: translateY(-4px); }}
+        }}
+        @keyframes orbDrift {{
+            0%, 100% {{ transform: translate(0, 0); }}
+            50% {{ transform: translate(30px, 18px); }}
+        }}
+    </style>
+    <div class="readme-shell">
+        <div class="readme-titlebar">
+            <div>
+                <div class="readme-kicker">Interactive Help</div>
+                <div class="readme-subtitle">Animated quick guide for IntelliDoc AI</div>
+            </div>
+            <div class="readme-icon">📘</div>
+        </div>
+        <div class="readme-content">{content_html}</div>
+    </div>
+    """
+
 def render_readme_help_panel(expanded=False):
-    """Render the README as a collapsible help panel."""
+    """Render the README as a collapsible animated help panel."""
     with st.expander("Help & README", expanded=expanded):
-        st.markdown(README_TEXT)
+        components.html(build_animated_readme_html(README_TEXT), height=720, scrolling=True)
 
 # -------------------------------
 # DOCUMENT PREVIEW FUNCTION
