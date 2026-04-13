@@ -4245,6 +4245,8 @@ def ensure_help_popup_state(tab_name, selected_files=None):
     query_key = _help_query_param_key(tab_name)
     if key not in st.session_state:
         st.session_state[key] = bool(selected_files)
+    elif selected_files and not st.session_state[key]:
+        st.session_state[key] = True
     if query_key in query_params and query_params[query_key]:
         query_value = query_params[query_key]
         if isinstance(query_value, list):
@@ -4409,17 +4411,18 @@ def show_help_popup(tab_name, selected_files):
     if not selected_files:
         st.markdown(
             f"""
-            <div style='position:fixed; bottom:14px; right:14px; width:360px; padding:18px; background:#fff5ef; border:1px solid #ffd3bc; border-radius:16px; box-shadow:0 16px 36px rgba(0,0,0,0.12); z-index:9999;'>
-                <h4 style='margin:0 0 10px 0; font-size:15px; font-weight:700; color:#7a3f23;'>🧠 {tab_name.capitalize()} Helper</h4>
-                <p style='margin:0 0 10px 0; font-size:12px; color:#5f3c2a;'>Upload and select documents to get tailored guidance for this section.</p>
-                <div style='margin:0 0 12px 0; padding:10px; background:rgba(255, 230, 216, 0.85); border-left:3px solid #ffb38f; border-radius:10px;'>
-                    <p style='margin:0; font-size:12px; color:#5f3c2a;'>💡 <strong>Skill Level: {skill_level.title()}</strong> | Queries: {tracker.get("queries", 0)}</p>
-                </div>
-                <p style='margin:0 0 6px 0; font-size:12px; color:#7a5d4f;'>This helper will show relevant suggestions once you pick files for the active tab.</p>
-                <p style='margin:0; font-size:11px; color:#9b7c68;'>Try: {', '.join(keywords)}</p>
-            </div>
-            """,
-            unsafe_allow_html=True
+            ### 🧠 {tab_name.capitalize()} Helper
+            💡 **Skill Level:** {skill_level.title()} | **Queries:** {tracker.get("queries", 0)}
+
+            Upload and select documents to get tailored guidance for this section.
+
+            **Suggested Queries:**
+            {chr(10).join([f"- {s}" for s in get_dynamic_suggestions(tab_name, skill_level)[:3]])}
+
+            This helper will show relevant suggestions once you pick files for the active tab.
+
+            Try: {', '.join(keywords)}
+            """
         )
         return
 
@@ -4448,35 +4451,26 @@ def show_help_popup(tab_name, selected_files):
     elif any(ext in selected_types for ext in [".capl", ".can"]):
         type_hint = "CAPL scripts are analyzed for syntax issues; ask for code fixes or suggestions."
 
-    suggestions_html = ""
-    for i, suggestion in enumerate(dynamic_suggestions[:3], 1):
-        suggestions_html += f"<div style='padding:6px 0; font-size:12px; color:#1e293b;'>• {suggestion}</div>"
+    suggestions_html = "\n".join(f"- {suggestion}" for suggestion in dynamic_suggestions[:3])
 
     st.markdown(
         f"""
-        <div style='position:fixed; bottom:14px; right:14px; width:380px; padding:18px; background:#fff5ef; border:1px solid #ffd3bc; border-radius:16px; box-shadow:0 16px 36px rgba(0,0,0,0.12); z-index:9999; font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;'>
-            <h4 style='margin:0 0 10px 0; font-size:15px; font-weight:700; color:#7a3f23;'>🧠 {tab_name.capitalize()} Helper</h4>
-            <p style='margin:0 0 12px 0; font-size:12px; color:#5f3c2a;'>Quick guidance for the active section, based on your selected files and workflow.</p>
+        ### 🧠 {tab_name.capitalize()} Helper
+        💡 **Skill Level:** {skill_level.title()} | **Queries:** {tracker.get("queries", 0)}
 
-            <div style='margin:0 0 12px 0; padding:10px; background:rgba(255, 230, 216, 0.85); border-left:3px solid #ffb38f; border-radius:10px;'>
-                <p style='margin:0; font-size:12px; color:#5f3c2a;'>💡 <strong>Skill Level: {skill_level.title()}</strong> | Queries: {tracker.get("queries", 0)}</p>
-            </div>
+        Quick guidance for the active section, based on your selected files and workflow.
 
-            <div style='margin:0 0 10px 0;'>
-                <p style='margin:0 0 5px 0; font-size:11px; font-weight:700; color:#8a5e49;'>✨ Suggested Queries:</p>
-                {suggestions_html}
-            </div>
+        **Suggested Queries:**
+        {suggestions_html}
 
-            <div style='margin:0 0 12px 0; padding:10px; background:rgba(255,255,255,0.92); border-radius:10px; border:1px solid #ffe1d2;'>
-                <p style='margin:0; font-size:12px; color:#5f3c2a;'>{next_action}</p>
-            </div>
+        🎯 **Next Step:** {next_action}
 
-            <p style='margin:0 0 6px 0; font-size:12px; color:#7a5d4f;'><strong>File Types:</strong> {', '.join(sorted(selected_types))}</p>
-            <p style='margin:0 0 6px 0; font-size:12px; color:#7a5d4f;'>{type_hint}</p>
-            <p style='margin:0; font-size:11px; color:#9b7c68;'>{extra}</p>
-        </div>
-        """,
-        unsafe_allow_html=True
+        **File Types:** {', '.join(sorted(selected_types))}
+
+        {type_hint}
+
+        {extra}
+        """
     )
 
 
