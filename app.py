@@ -425,8 +425,16 @@ st.markdown(
             background-color: #d0e8f8 !important;
         }
         
-        button:focus {
-            background-color: #d0e8f8 !important;
+        /* Smaller buttons for logout and reset */
+        button[data-testid*="main_logout_btn"],
+        button[data-testid*="reset_chat_selection"],
+        button[data-testid*="reset_dashboard_selection"],
+        button[data-testid*="reset_compare_selection"],
+        button[data-testid*="reset_capl_selection"] {
+            padding: 0.25rem 0.75rem !important;
+            font-size: 0.875rem !important;
+            min-width: auto !important;
+            width: auto !important;
         }
         
         /* Animations */
@@ -892,30 +900,30 @@ def render_status_strip():
     components.html(status_html, height=120)
 
 # ============================================
-# SIMPLE HEADER
+# SIMPLE HEADER - Moved higher for better visibility
 # ============================================
 if st.session_state.is_authenticated:
-    header_col, logout_col = st.columns([6, 1])
+    header_col, logout_col = st.columns([8, 1])
 
     with header_col:
         st.markdown("### 🧠 IntelliDoc AI")
         st.markdown("*Smart Document Assistant*")
 
     with logout_col:
-        if st.button("🚶 Logout", use_container_width=True, key="main_logout_btn"):
+        if st.button("🚶 Logout", key="main_logout_btn"):
             now = datetime.now()
             ist_tz = timezone('Asia/Kolkata')
             ist_time = now.astimezone(ist_tz).strftime("%Y-%m-%d %H:%M:%S %Z")
-            
+
             # Calculate usage time
             usage_seconds = 0
             if st.session_state.start_time is not None:
                 usage_seconds = int(time.time() - st.session_state.start_time)
-            
+
             hours, remainder = divmod(usage_seconds, 3600)
             minutes, seconds = divmod(remainder, 60)
             usage_time_str = f"{hours}h {minutes}m {seconds}s"
-            
+
             st.session_state.login_history.append({
                 "username": st.session_state.logged_in_username,
                 "role": st.session_state.user_role,
@@ -943,9 +951,9 @@ if st.session_state.is_authenticated:
             st.session_state.welcome_shown = False
             st.success("Logged out successfully.")
             st.rerun()
-    
+
     st.divider()
-    
+
     if not st.session_state.get('welcome_shown', False):
         st.toast("Welcome back!", icon="🎉")
         st.session_state.welcome_shown = True
@@ -4388,7 +4396,7 @@ if active_main_tab == "💬 Chat":
     with chat_header_col:
         st.subheader("Chat with Selected Documents")
     with chat_reset_col:
-        if st.button(" 🧼 Reset", key="reset_chat_selection", use_container_width=True, help="Reset chat selection"):
+        if st.button(" 🧼 Reset", key="reset_chat_selection", help="Reset chat selection"):
             st.session_state.chat_file_selection = []
             st.session_state.chat_summary_downloads = {"images": [], "tables": []}
             st.session_state.messages = []
@@ -4543,7 +4551,7 @@ if active_main_tab == "📊 Dashboard":
     with dashboard_header_col:
         st.subheader("Dashboard")
     with dashboard_reset_col:
-        if st.button("🧼 Reset", key="reset_dashboard_selection", use_container_width=True):
+        if st.button("🧼 Reset", key="reset_dashboard_selection"):
             st.session_state.file_dropdown = "--Select File--"
             st.rerun()
 
@@ -5090,7 +5098,7 @@ if active_main_tab == "📂 Compare":
     with compare_header_col:
         st.subheader("Compare Files")
     with compare_reset_col:
-        if st.button("🧼 Reset", key="reset_compare_selection", use_container_width=True):
+        if st.button("🧼 Reset", key="reset_compare_selection"):
             st.session_state.compare_file_selection = []
             st.session_state.compare_result_html = None
             st.session_state.compare_result_excel_bytes = None
@@ -5187,7 +5195,7 @@ if active_main_tab == "🧠 CAPL":
     with capl_header_col:
         st.subheader("⚙️ CAPL Compiler & Analyzer")
     with capl_reset_col:
-        if st.button("🧼 Reset", key="reset_capl_selection", use_container_width=True):
+        if st.button("🧼 Reset", key="reset_capl_selection"):
             st.session_state.selected_capl_file = "--Select CAPL file--"
             st.session_state.capl_last_analyzed_file = None
             st.session_state.capl_last_issues = None
