@@ -359,15 +359,10 @@ st.markdown(
         .loading-dots:nth-child(1) { animation-delay: -0.32s; }
         .loading-dots:nth-child(2) { animation-delay: -0.16s; }
         
-        /* Button styling - Comprehensive targeting */
-        .stButton > button,
-        button[data-testid="baseButton-primary"],
-        button[data-testid="baseButton-secondary"],
-        button[kind="primary"],
-        button[kind="secondary"],
-        div[data-testid="stBaseButton"] > button {
-            background: var(--button-bg) !important;
-            color: var(--button-text) !important;
+        /* Button styling - Ultra-aggressive Streamlit override */
+        .stButton > button {
+            background-color: #e8f6ff !important;
+            color: #1e293b !important;
             border: 2px solid #c0dff0 !important;
             border-radius: 6px !important;
             padding: 0.5rem 1rem !important;
@@ -376,26 +371,62 @@ st.markdown(
             box-shadow: 0 2px 4px rgba(200, 230, 250, 0.2) !important;
         }
         
-        .stButton > button:hover,
-        button[data-testid="baseButton-primary"]:hover,
-        button[data-testid="baseButton-secondary"]:hover,
-        button[kind="primary"]:hover,
-        button[kind="secondary"]:hover,
-        div[data-testid="stBaseButton"] > button:hover {
-            background: var(--button-hover) !important;
+        .stButton > button:hover {
+            background-color: #d0e8f8 !important;
             transform: translateY(-1px) !important;
             box-shadow: 0 4px 8px rgba(175, 215, 245, 0.3) !important;
             border-color: #a0c8e8 !important;
         }
         
-        .stButton > button:active,
-        button[data-testid="baseButton-primary"]:active,
-        button[data-testid="baseButton-secondary"]:active,
-        button[kind="primary"]:active,
-        button[kind="secondary"]:active,
-        div[data-testid="stBaseButton"] > button:active {
+        .stButton > button:active {
             transform: translateY(0) !important;
             box-shadow: 0 2px 4px rgba(200, 230, 250, 0.2) !important;
+        }
+        
+        /* Override Streamlit's internal button styling */
+        div.stButton > button,
+        div[data-testid="stBaseButton"] button,
+        button[kind="primary"],
+        button[kind="secondary"],
+        button[kind="tertiary"] {
+            background-color: #e8f6ff !important;
+            color: #1e293b !important;
+            border: 2px solid #c0dff0 !important;
+        }
+        
+        div.stButton > button:hover,
+        div[data-testid="stBaseButton"] button:hover,
+        button[kind="primary"]:hover,
+        button[kind="secondary"]:hover,
+        button[kind="tertiary"]:hover {
+            background-color: #d0e8f8 !important;
+        }
+        
+        /* Alternative Streamlit button selectors */
+        [role="button"],
+        [data-testid*="button"] {
+            background-color: #e8f6ff !important;
+            color: #1e293b !important;
+        }
+        
+        [role="button"]:hover,
+        [data-testid*="button"]:hover {
+            background-color: #d0e8f8 !important;
+        }
+        
+        /* Strip Streamlit theme blue and apply light blue */
+        button {
+            background-color: #e8f6ff !important;
+            color: #1e293b !important;
+            border-color: #c0dff0 !important;
+        }
+        
+        button:hover {
+            background-color: #d0e8f8 !important;
+        }
+        
+        button:focus {
+            background-color: #d0e8f8 !important;
         }
         
         /* Animations */
@@ -792,6 +823,28 @@ def render_status_strip():
             }}
         }}
     </style>
+    <script>
+        // Dynamically override button colors on page load and mutations
+        function applyButtonColors() {{
+            const buttons = document.querySelectorAll('button, [role="button"]');
+            buttons.forEach(btn => {{
+                btn.style.backgroundColor = '#e8f6ff !important';
+                btn.style.color = '#1e293b !important';
+                btn.style.borderColor = '#c0dff0 !important';
+                btn.style.border = '2px solid #c0dff0 !important';
+            }});
+        }}
+        
+        // Apply on page load
+        document.addEventListener('DOMContentLoaded', applyButtonColors);
+        
+        // Apply on mutation (when new buttons are added)
+        const observer = new MutationObserver(applyButtonColors);
+        observer.observe(document.body, {{ childList: true, subtree: true }});
+        
+        // Apply immediately
+        applyButtonColors();
+    </script>
     {live_timer_js}
     <div class="dashboard-grid">
         <div class="metric-card" style="background: linear-gradient(135deg, #e8eaf6 0%, #c5cae9 100%); color: #3c4f7e; border: 1px solid #e8eaf6;">
