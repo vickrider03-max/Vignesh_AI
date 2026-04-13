@@ -4228,11 +4228,106 @@ def _help_state_key(tab_name):
     return f"show_help_popup_{tab_name}"
 
 
+def _help_query_param_key(tab_name):
+    return f"help_popup_{tab_name}"
+
+
 def ensure_help_popup_state(tab_name):
     key = _help_state_key(tab_name)
+    query_key = _help_query_param_key(tab_name)
     if key not in st.session_state:
         st.session_state[key] = False
+    if query_key in query_params and query_params[query_key]:
+        query_value = query_params[query_key]
+        if isinstance(query_value, list):
+            query_value = query_value[0] if query_value else ""
+        st.session_state[key] = str(query_value).strip().lower() in {"1", "true", "yes", "open"}
     return key
+
+
+def _set_query_params(params):
+    try:
+        if hasattr(st, "query_params"):
+            st.query_params.clear()
+            for param_key, param_value in params.items():
+                if isinstance(param_value, list):
+                    st.query_params[param_key] = [str(v) for v in param_value]
+                else:
+                    st.query_params[param_key] = str(param_value)
+        elif hasattr(st, "experimental_set_query_params"):
+            st.experimental_set_query_params(**params)
+        elif hasattr(st, "set_query_params"):
+            st.set_query_params(**params)
+    except Exception:
+        pass
+
+
+def set_help_popup_state(tab_name, is_open):
+    state_key = ensure_help_popup_state(tab_name)
+    query_key = _help_query_param_key(tab_name)
+    st.session_state[state_key] = is_open
+
+    updated_params = {}
+    try:
+        for param_key in query_params.keys():
+            param_value = query_params[param_key]
+            if isinstance(param_value, list):
+                updated_params[param_key] = list(param_value)
+            else:
+                updated_params[param_key] = param_value
+    except Exception:
+        updated_params = dict(query_params) if isinstance(query_params, dict) else {}
+
+    if is_open:
+        updated_params[query_key] = "1"
+    else:
+        updated_params.pop(query_key, None)
+
+    _set_query_params(updated_params)
+
+
+def render_help_floating_icon(tab_name, is_open):
+    button_key = f"help_fab_button_{tab_name}"
+    button_label = "x" if is_open else "?"
+    button_help = "Close query helper" if is_open else f"Open {tab_name.capitalize()} query helper"
+    if st.button(button_label, key=button_key, help=button_help):
+        set_help_popup_state(tab_name, not is_open)
+        st.rerun()
+
+    st.markdown(
+        f"""
+        <style>
+        .st-key-{button_key} {{
+            position: fixed;
+            right: 18px;
+            bottom: 18px;
+            z-index: 10001;
+        }}
+
+        .st-key-{button_key} > button {{
+            width: 56px;
+            height: 56px;
+            border-radius: 999px;
+            border: none;
+            background: linear-gradient(135deg, #0f6cbd 0%, #42a5f5 100%);
+            color: #ffffff;
+            font-size: 24px;
+            font-weight: 700;
+            box-shadow: 0 12px 28px rgba(15, 108, 189, 0.32);
+        }}
+
+        .st-key-{button_key} > button:hover {{
+            background: linear-gradient(135deg, #0d5ea6 0%, #1e88e5 100%);
+            transform: translateY(-1px);
+        }}
+
+        .st-key-{button_key} > button:focus {{
+            box-shadow: 0 0 0 3px rgba(66, 165, 245, 0.25), 0 12px 28px rgba(15, 108, 189, 0.32);
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
 
 
 # Define keywords for each tab
@@ -4335,7 +4430,7 @@ def get_next_best_action(tab_name, skill_level):
 
 def show_help_popup(tab_name, selected_files):
     state_key = ensure_help_popup_state(tab_name)
-    st.checkbox("Show query helper popup", key=state_key)
+    render_help_floating_icon(tab_name, st.session_state[state_key])
 
     if not st.session_state[state_key]:
         return
