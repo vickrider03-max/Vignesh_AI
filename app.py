@@ -4262,41 +4262,6 @@ def _set_query_params(params):
         pass
 
 
-def _build_query_string(params):
-    cleaned_params = {}
-    for param_key, param_value in params.items():
-        if param_value in (None, "", []):
-            continue
-        if isinstance(param_value, list):
-            cleaned_params[param_key] = [str(v) for v in param_value if v not in (None, "")]
-        else:
-            cleaned_params[param_key] = str(param_value)
-    return urllib.parse.urlencode(cleaned_params, doseq=True)
-
-
-def _build_help_popup_href(tab_name, is_open):
-    query_key = _help_query_param_key(tab_name)
-    updated_params = {}
-
-    try:
-        for param_key in query_params.keys():
-            param_value = query_params[param_key]
-            if isinstance(param_value, list):
-                updated_params[param_key] = list(param_value)
-            else:
-                updated_params[param_key] = param_value
-    except Exception:
-        updated_params = dict(query_params) if isinstance(query_params, dict) else {}
-
-    if is_open:
-        updated_params.pop(query_key, None)
-    else:
-        updated_params[query_key] = "1"
-
-    query_string = _build_query_string(updated_params)
-    return f"./?{query_string}" if query_string else "./"
-
-
 def set_help_popup_state(tab_name, is_open):
     state_key = ensure_help_popup_state(tab_name)
     query_key = _help_query_param_key(tab_name)
@@ -4322,50 +4287,60 @@ def set_help_popup_state(tab_name, is_open):
 
 
 def render_help_floating_icon(tab_name, is_open):
-    fab_href = _build_help_popup_href(tab_name, is_open)
-    fab_label = "x" if is_open else "?"
-    fab_title = "Close query helper" if is_open else f"Open {tab_name.capitalize()} query helper"
+    button_key = f"help_fab_button_{tab_name}"
+    button_label = "✕" if is_open else "💡"
+    button_help = "Close query helper" if is_open else f"Open {tab_name.capitalize()} query helper"
+
+    if st.button(button_label, key=button_key, help=button_help):
+        set_help_popup_state(tab_name, not is_open)
+        st.rerun()
 
     st.markdown(
         f"""
         <style>
-        .query-helper-fab {{
+        .st-key-{button_key} {{
             position: fixed;
-            right: 18px;
-            bottom: 18px;
-            width: 56px;
-            height: 56px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            right: 22px;
+            top: 92px;
+            z-index: 10050;
+        }}
+
+        .st-key-{button_key} > button {{
+            width: 38px;
+            height: 38px;
+            min-width: 38px !important;
+            min-height: 38px !important;
             border-radius: 999px;
-            text-decoration: none;
             color: #ffffff;
-            font-size: 24px;
+            font-size: 18px;
             font-weight: 700;
             border: 2px solid rgba(255, 255, 255, 0.72);
-            background: linear-gradient(135deg, #0f6cbd 0%, #42a5f5 100%) !important;
-            box-shadow: 0 12px 28px rgba(15, 108, 189, 0.32);
-            z-index: 10050;
+            background: linear-gradient(135deg, #f7c948 0%, #f59e0b 100%) !important;
+            box-shadow: 0 8px 18px rgba(245, 158, 11, 0.30) !important;
             transition: transform 0.18s ease, box-shadow 0.18s ease;
+            padding: 0 !important;
         }}
 
-        .query-helper-fab:hover {{
+        .st-key-{button_key} > button:hover {{
             color: #ffffff;
-            text-decoration: none;
-            background: linear-gradient(135deg, #0d5ea6 0%, #1e88e5 100%) !important;
+            background: linear-gradient(135deg, #f4b400 0%, #ea8c00 100%) !important;
             transform: translateY(-1px);
-            box-shadow: 0 16px 32px rgba(15, 108, 189, 0.36);
+            box-shadow: 0 10px 22px rgba(245, 158, 11, 0.34) !important;
         }}
 
-        .query-helper-fab:focus,
-        .query-helper-fab:active {{
+        .st-key-{button_key} > button:focus,
+        .st-key-{button_key} > button:active {{
             color: #ffffff;
-            text-decoration: none;
-            box-shadow: 0 0 0 3px rgba(66, 165, 245, 0.25), 0 12px 28px rgba(15, 108, 189, 0.32);
+            box-shadow: 0 0 0 3px rgba(245, 193, 66, 0.28), 0 8px 18px rgba(245, 158, 11, 0.30) !important;
+        }}
+
+        @media (max-width: 768px) {{
+            .st-key-{button_key} {{
+                right: 14px;
+                top: 138px;
+            }}
         }}
         </style>
-        <a href="{html.escape(fab_href)}" class="query-helper-fab" title="{html.escape(fab_title)}">{html.escape(fab_label)}</a>
         """,
         unsafe_allow_html=True
     )
