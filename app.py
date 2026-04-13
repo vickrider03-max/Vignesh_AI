@@ -906,8 +906,18 @@ if st.session_state.is_authenticated:
     header_col, logout_col = st.columns([8, 1])
 
     with header_col:
-        st.markdown("### 🧠 IntelliDoc AI")
-        st.markdown("*Smart Document Assistant*")
+        brain_col, title_col = st.columns([0.8, 7.2])
+        with brain_col:
+            # 🧠 icon as helper trigger - will be used in show_help_popup_header()
+            if st.button("🧠", key="header_brain_icon", help="Click to show/hide helper tips"):
+                state_key = "show_header_helper_popup"
+                if state_key not in st.session_state:
+                    st.session_state[state_key] = False
+                st.session_state[state_key] = not st.session_state[state_key]
+                st.rerun()
+        with title_col:
+            st.markdown("### IntelliDoc AI")
+            st.markdown("*Smart Document Assistant*")
 
     with logout_col:
         if st.button("🚶 Logout", key="main_logout_btn"):
@@ -4286,64 +4296,7 @@ def set_help_popup_state(tab_name, is_open):
     _set_query_params(updated_params)
 
 
-def render_help_floating_icon(tab_name, is_open):
-    button_key = f"help_fab_button_{tab_name}"
-    button_label = "🧠"
-    button_help = "Close query helper" if is_open else f"Open {tab_name.capitalize()} query helper"
-
-    if st.button(button_label, key=button_key, help=button_help):
-        set_help_popup_state(tab_name, not is_open)
-        st.rerun()
-
-    st.markdown(
-        f"""
-        <style>
-        .st-key-{button_key} {{
-            position: fixed;
-            right: 22px;
-            bottom: 22px;
-            z-index: 10050;
-        }}
-
-        .st-key-{button_key} > button {{
-            width: 38px;
-            height: 38px;
-            min-width: 38px !important;
-            min-height: 38px !important;
-            border-radius: 999px;
-            color: #ffffff;
-            font-size: 18px;
-            font-weight: 700;
-            border: 2px solid rgba(255, 255, 255, 0.72);
-            background: linear-gradient(135deg, #f7c948 0%, #f59e0b 100%) !important;
-            box-shadow: 0 8px 18px rgba(245, 158, 11, 0.30) !important;
-            transition: transform 0.18s ease, box-shadow 0.18s ease;
-            padding: 0 !important;
-        }}
-
-        .st-key-{button_key} > button:hover {{
-            color: #ffffff;
-            background: linear-gradient(135deg, #f4b400 0%, #ea8c00 100%) !important;
-            transform: translateY(-1px);
-            box-shadow: 0 10px 22px rgba(245, 158, 11, 0.34) !important;
-        }}
-
-        .st-key-{button_key} > button:focus,
-        .st-key-{button_key} > button:active {{
-            color: #ffffff;
-            box-shadow: 0 0 0 3px rgba(245, 193, 66, 0.28), 0 8px 18px rgba(245, 158, 11, 0.30) !important;
-        }}
-
-        @media (max-width: 768px) {{
-            .st-key-{button_key} {{
-                right: 14px;
-                bottom: 14px;
-            }}
-        }}
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
+# Floating icon function removed - helper is now triggered by header 🧠 icon
 
 
 # Define keywords for each tab
@@ -4446,7 +4399,6 @@ def get_next_best_action(tab_name, skill_level):
 
 def show_help_popup(tab_name, selected_files):
     state_key = ensure_help_popup_state(tab_name)
-    render_help_floating_icon(tab_name, st.session_state[state_key])
 
     if not st.session_state[state_key]:
         return
