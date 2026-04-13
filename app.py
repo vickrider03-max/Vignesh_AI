@@ -604,16 +604,13 @@ def render_status_strip():
 # SIMPLE HEADER
 # ============================================
 if st.session_state.is_authenticated:
-    col1, col2, col3 = st.columns([1, 3, 1])
-    
-    with col1:
-        st.write("")  # Empty column for spacing
-    
-    with col2:
+    header_col, logout_col = st.columns([6, 1])
+
+    with header_col:
         st.markdown("### 🧠 IntelliDoc AI")
         st.markdown("*Smart Document Assistant*")
-    
-    with col3:
+
+    with logout_col:
         if st.button("🚪 Logout", use_container_width=True):
             active_file = "active_users.json"
             if os.path.exists(active_file):
