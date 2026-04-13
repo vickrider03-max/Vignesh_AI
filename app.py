@@ -4240,13 +4240,11 @@ def _help_query_param_key(tab_name):
     return f"help_popup_{tab_name}"
 
 
-def ensure_help_popup_state(tab_name, selected_files=None):
+def ensure_help_popup_state(tab_name):
     key = _help_state_key(tab_name)
     query_key = _help_query_param_key(tab_name)
     if key not in st.session_state:
-        st.session_state[key] = bool(selected_files)
-    elif selected_files and not st.session_state[key]:
-        st.session_state[key] = True
+        st.session_state[key] = False
     if query_key in query_params and query_params[query_key]:
         query_value = query_params[query_key]
         if isinstance(query_value, list):
@@ -4398,7 +4396,7 @@ def get_next_best_action(tab_name, skill_level):
 
 
 def show_help_popup(tab_name, selected_files):
-    state_key = ensure_help_popup_state(tab_name, selected_files)
+    state_key = ensure_help_popup_state(tab_name)
 
     if not st.session_state[state_key]:
         return
