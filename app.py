@@ -4244,6 +4244,95 @@ tab_keywords = {
 }
 
 
+def track_user_behavior(tab_name):
+    """Tracks user actions to detect skill level progression."""
+    if "behavior_tracker" not in st.session_state:
+        st.session_state.behavior_tracker = {
+            "chat": {"queries": 0, "actions": []},
+            "dashboard": {"queries": 0, "actions": []},
+            "compare": {"queries": 0, "actions": []},
+            "capl": {"queries": 0, "actions": []}
+        }
+    
+    if tab_name not in st.session_state.behavior_tracker:
+        st.session_state.behavior_tracker[tab_name] = {"queries": 0, "actions": []}
+    
+    st.session_state.behavior_tracker[tab_name]["queries"] += 1
+    tracker = st.session_state.behavior_tracker[tab_name]
+    return tracker
+
+
+def infer_user_workflow():
+    """Auto-detects user skill level from query patterns."""
+    if "behavior_tracker" not in st.session_state:
+        return "beginner"
+    
+    total_queries = sum(t.get("queries", 0) for t in st.session_state.behavior_tracker.values())
+    
+    if total_queries > 15:
+        return "advanced"
+    elif total_queries > 5:
+        return "intermediate"
+    else:
+        return "beginner"
+
+
+def get_dynamic_suggestions(tab_name, skill_level):
+    """Returns context-aware suggestions based on skill level."""
+    suggestions_by_skill = {
+        "chat": {
+            "beginner": ["What does this file contain?", "Show me a summary", "Are there any errors?"],
+            "intermediate": ["Count specific items", "Find patterns in data", "Compare sections"],
+            "advanced": ["Create custom queries", "Analyze trends", "Generate insights", "Export filtered data"]
+        },
+        "dashboard": {
+            "beginner": ["Show me all metrics", "What are the totals?", "Create a basic chart"],
+            "intermediate": ["Analyze by category", "Show trends over time", "Create filtered reports"],
+            "advanced": ["Multi-source analysis", "Correlation detection", "Predictive metrics", "Custom dashboards"]
+        },
+        "compare": {
+            "beginner": ["Show differences", "Side-by-side view", "Basic comparison"],
+            "intermediate": ["Detailed change log", "Merge documents", "Track modifications"],
+            "advanced": ["Multi-file comparison", "Change impact analysis", "Conflict resolution", "Advanced merging"]
+        },
+        "capl": {
+            "beginner": ["Check syntax errors", "What does this code do?", "Basic debugging"],
+            "intermediate": ["Refactor code", "Find unused variables", "Code optimization"],
+            "advanced": ["Complex debugging", "Performance tuning", "Architecture review", "Code generation"]
+        }
+    }
+    
+    return suggestions_by_skill.get(tab_name, {}).get(skill_level, [])
+
+
+def get_next_best_action(tab_name, skill_level):
+    """Intelligently recommends the next workflow step."""
+    workflow_paths = {
+        "chat": {
+            "beginner": "🎯 Pro Tip: Start with 'Show me a summary' to understand the document, then ask specific questions.",
+            "intermediate": "🎯 Next: Try using count() or find() functions to extract specific data efficiently.",
+            "advanced": "🎯 Next: Combine multiple queries for advanced analysis and custom filtering."
+        },
+        "dashboard": {
+            "beginner": "🎯 Pro Tip: Select a file to see basic statistics, then explore the visualizations.",
+            "intermediate": "🎯 Next: Use filters and date ranges to dive deeper into trends and patterns.",
+            "advanced": "🎯 Next: Combine multiple files for cross-source analysis and insights."
+        },
+        "compare": {
+            "beginner": "🎯 Pro Tip: Select two similar files and choose a comparison method to see differences.",
+            "intermediate": "🎯 Next: Try detailed change tracking and document merge features.",
+            "advanced": "🎯 Next: Leverage multi-file comparison for complex document workflows."
+        },
+        "capl": {
+            "beginner": "🎯 Pro Tip: Paste your code and ask about errors or what specific lines do.",
+            "intermediate": "🎯 Next: Request code optimization and variable analysis for cleaner code.",
+            "advanced": "🎯 Next: Use architectural reviews and advanced debugging techniques."
+        }
+    }
+    
+    return workflow_paths.get(tab_name, {}).get(skill_level, "🎯 Keep exploring the features available!")
+
+
 def show_help_popup(tab_name, selected_files):
     state_key = ensure_help_popup_state(tab_name)
     st.checkbox("Show query helper popup", key=state_key)
@@ -4251,15 +4340,19 @@ def show_help_popup(tab_name, selected_files):
     if not st.session_state[state_key]:
         return
 
+    # Track behavior
+    tracker = track_user_behavior(tab_name)
+    skill_level = infer_user_workflow()
     keywords = tab_keywords.get(tab_name.lower(), [])
 
     if not selected_files:
         st.markdown(
             f"""
-            <div style='position:fixed; bottom:14px; right:14px; width:340px; padding:14px; background:#ffffff; border:1px solid #a8d8f0; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.24); z-index:9999;'>
-                <h4 style='margin:0 0 6px 0; font-size:15px; color:#a8d8f0;'>📘 {tab_name.capitalize()} Query Keywords</h4>
-                <p style='margin:0; font-size:13px; color:#253659;'>Select a document first to see targeted query guidance.</p>
-                <p style='margin:5px 0 0 0; font-size:13px; color:#253659;'>Suggested keywords: {', '.join(keywords)}</p>
+            <div style='position:fixed; bottom:14px; right:14px; width:360px; padding:16px; background:linear-gradient(135deg, #f8fbff 0%, #f0f7ff 100%); border:1px solid #d0e8f0; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.12); z-index:9999;'>
+                <h4 style='margin:0 0 8px 0; font-size:14px; font-weight:600; color:#1e293b;'>📘 {tab_name.capitalize()} Get Started</h4>
+                <p style='margin:0 0 6px 0; font-size:12px; color:#475569;'>💡 <strong>You're at: {skill_level.title()} Level</strong></p>
+                <p style='margin:0; font-size:12px; color:#64748b;'>Select a document first to unlock targeted query guidance and smart suggestions.</p>
+                <p style='margin:5px 0 0 0; font-size:11px; color:#94a3b8;'>Keywords: {', '.join(keywords)}</p>
             </div>
             """,
             unsafe_allow_html=True
@@ -4267,6 +4360,9 @@ def show_help_popup(tab_name, selected_files):
         return
 
     selected_types = {os.path.splitext(f)[1].lower() for f in selected_files}
+    dynamic_suggestions = get_dynamic_suggestions(tab_name, skill_level)
+    next_action = get_next_best_action(tab_name, skill_level)
+    
     if tab_name == "chat":
         extra = "Try count('Approved'), find('Error'), summarize(), or specific queries like 'How many tests passed?'"
     elif tab_name == "dashboard":
@@ -4288,14 +4384,31 @@ def show_help_popup(tab_name, selected_files):
     elif any(ext in selected_types for ext in [".capl", ".can"]):
         type_hint = "CAPL scripts are analyzed for syntax issues; ask for code fixes or suggestions."
 
+    suggestions_html = ""
+    for i, suggestion in enumerate(dynamic_suggestions[:3], 1):
+        suggestions_html += f"<div style='padding:6px 0; font-size:12px; color:#1e293b;'>• {suggestion}</div>"
+
     st.markdown(
         f"""
-        <div style='position:fixed; bottom:14px; right:14px; width:340px; padding:14px; background:#ffffff; border:1px solid #a8d8f0; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.24); z-index:9999;'>
-            <h4 style='margin:0 0 6px 0; font-size:15px; color:#a8d8f0;'>📘 {tab_name.capitalize()} Query Keywords</h4>
-            <p style='margin:0 0 8px 0; font-size:13px; color:#253659;'>Support for selected file types: {', '.join(sorted(selected_types))}</p>
-            <p style='margin:0 0 8px 0; font-size:13px; color:#253659;'>Suggested keywords: {', '.join(keywords)}</p>
-            <p style='margin:0; font-size:12px; color:#3c4f7e;'>{extra}</p>
-            <p style='margin:5px 0 0 0; font-size:12px; color:#3c4f7e;'>{type_hint}</p>
+        <div style='position:fixed; bottom:14px; right:14px; width:380px; padding:16px; background:linear-gradient(135deg, #f8fbff 0%, #f0f7ff 100%); border:1px solid #d0e8f0; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.12); z-index:9999; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;'>
+            <h4 style='margin:0 0 10px 0; font-size:14px; font-weight:600; color:#1e293b;'>📘 {tab_name.capitalize()} Assistant</h4>
+            
+            <div style='margin:0 0 10px 0; padding:8px; background:rgba(168, 216, 240, 0.1); border-left:3px solid #a8d8f0; border-radius:4px;'>
+                <p style='margin:0; font-size:12px; color:#475569;'>💡 <strong>Skill Level: {skill_level.title()}</strong> | Queries: {tracker.get("queries", 0)}</p>
+            </div>
+            
+            <div style='margin:0 0 8px 0;'>
+                <p style='margin:0 0 4px 0; font-size:11px; font-weight:600; color:#64748b;'>✨ Suggested Queries:</p>
+                {suggestions_html}
+            </div>
+            
+            <div style='margin:0 0 8px 0; padding:8px; background:rgba(30, 41, 59, 0.05); border-radius:4px;'>
+                <p style='margin:0; font-size:12px; color:#1e293b;'>{next_action}</p>
+            </div>
+            
+            <p style='margin:0 0 6px 0; font-size:12px; color:#64748b;'><strong>File Types:</strong> {', '.join(sorted(selected_types))}</p>
+            <p style='margin:0 0 6px 0; font-size:12px; color:#64748b;'>{type_hint}</p>
+            <p style='margin:0; font-size:11px; color:#94a3b8;'>{extra}</p>
         </div>
         """,
         unsafe_allow_html=True
