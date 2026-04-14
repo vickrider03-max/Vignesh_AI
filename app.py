@@ -3913,7 +3913,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
 
         st.markdown('<div class="glass-input-label">👤 Username</div>', unsafe_allow_html=True)
         login_username = st.text_input(
-            "Username",
+            "",
             key="login_username",
             placeholder="Enter your username",
             label_visibility="collapsed",
@@ -3921,7 +3921,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
 
         st.markdown('<div class="glass-input-label">🔒 Password <span style="font-size:0.88rem;color:#7C5CFF;">(optional)</span></div>', unsafe_allow_html=True)
         login_password = st.text_input(
-            "Password",
+            "",
             type="password",
             key="login_password",
             placeholder="Enter your password",
