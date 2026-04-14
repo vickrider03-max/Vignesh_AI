@@ -3903,8 +3903,6 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
     with right_col:
         st.markdown("""
             <div class="glass-card">
-                <h2>🧠 IntelliDoc AI</h2>
-                <p>Smart Document Assistant</p>
             """,
             unsafe_allow_html=True,
         )
