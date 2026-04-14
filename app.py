@@ -302,10 +302,39 @@ st.markdown(
             --button-text: #1e293b;
         }
         
-        body {
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            min-width: 0;
+            overflow-x: hidden;
             background: var(--background);
             color: var(--text);
             transition: background 0.3s ease, color 0.3s ease;
+        }
+
+        div[role="main"], section.main, .stApp {
+            min-width: 0;
+            max-width: 1600px;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        .block-container {
+            padding-left: clamp(1rem, 2vw, 1.75rem) !important;
+            padding-right: clamp(1rem, 2vw, 1.75rem) !important;
+            max-width: 1600px;
+        }
+
+        .stSidebar {
+            min-width: 280px !important;
+            max-width: 360px !important;
+            width: clamp(280px, 18vw, 360px) !important;
+        }
+
+        .stSidebarNav {
+            min-width: 280px !important;
         }
         
         .dashboard-grid {
@@ -3737,6 +3766,9 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 align-items: center;
                 min-height: 78vh;
                 padding: 32px 0;
+                max-width: 1240px;
+                margin: 0 auto;
+                width: min(100%, 1240px);
             }
             .login-left-panel {
                 position: relative;
