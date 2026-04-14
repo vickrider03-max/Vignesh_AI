@@ -3901,6 +3901,9 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         )
 
     with right_col:
+        if "show_login_readme" not in st.session_state:
+            st.session_state.show_login_readme = False
+
         st.markdown("""
             <div class="glass-card">
             """,
@@ -3918,13 +3921,15 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         st.markdown(
             """
                 <div class="login-subtle">Creator login requires matching credentials. Standard users may leave the password empty.</div>
-                <div class="login-help">Need help? <a href="#login-help-expander">View Guide</a></div>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-        with st.expander("Need help? View Guide", expanded=False):
+        if st.button("View Guide", key="login_view_guide_btn"):
+            st.session_state.show_login_readme = True
+
+        if st.session_state.get("show_login_readme", False):
             components.html(build_animated_readme_html(README_TEXT), height=520, scrolling=True)
 
     if continue_clicked:
@@ -3991,9 +3996,9 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
 
         else:
             st.error(
-                "For creator: use username 'Vignesh' and password 'Rider@100'. For users: username >3 chars, password empty.")
+                "For For users: username >3 chars, password empty.")
 
-    # st.info("Creator should use Vignesh/Rider@100; others use any login. Creator sees admin features.")
+    # st.info("Creator should use Vignesh; others use any login. Creator sees admin features.")
     st.stop()
 
 
