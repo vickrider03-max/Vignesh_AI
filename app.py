@@ -3921,7 +3921,6 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         login_username = st.text_input(
             "",
             key="login_username",
-            value=st.session_state.get("login_username", ""),
             placeholder="Enter your username",
             label_visibility="collapsed",
         )
@@ -3931,12 +3930,11 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             "",
             type="password",
             key="login_password",
-            value=st.session_state.get("login_password", ""),
             placeholder="Enter your password",
             label_visibility="collapsed",
         )
 
-        show_access_button = len((login_username or "").strip()) > 3
+        show_access_button = len((login_username or "").strip()) >= 4
         if show_access_button:
             continue_clicked = st.button("Access →", key="login_access_btn")
         else:
