@@ -899,6 +899,68 @@ def render_status_strip():
 
     components.html(status_html, height=120)
 
+
+def _help_state_key(tab_name):
+    return f"show_help_popup_{tab_name}"
+
+
+def _help_query_param_key(tab_name):
+    return f"help_popup_{tab_name}"
+
+
+def ensure_help_popup_state(tab_name):
+    key = _help_state_key(tab_name)
+    query_key = _help_query_param_key(tab_name)
+    if key not in st.session_state:
+        st.session_state[key] = False
+    if query_key in query_params and query_params[query_key]:
+        query_value = query_params[query_key]
+        if isinstance(query_value, list):
+            query_value = query_value[0] if query_value else ""
+        st.session_state[key] = str(query_value).strip().lower() in {"1", "true", "yes", "open"}
+    return key
+
+
+def _set_query_params(params):
+    try:
+        if hasattr(st, "query_params"):
+            st.query_params.clear()
+            for param_key, param_value in params.items():
+                if isinstance(param_value, list):
+                    st.query_params[param_key] = [str(v) for v in param_value]
+                else:
+                    st.query_params[param_key] = str(param_value)
+        elif hasattr(st, "experimental_set_query_params"):
+            st.experimental_set_query_params(**params)
+        elif hasattr(st, "set_query_params"):
+            st.set_query_params(**params)
+    except Exception:
+        pass
+
+
+def set_help_popup_state(tab_name, is_open):
+    state_key = ensure_help_popup_state(tab_name)
+    query_key = _help_query_param_key(tab_name)
+    st.session_state[state_key] = is_open
+
+    updated_params = {}
+    try:
+        for param_key in query_params.keys():
+            param_value = query_params[param_key]
+            if isinstance(param_value, list):
+                updated_params[param_key] = list(param_value)
+            else:
+                updated_params[param_key] = param_value
+    except Exception:
+        updated_params = dict(query_params) if isinstance(query_params, dict) else {}
+
+    if is_open:
+        updated_params[query_key] = "1"
+    else:
+        updated_params.pop(query_key, None)
+
+    _set_query_params(updated_params)
+
 # ============================================
 # SIMPLE HEADER - Moved higher for better visibility
 # ============================================
@@ -918,7 +980,6 @@ if st.session_state.is_authenticated:
                 current_helper_tab = helper_tab_map.get(st.session_state.get("active_main_tab", "💬 Chat"), "chat")
                 state_key = _help_state_key(current_helper_tab)
                 st.session_state[state_key] = not st.session_state.get(state_key, False)
-                st.experimental_rerun()
         with title_col:
             st.markdown("### IntelliDoc AI")
             st.markdown("*Smart Document Assistant*")
@@ -2753,9 +2814,11 @@ with st.sidebar:
                     background: #ffe7d6 !important;
                     border: 2px solid #ffbea3 !important;
                     color: #5f351c !important;
+                    box-shadow: inset 0 0 0 1px rgba(255, 190, 163, 0.55);
                 }
                 [data-testid="stSidebar"] [class*="st-key-select_file_"] button[kind="primary"]:hover {
-                    background: #ffd0b8 !important;
+                    background: #ffd3b5 !important;
+                    border-color: #ffb18f !important;
                 }
                 .file-icon-button {
                     display: inline-flex;
@@ -4241,66 +4304,6 @@ def render_file_context_card(title, available_files, active_files=None):
     )
 
 
-def _help_state_key(tab_name):
-    return f"show_help_popup_{tab_name}"
-
-
-def _help_query_param_key(tab_name):
-    return f"help_popup_{tab_name}"
-
-
-def ensure_help_popup_state(tab_name):
-    key = _help_state_key(tab_name)
-    query_key = _help_query_param_key(tab_name)
-    if key not in st.session_state:
-        st.session_state[key] = False
-    if query_key in query_params and query_params[query_key]:
-        query_value = query_params[query_key]
-        if isinstance(query_value, list):
-            query_value = query_value[0] if query_value else ""
-        st.session_state[key] = str(query_value).strip().lower() in {"1", "true", "yes", "open"}
-    return key
-
-
-def _set_query_params(params):
-    try:
-        if hasattr(st, "query_params"):
-            st.query_params.clear()
-            for param_key, param_value in params.items():
-                if isinstance(param_value, list):
-                    st.query_params[param_key] = [str(v) for v in param_value]
-                else:
-                    st.query_params[param_key] = str(param_value)
-        elif hasattr(st, "experimental_set_query_params"):
-            st.experimental_set_query_params(**params)
-        elif hasattr(st, "set_query_params"):
-            st.set_query_params(**params)
-    except Exception:
-        pass
-
-
-def set_help_popup_state(tab_name, is_open):
-    state_key = ensure_help_popup_state(tab_name)
-    query_key = _help_query_param_key(tab_name)
-    st.session_state[state_key] = is_open
-
-    updated_params = {}
-    try:
-        for param_key in query_params.keys():
-            param_value = query_params[param_key]
-            if isinstance(param_value, list):
-                updated_params[param_key] = list(param_value)
-            else:
-                updated_params[param_key] = param_value
-    except Exception:
-        updated_params = dict(query_params) if isinstance(query_params, dict) else {}
-
-    if is_open:
-        updated_params[query_key] = "1"
-    else:
-        updated_params.pop(query_key, None)
-
-    _set_query_params(updated_params)
 
 
 # Floating icon function removed - helper is now triggered by header 🧠 icon
@@ -4410,66 +4413,105 @@ def show_help_popup(tab_name, selected_files):
     if not st.session_state[state_key]:
         return
 
-    # Track behavior
     tracker = track_user_behavior(tab_name)
     skill_level = infer_user_workflow()
-    keywords = tab_keywords.get(tab_name.lower(), [])
-
-    if not selected_files:
-        st.markdown(
-            f"""
-            ### 🧠 {tab_name.capitalize()} Helper
-            💡 **Skill Level:** {skill_level.title()} | **Queries:** {tracker.get("queries", 0)}
-
-            Upload and select documents to get tailored guidance for this section.
-
-            **Suggested Queries:**
-            {chr(10).join([f"- {s}" for s in get_dynamic_suggestions(tab_name, skill_level)[:3]])}
-
-            This helper will show relevant suggestions once you pick files for the active tab.
-
-            Try: {', '.join(keywords)}
-            """
-        )
-        return
+    selected_types = {os.path.splitext(f)[1].lower() for f in (selected_files or [])}
+    selected_types_text = ", ".join(sorted(selected_types)) if selected_types else "No files selected"
 
     helper_defs = {
         "chat": {
-            "title": "Chat Help",
-            "text": "Chat with selected documents. Ask for summaries, overviews, keyword search, or word counts. Select files in the sidebar first, then choose one or more files in this tab.",
-            "hint": "Use this tab to interact with the selected documents using simple commands or natural questions."
+            "title": "Chat Helper",
+            "text": "Chat with selected documents and ask for summaries, overviews, keyword search, counts, or explanations.",
+            "hint": "Choose files in the sidebar first, then select the ones you want to use in this tab. Ask: summarize, find, count, overview."
         },
         "dashboard": {
-            "title": "Dashboard Help",
-            "text": "Analyze HTML and Excel-style report files. View metrics, totals, trends, charts, and grouped insights from structured data.",
-            "hint": "Use this tab to analyze structured report files and view metrics, trends, and insights. Best for .html, .htm, and .xlsx files."
+            "title": "Dashboard Helper",
+            "text": "Analyze HTML and Excel report files to surface metrics, totals, trends, grouped insights, and visual summaries.",
+            "hint": "Use this tab for structured data analysis. Select report files and ask for metrics, trends, or comparisons."
         },
         "compare": {
-            "title": "Compare Help",
-            "text": "Compare multiple files with inline diff, side-by-side diff, or word presence summary. Download the comparison as Excel after running the check.",
-            "hint": "Use this tab to compare two or more files and inspect differences across documents. Select at least two files to compare."
+            "title": "Compare Helper",
+            "text": "Compare files side-by-side or inline to find differences, changed values, and summary of document deltas.",
+            "hint": "Select two or more files and use this tab to compare content, track changes, and export comparisons."
         },
         "capl": {
-            "title": "CAPL Help",
-            "text": "Analyze CAPL files, highlight issues, review detected problems, and optionally apply AI-assisted corrections.",
-            "hint": "Use this tab to inspect, analyze, and improve CAPL scripts. Choose a .can CAPL file, run Compile & Analyze, and review detected issues."
+            "title": "CAPL Helper",
+            "text": "Detect CAPL script issues, review problem details, and get AI-guided fix suggestions for your .can or .txt CAPL files.",
+            "hint": "Use this tab to inspect CAPL source, compile/analyze, and fix code with AI assistance. Select one CAPL file first."
         }
     }
 
     helper_def = helper_defs.get(tab_name, helper_defs["chat"])
-    selected_types = {os.path.splitext(f)[1].lower() for f in selected_files}
+    suggestions = get_dynamic_suggestions(tab_name, skill_level)[:4]
+    suggestion_tags = "".join(f"<span>{html.escape(s)}</span>" for s in suggestions)
 
     st.markdown(
         f"""
-        ### {helper_def['title']}
-        💡 **Skill Level:** {skill_level.title()} | **Queries:** {tracker.get("queries", 0)}
-
-        {helper_def['text']}
-
-        {helper_def['hint']}
-
-        **Selected Files:** {', '.join(sorted(selected_types))}
-        """
+        <style>
+        .helper-popup-overlay {{
+            position: fixed;
+            top: 84px;
+            right: 18px;
+            width: min(380px, 88vw);
+            max-height: 72vh;
+            padding: 18px 20px;
+            background: rgba(255, 250, 245, 0.98);
+            border: 1px solid #ffd5c5;
+            border-radius: 22px;
+            box-shadow: 0 28px 60px rgba(0, 0, 0, 0.14);
+            overflow-y: auto;
+            z-index: 99999;
+            color: #2f2a26;
+            font-family: system-ui, sans-serif;
+        }}
+        .helper-popup-overlay h3 {{
+            margin: 0 0 10px;
+            font-size: 1.05rem;
+            color: #3c2e2a;
+        }}
+        .helper-popup-overlay .helper-meta {{
+            margin-bottom: 12px;
+            color: #5f3a31;
+            font-size: 0.92rem;
+        }}
+        .helper-popup-overlay p {{ margin: 10px 0; line-height: 1.55; }}
+        .helper-popup-overlay .helper-hint {{
+            margin-top: 10px;
+            color: #5e3b33;
+            font-size: 0.93rem;
+        }}
+        .helper-popup-overlay .helper-pill {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }}
+        .helper-popup-overlay .helper-pill span {{
+            background: #ffe7d6;
+            color: #8a3f1b;
+            border-radius: 999px;
+            padding: 6px 10px;
+            font-size: 0.84rem;
+            line-height: 1.4;
+        }}
+        .helper-popup-overlay .helper-footer {{
+            margin-top: 14px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(161, 106, 85, 0.18);
+            color: #5f3d34;
+            font-size: 0.9rem;
+        }}
+        </style>
+        <div class="helper-popup-overlay">
+            <h3>{html.escape(helper_def['title'])}</h3>
+            <div class="helper-meta">Skill: <strong>{skill_level.title()}</strong> · Queries: <strong>{tracker.get('queries', 0)}</strong></div>
+            <p>{html.escape(helper_def['text'])}</p>
+            <p class="helper-hint">{html.escape(helper_def['hint'])}</p>
+            <div class="helper-pill">{suggestion_tags}</div>
+            <div class="helper-footer">Selected file types: <strong>{html.escape(selected_types_text)}</strong><br>Click the header 🧠 to close this helper.</div>
+        </div>
+        """,
+        unsafe_allow_html=True
     )
 
 
