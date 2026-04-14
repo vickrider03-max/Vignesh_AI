@@ -3905,12 +3905,6 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         if "show_login_readme" not in st.session_state:
             st.session_state.show_login_readme = False
 
-        st.markdown("""
-            <div class="glass-card">
-            """,
-            unsafe_allow_html=True,
-        )
-
         st.markdown('<div class="glass-input-label">👤 Username</div>', unsafe_allow_html=True)
         login_username = st.text_input(
             "",
