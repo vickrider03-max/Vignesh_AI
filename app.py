@@ -3681,33 +3681,257 @@ CREATOR_PASSWORD = "Rider@100"
 # This runs before the main app tabs are shown. It keeps the creator/user access
 # flow in one place so authentication checks do not have to be repeated per tab.
 if not st.session_state.is_authenticated and "preview_token" not in query_params:
-    st.subheader("Login")
-    login_username = st.text_input("Username")
-    login_password = st.text_input("Password", type="password")
-    st.info("Note: For users, leave the password field blank (empty).")
+    st.markdown(
+        """
+        <style>
+            body {
+                background: #0B0F1A !important;
+                color: #E6EAF2 !important;
+            }
+            .login-split {
+                display: grid;
+                grid-template-columns: 1.35fr 1fr;
+                gap: 32px;
+                align-items: center;
+                min-height: 78vh;
+                padding: 32px 0;
+            }
+            .login-left-panel {
+                position: relative;
+                overflow: hidden;
+                border-radius: 32px;
+                padding: 40px 36px;
+                background: radial-gradient(circle at top left, rgba(124, 92, 255, 0.22), transparent 28%),
+                            radial-gradient(circle at top right, rgba(0, 194, 255, 0.16), transparent 26%),
+                            linear-gradient(180deg, rgba(19, 29, 56, 0.96) 0%, rgba(11, 15, 26, 0.95) 100%);
+                box-shadow: 0 36px 100px rgba(0, 0, 0, 0.35);
+                border: 1px solid rgba(124, 92, 255, 0.14);
+            }
+            .login-left-panel::before {
+                content: '';
+                position: absolute;
+                inset: 0;
+                background: radial-gradient(circle at 20% 20%, rgba(124, 92, 255, 0.24), transparent 16%),
+                            radial-gradient(circle at 80% 15%, rgba(0, 194, 255, 0.14), transparent 20%),
+                            radial-gradient(circle at 30% 80%, rgba(255, 255, 255, 0.06), transparent 24%);
+                pointer-events: none;
+            }
+            .login-left-content {
+                position: relative;
+                z-index: 1;
+                max-width: 460px;
+            }
+            .login-logo {
+                display: flex;
+                align-items: center;
+                gap: 14px;
+                margin-bottom: 28px;
+            }
+            .login-logo img {
+                width: 52px;
+                height: 52px;
+                border-radius: 16px;
+                object-fit: cover;
+                box-shadow: 0 22px 48px rgba(0, 0, 0, 0.32);
+                border: 1px solid rgba(255,255,255,0.12);
+            }
+            .login-logo-text {
+                display: grid;
+                gap: 4px;
+            }
+            .login-logo-text .brand-tag {
+                font-size: 0.82rem;
+                letter-spacing: 0.24em;
+                text-transform: uppercase;
+                color: #A497FF;
+                font-weight: 700;
+            }
+            .login-heading {
+                font-size: clamp(2.4rem, 3vw, 3.4rem);
+                line-height: 1.03;
+                margin-bottom: 18px;
+                color: #F7F9FF;
+                letter-spacing: -0.04em;
+            }
+            .login-tagline {
+                color: #B8C4DD;
+                font-size: 1rem;
+                line-height: 1.75;
+                max-width: 420px;
+                margin-bottom: 32px;
+            }
+            .login-keywords {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 12px;
+            }
+            .login-keyword {
+                padding: 10px 14px;
+                border-radius: 999px;
+                border: 1px solid rgba(124, 92, 255, 0.24);
+                background: rgba(124, 92, 255, 0.08);
+                color: #D9E1FF;
+                font-size: 0.92rem;
+            }
+            .glass-card {
+                position: relative;
+                padding: 40px 34px;
+                border-radius: 30px;
+                background: rgba(255, 255, 255, 0.06);
+                backdrop-filter: blur(24px);
+                box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28);
+                border: 1px solid rgba(255, 255, 255, 0.12);
+            }
+            .glass-card h2 {
+                margin: 0;
+                color: #F4F7FF;
+                font-size: 2.05rem;
+                letter-spacing: -0.03em;
+            }
+            .glass-card p {
+                margin: 14px 0 26px;
+                color: #A5B1D6;
+                font-size: 1rem;
+                line-height: 1.75;
+            }
+            .glass-input-label {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                color: #A9B5D2;
+                font-size: 0.95rem;
+                margin-bottom: 8px;
+            }
+            .glass-card .stTextInput > label {
+                display: none !important;
+            }
+            .glass-card .stTextInput input {
+                background: rgba(255, 255, 255, 0.08) !important;
+                border: 1px solid rgba(255, 255, 255, 0.14) !important;
+                color: #F4F7FF !important;
+                border-radius: 18px !important;
+                padding: 18px 18px !important;
+                min-height: 52px !important;
+                box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04) !important;
+                transition: all 0.2s ease !important;
+            }
+            .glass-card .stTextInput input:focus {
+                border-color: rgba(124, 92, 255, 0.8) !important;
+                box-shadow: 0 0 0 6px rgba(124, 92, 255, 0.12) !important;
+                outline: none !important;
+            }
+            .glass-card .stTextInput input::placeholder {
+                color: rgba(244, 247, 255, 0.62) !important;
+            }
+            .glass-card .stButton > button {
+                width: 100% !important;
+                border-radius: 20px !important;
+                padding: 16px 0 !important;
+                font-size: 1rem !important;
+                font-weight: 700 !important;
+                color: #F7F9FF !important;
+                background: linear-gradient(135deg, #6A70FF 0%, #00C2FF 100%) !important;
+                border: none !important;
+                box-shadow: 0 18px 42px rgba(0, 194, 255, 0.24) !important;
+                transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+            }
+            .glass-card .stButton > button:hover {
+                transform: translateY(-2px) !important;
+                box-shadow: 0 26px 58px rgba(0, 194, 255, 0.32) !important;
+            }
+            .login-subtle {
+                color: #8D9CC9;
+                font-size: 0.93rem;
+                margin-top: 18px;
+                line-height: 1.7;
+            }
+            .login-help {
+                margin-top: 22px;
+                font-size: 0.95rem;
+                color: #BAC8E8;
+            }
+            .login-help a {
+                color: #7C5CFF;
+                text-decoration: none;
+                font-weight: 600;
+            }
+            .login-help a:hover {
+                text-decoration: underline;
+            }
+            .login-expander > button {
+                width: 100% !important;
+                background: rgba(255,255,255,0.06) !important;
+                color: #E6EAF2 !important;
+                border: 1px solid rgba(255,255,255,0.12) !important;
+            }
+            @media (max-width: 980px) {
+                .login-split {grid-template-columns: 1fr;}
+                .login-left-panel, .glass-card {border-radius: 24px;}
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    has_read_readme = st.checkbox("I have read the README and want to continue")
+    left_col, right_col = st.columns([3, 2], gap="large")
+    with left_col:
+        st.markdown(
+            f"""
+            <div class="login-left-panel">
+                <div class="login-left-content">
+                    <div class="login-logo">
+                        {f'<img src="data:image/gif;base64,{logo_data}" alt="Mercedes-Benz logo">' if logo_data else ''}
+                        <div class="login-logo-text">
+                            <div class="brand-tag">Mercedes-Benz Intelligence</div>
+                            <div style="font-size:0.95rem;color:#DDE4FF;">AI Control Room</div>
+                        </div>
+                    </div>
+                    <div class="login-heading">Where Documents Become Intelligence</div>
+                    <div class="login-tagline">A premium command center for AI-powered document analysis, comparison, automation, and insights.</div>
+                    <div class="login-keywords">
+                        <span class="login-keyword">Analyze</span>
+                        <span class="login-keyword">Compare</span>
+                        <span class="login-keyword">Automate</span>
+                        <span class="login-keyword">Intelligence</span>
+                    </div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-    col1, col2 = st.columns([1, 3])
-    with col1:
-        access_clicked = False
-        if has_read_readme:
-            access_clicked = st.button("🔑 Access", use_container_width=True, key="login_access_btn")
-        else:
-            st.write("")
-    with col2:
-        st.write("")
+    with right_col:
+        st.markdown("""
+            <div class="glass-card">
+                <h2>🧠 IntelliDoc AI</h2>
+                <p>Smart Document Assistant</p>
+            """,
+            unsafe_allow_html=True,
+        )
 
-    st.markdown("### Read Me First")
-    render_readme_help_panel(expanded=False)
+        st.markdown('<div class="glass-input-label">👤 Username</div>', unsafe_allow_html=True)
+        login_username = st.text_input("", key="login_username", placeholder="Enter your username", label_visibility="collapsed")
 
-    if access_clicked:
-        if not has_read_readme:
-            st.warning("Please read the README and confirm the checkbox before accessing the app.")
-            st.stop()
+        st.markdown('<div class="glass-input-label">🔒 Password <span style="font-size:0.88rem;color:#7C5CFF;">(optional)</span></div>', unsafe_allow_html=True)
+        login_password = st.text_input("", type="password", key="login_password", placeholder="Enter your password", label_visibility="collapsed")
 
-        cleaned_username = (login_username or "").strip()
-        cleaned_password = (login_password or "").strip()
+        continue_clicked = st.button("Continue →", key="login_continue_btn")
+
+        st.markdown(
+            """
+                <div class="login-subtle">Creator login requires matching credentials. Standard users may leave the password empty.</div>
+                <div class="login-help">Need help? <a href="#login-help-expander">View Guide</a></div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        with st.expander("Need help? View Guide", expanded=False):
+            components.html(build_animated_readme_html(README_TEXT), height=520, scrolling=True)
+
+    if continue_clicked:
+        cleaned_username = (st.session_state.get("login_username", "") or "").strip()
+        cleaned_password = (st.session_state.get("login_password", "") or "").strip()
 
         if cleaned_username == CREATOR_USERNAME and cleaned_password == CREATOR_PASSWORD:
             st.session_state.is_authenticated = True
@@ -3724,7 +3948,6 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 "timestamp": ist_time,
                 "usage_time": "-"
             })
-            # Update active users
             active_file = "active_users.json"
             now = datetime.now()
             if os.path.exists(active_file):
@@ -3732,10 +3955,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                     active_users = json.load(f)
             else:
                 active_users = []
-            # Clean old entries (>1 hour)
-            active_users = [u for u in active_users if
-                            datetime.fromisoformat(u["timestamp"]) > now - timedelta(hours=1)]
-            # Add current
+            active_users = [u for u in active_users if datetime.fromisoformat(u["timestamp"]) > now - timedelta(hours=1)]
             active_users.append({"username": cleaned_username, "timestamp": now.isoformat()})
             with open(active_file, "w") as f:
                 json.dump(active_users, f)
@@ -3757,7 +3977,6 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 "timestamp": ist_time,
                 "usage_time": "-"
             })
-            # Update active users
             active_file = "active_users.json"
             now = datetime.now()
             if os.path.exists(active_file):
@@ -3765,10 +3984,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                     active_users = json.load(f)
             else:
                 active_users = []
-            # Clean old entries (>1 hour)
-            active_users = [u for u in active_users if
-                            datetime.fromisoformat(u["timestamp"]) > now - timedelta(hours=1)]
-            # Add current
+            active_users = [u for u in active_users if datetime.fromisoformat(u["timestamp"]) > now - timedelta(hours=1)]
             active_users.append({"username": cleaned_username, "timestamp": now.isoformat()})
             with open(active_file, "w") as f:
                 json.dump(active_users, f)
