@@ -3804,6 +3804,18 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             }
             .glass-card .stTextInput > label {
                 display: none !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                height: 0 !important;
+                width: 0 !important;
+                overflow: hidden !important;
+            }
+            .glass-card .stTextInput {
+                margin-top: 0 !important;
+                padding-top: 0 !important;
+            }
+            .glass-card .stTextInput > label + div {
+                margin-top: 0 !important;
             }
             .glass-card .stTextInput input {
                 background: rgba(255, 255, 255, 0.08) !important;
@@ -3909,6 +3921,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         login_username = st.text_input(
             "",
             key="login_username",
+            value=st.session_state.get("login_username", ""),
             placeholder="Enter your username",
             label_visibility="collapsed",
         )
@@ -3918,6 +3931,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             "",
             type="password",
             key="login_password",
+            value=st.session_state.get("login_password", ""),
             placeholder="Enter your password",
             label_visibility="collapsed",
         )
