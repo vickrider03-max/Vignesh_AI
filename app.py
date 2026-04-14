@@ -1,3 +1,7 @@
+# -------------------------------
+# IMPORTS
+# -------------------------------
+# Standard library and third-party imports for the application.
 import html, re, hashlib, os, json, base64, pickle
 import uuid
 import urllib.parse
@@ -27,15 +31,21 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+# -------------------------------
+# GLOBAL VARIABLES & CONSTANTS
+# -------------------------------
+# Persistent storage for document previews across app reruns.
+# PREVIEW_TOKENS maps tokens to metadata, PREVIEW_STORE holds file data.
 PREVIEW_TOKENS = {}  # token -> {'file_name': str, 'timestamp': datetime}
 PREVIEW_STORE = {}   # token -> file_dict
 
 PREVIEW_DATA_FILE = "preview_data.pkl"
 
-# Preview token helpers:
-# Used by the document preview flow opened in a separate browser tab/window.
-# These functions persist preview state so a selected file can still be rendered
-# even after Streamlit reruns the main app script.
+# -------------------------------
+# PREVIEW PERSISTENCE HELPERS
+# -------------------------------
+# Functions to save/load preview data so document previews persist across Streamlit reruns.
+# This allows users to share preview links that work even after app restart.
 def load_preview_data():
     """Load preview data from file"""
     global PREVIEW_TOKENS, PREVIEW_STORE
@@ -79,6 +89,11 @@ def cleanup_expired_preview_tokens():
     save_preview_data()
 
 
+# -------------------------------
+# MERCEDES LOGO GENERATION
+# -------------------------------
+# Generates an animated GIF of the Mercedes-Benz logo using matplotlib.
+# Used in the sidebar and login screen for branding.
 @st.cache_data(show_spinner=False)
 def get_needle_minimalist_logo():
     try:
@@ -149,7 +164,19 @@ def get_needle_minimalist_logo():
 # -------------------------------
 st.set_page_config(page_title="🧠 IntelliDoc AI– Smart Document Assistant", layout="wide")
 
-# Hide Streamlit footer and branding overlays
+# Mobile viewport meta tag for proper scaling
+st.markdown(
+    """
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    """,
+    unsafe_allow_html=True,
+)
+
+# -------------------------------
+# GLOBAL CSS STYLING
+# -------------------------------
+# Custom CSS to hide Streamlit branding, style buttons, and add animations.
+# Applied globally to override default Streamlit appearance.
 st.markdown(
     """
     <style>
@@ -252,6 +279,10 @@ try:
 except Exception:
     logo_data = None
 
+# -------------------------------
+# ADDITIONAL CSS STYLING
+# -------------------------------
+# More CSS for dashboard grids, metric cards, loading animations, and responsive design.
 st.markdown(
     """
     <style>
@@ -1113,7 +1144,11 @@ if "start_time" not in st.session_state:
 if "active_main_tab" not in st.session_state:
     st.session_state.active_main_tab = "💬 Chat"
 
-# Load README.txt from file system
+# -------------------------------
+# README LOADING
+# -------------------------------
+# Loads the README text from file or uses default embedded content.
+# Used for the help/guide functionality.
 def load_readme_text():
     """Load README from file if it exists, otherwise use default"""
     readme_path = os.path.join(os.path.dirname(__file__), "README.txt")
@@ -1243,6 +1278,10 @@ Visualization via Plotly
 
 README_TEXT = load_readme_text()
 
+# -------------------------------
+# README FORMATTING
+# -------------------------------
+# Formats README text with HTML for display in the help panel.
 def _format_readme_inline(text):
     text = html.escape(text)
     text = re.sub(r'`([^`]+)`', r'<code>\1</code>', text)
@@ -2688,7 +2727,9 @@ def render_extracted_assets_preview(file_name, file_entry):
             )
 
 
-# Preview route handling:
+# -------------------------------
+# PREVIEW ROUTE HANDLING
+# -------------------------------
 # If a preview token is present in the query params, the app short-circuits into
 # a dedicated document preview screen instead of rendering the main multi-tab UI.
 preview_file_from_url = None
@@ -2757,6 +2798,7 @@ if preview_file_from_url:
     st.stop()
 
 
+# -------------------------------
 # -------------------------------
 # FILE UPLOAD & MANAGEMENT (SIDEBAR)
 # -------------------------------
@@ -3879,6 +3921,19 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             @media (max-width: 980px) {
                 .login-split {grid-template-columns: 1fr;}
                 .login-left-panel, .glass-card {border-radius: 24px;}
+                .login-left-panel {padding: 32px 24px;}
+                .glass-card {padding: 32px 24px;}
+                .login-heading {font-size: 2.2rem;}
+                .login-tagline {font-size: 0.95rem;}
+            }
+            @media (max-width: 767px) {
+                .login-split {padding: 16px 0;}
+                .login-left-panel {padding: 24px 16px;}
+                .glass-card {padding: 24px 16px;}
+                .login-heading {font-size: 1.8rem; margin-bottom: 12px;}
+                .login-tagline {font-size: 0.9rem; margin-bottom: 24px;}
+                .login-keywords {gap: 8px;}
+                .login-keyword {padding: 8px 12px; font-size: 0.85rem;}
             }
         </style>
         """,
@@ -4828,10 +4883,142 @@ st.markdown("""
         background-color: #BA68C8; 
         box-shadow: 0 0 6px #BA68C8;
     }
+
+    /* --- RESPONSIVE DESIGN --- */
+    /* Mobile First: Base styles are mobile-friendly */
+    
+    /* Tablet and up */
+    @media (min-width: 768px) {
+        div[role="radiogroup"] {
+            flex-direction: row !important;
+            justify-content: center;
+        }
+        div[role="radiogroup"] > label {
+            flex: 0 0 auto;
+            min-width: 120px;
+        }
+    }
+
+    /* Desktop */
+    @media (min-width: 1024px) {
+        div[role="radiogroup"] > label {
+            min-width: 140px;
+        }
+    }
+
+    /* Mobile: Stack tabs vertically */
+    @media (max-width: 767px) {
+        div[role="radiogroup"] {
+            flex-direction: column !important;
+            gap: 8px;
+            align-items: stretch;
+        }
+        div[role="radiogroup"] > label {
+            width: 100% !important;
+            min-height: 50px;
+            padding: 12px 16px !important;
+            font-size: 16px !important; /* Prevent zoom on iOS */
+            text-align: center;
+        }
+        div[role="radiogroup"] > label::after {
+            margin-left: 8px;
+        }
+    }
+
+    /* Touch-friendly buttons on mobile */
+    @media (max-width: 767px) {
+        .stButton > button {
+            min-height: 48px !important;
+            padding: 12px 16px !important;
+            font-size: 16px !important;
+        }
+        
+        /* Larger file cards for touch */
+        [data-testid="stSidebar"] [class*="st-key-select_file_"] button {
+            min-height: 80px !important;
+            padding: 16px 12px !important;
+        }
+        
+        /* Sidebar improvements for mobile */
+        [data-testid="stSidebar"] {
+            width: 280px !important;
+        }
+    }
+
+    /* Prevent horizontal scroll */
+    body {
+        overflow-x: hidden;
+    }
+
+    /* Responsive text sizes */
+    .login-heading {
+        font-size: clamp(1.8rem, 5vw, 3.4rem);
+    }
+
+    .login-tagline {
+        font-size: clamp(0.9rem, 2.5vw, 1rem);
+    }
+
+    /* Content responsiveness */
+    .app-card {
+        padding: clamp(1rem, 2vw, 1.5rem);
+    }
+
+    .metric-card {
+        padding: clamp(1rem, 2vw, 1.5rem);
+    }
+
+    /* Table responsiveness */
+    .scrollable {
+        overflow-x: auto;
+    }
+
+    /* Ensure images are responsive */
+    img {
+        max-width: 100%;
+        height: auto;
+    }
+
+    /* Form inputs on mobile */
+    @media (max-width: 767px) {
+        .glass-card .stTextInput input {
+            font-size: 16px !important; /* Prevent zoom */
+            padding: 16px !important;
+            min-height: 48px !important;
+        }
+        
+        .glass-card .stButton > button {
+            min-height: 48px !important;
+            font-size: 16px !important;
+        }
+    }
+
+    /* Dashboard grid responsiveness */
+    @media (max-width: 767px) {
+        .dashboard-grid {
+            grid-template-columns: 1fr;
+            gap: 1rem;
+        }
+    }
+
+    /* Chat and other content */
+    @media (max-width: 767px) {
+        .stMarkdown {
+            font-size: 14px;
+        }
+        
+        .stDataFrame {
+            font-size: 12px;
+        }
+    }
     </style>
 """, unsafe_allow_html=True)
 
-# 2. Your Tab Logic
+# -------------------------------
+# MAIN TAB NAVIGATION
+# -------------------------------
+# Creates the horizontal tab navigation with custom styling.
+# Each tab corresponds to a major feature area of the application.
 main_tab_options = ["💬 Chat", "📊 Dashboard", "📂 Compare", "🧠 CAPL"]
 active_main_tab = st.radio("Open Section", main_tab_options, horizontal=True, key="active_main_tab", label_visibility="collapsed")
 
