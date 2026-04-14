@@ -3934,11 +3934,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             label_visibility="collapsed",
         )
 
-        show_access_button = len((login_username or "").strip()) >= 4
-        if show_access_button:
-            continue_clicked = st.button("Access →", key="login_access_btn")
-        else:
-            continue_clicked = False
+        continue_clicked = st.button("Access →", key="login_access_btn")
 
         st.markdown(
             """
