@@ -3905,9 +3905,6 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         if "show_login_readme" not in st.session_state:
             st.session_state.show_login_readme = False
 
-        def _refresh_login_username():
-            pass
-
         st.markdown("""
             <div class="glass-card">
             """,
@@ -3916,20 +3913,19 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
 
         st.markdown('<div class="glass-input-label">👤 Username</div>', unsafe_allow_html=True)
         login_username = st.text_input(
-            "",
+            "Username",
             key="login_username",
             placeholder="Enter your username",
-            label_visibility="hidden",
-            on_change=_refresh_login_username,
+            label_visibility="collapsed",
         )
 
         st.markdown('<div class="glass-input-label">🔒 Password <span style="font-size:0.88rem;color:#7C5CFF;">(optional)</span></div>', unsafe_allow_html=True)
         login_password = st.text_input(
-            "",
+            "Password",
             type="password",
             key="login_password",
             placeholder="Enter your password",
-            label_visibility="hidden",
+            label_visibility="collapsed",
         )
 
         show_access_button = len((login_username or "").strip()) >= 3
@@ -3946,7 +3942,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
 
         st.markdown(
             """
-                <div class="login-subtle">Creator login requires matching credentials. Standard users may leave the password empty.</div>
+                <div class="login-subtle">Standard users may leave the password empty.</div>
             </div>
             """,
             unsafe_allow_html=True,
