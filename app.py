@@ -3967,11 +3967,174 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
 
     left_col, right_col = st.columns([3, 2], gap="large")
     with left_col:
-        html_feature_panel = f"""
+        logo_img = f'<img src="data:image/gif;base64,{logo_data}" alt="Mercedes-Benz logo">' if logo_data else ''
+        html_feature_panel = """
+            <style>
+                html, body {
+                    margin: 0;
+                    padding: 0;
+                    background: transparent;
+                    color: #E6EAF2;
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                }
+                .login-left-panel {
+                    position: relative;
+                    overflow: hidden;
+                    border-radius: 32px;
+                    padding: 40px 36px;
+                    background: radial-gradient(circle at top left, rgba(124, 92, 255, 0.22), transparent 28%),
+                                radial-gradient(circle at top right, rgba(0, 194, 255, 0.16), transparent 26%),
+                                linear-gradient(180deg, rgba(19, 29, 56, 0.96) 0%, rgba(11, 15, 26, 0.95) 100%);
+                    box-shadow: 0 36px 100px rgba(0, 0, 0, 0.35);
+                    border: 1px solid rgba(124, 92, 255, 0.14);
+                    min-height: 630px;
+                }
+                .login-left-panel::before {
+                    content: '';
+                    position: absolute;
+                    inset: 0;
+                    background: radial-gradient(circle at 20% 20%, rgba(124, 92, 255, 0.24), transparent 16%),
+                                radial-gradient(circle at 80% 15%, rgba(0, 194, 255, 0.14), transparent 20%),
+                                radial-gradient(circle at 30% 80%, rgba(255, 255, 255, 0.06), transparent 24%);
+                    pointer-events: none;
+                }
+                .login-left-content {
+                    position: relative;
+                    z-index: 1;
+                    max-width: 460px;
+                }
+                .login-logo {
+                    display: flex;
+                    align-items: center;
+                    gap: 14px;
+                    margin-bottom: 28px;
+                }
+                .login-logo img {
+                    width: 52px;
+                    height: 52px;
+                    border-radius: 16px;
+                    object-fit: cover;
+                    box-shadow: 0 22px 48px rgba(0, 0, 0, 0.32);
+                    border: 1px solid rgba(255,255,255,0.12);
+                }
+                .login-logo-text {
+                    display: grid;
+                    gap: 4px;
+                }
+                .brand-tag {
+                    font-size: 0.82rem;
+                    letter-spacing: 0.24em;
+                    text-transform: uppercase;
+                    color: #A497FF;
+                    font-weight: 700;
+                }
+                .login-heading {
+                    font-size: clamp(2.4rem, 3vw, 3.4rem);
+                    line-height: 1.03;
+                    margin-bottom: 18px;
+                    color: #F7F9FF;
+                    letter-spacing: -0.04em;
+                }
+                .login-tagline {
+                    color: #B8C4DD;
+                    font-size: 1rem;
+                    line-height: 1.75;
+                    max-width: 420px;
+                    margin-bottom: 32px;
+                }
+                .login-keywords {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 12px;
+                }
+                .login-keyword {
+                    padding: 10px 14px;
+                    border-radius: 999px;
+                    border: 1px solid rgba(124, 92, 255, 0.24);
+                    background: rgba(124, 92, 255, 0.08);
+                    color: #D9E1FF;
+                    font-size: 0.92rem;
+                    cursor: pointer;
+                    transition: all 0.28s ease;
+                }
+                .login-keyword:hover {
+                    background: rgba(124, 92, 255, 0.16);
+                    border-color: rgba(124, 92, 255, 0.42);
+                    box-shadow: 0 6px 20px rgba(124, 92, 255, 0.12);
+                    transform: translateY(-1px);
+                }
+                .feature-description {
+                    display: none;
+                    margin-top: 20px;
+                    padding: 20px;
+                    border-radius: 18px;
+                    background: rgba(124, 92, 255, 0.08);
+                    border: 1px solid rgba(124, 92, 255, 0.22);
+                    color: #D9C8E8;
+                    font-size: 0.9rem;
+                    line-height: 1.7;
+                }
+                .feature-description.active {
+                    display: block;
+                }
+                .feature-description ul {
+                    margin: 10px 0;
+                    padding-left: 20px;
+                }
+                .feature-description li {
+                    margin-bottom: 8px;
+                }
+                #feature-bottom-banner {
+                    position: fixed;
+                    bottom: 0;
+                    left: 0;
+                    right: 0;
+                    background: linear-gradient(90deg, rgba(124, 92, 255, 0.95), rgba(0, 194, 255, 0.9));
+                    padding: 24px 40px;
+                    z-index: 9998;
+                    display: none;
+                    box-shadow: 0 -4px 30px rgba(124, 92, 255, 0.3);
+                    border-top: 2px solid rgba(124, 92, 255, 0.5);
+                    min-height: 80px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: flex-start;
+                    overflow: hidden;
+                }
+                #feature-bottom-banner.show {
+                    display: flex;
+                    animation: slideInFromRight 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+                }
+                #feature-banner-content {
+                    color: #ffffff;
+                    font-size: 1rem;
+                    font-weight: 500;
+                    white-space: nowrap;
+                    animation: marqueeText 12s linear infinite;
+                }
+                @keyframes slideInFromRight {
+                    from {
+                        transform: translateX(100%);
+                        opacity: 0;
+                    }
+                    to {
+                        transform: translateX(0);
+                        opacity: 1;
+                    }
+                }
+                @keyframes marqueeText {
+                    from {
+                        transform: translateX(100%);
+                    }
+                    to {
+                        transform: translateX(-100%);
+                    }
+                }
+            </style>
             <div class="login-left-panel">
                 <div class="login-left-content">
                     <div class="login-logo">
-                        {f'<img src="data:image/gif;base64,{logo_data}" alt="Mercedes-Benz logo">' if logo_data else ''}
+                        __LOGO_IMG__
                         <div class="login-logo-text">
                             <div class="brand-tag">Mercedes-Benz Intelligence</div>
                             <div style="font-size:0.95rem;color:#DDE4FF;">AI Control Room</div>
@@ -4051,20 +4214,19 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                         banner.classList.add('show');
                     }}
                 }}
-                document.addEventListener('DOMContentLoaded', function() {{
-                    const keywords = document.querySelectorAll('.login-keyword');
-                    keywords.forEach(keyword => {{
-                        keyword.addEventListener('click', function(e) {{
-                            e.preventDefault();
-                            e.stopPropagation();
-                            const feature = this.getAttribute('data-feature');
-                            showFeature(feature);
-                        }});
+                const keywords = document.querySelectorAll('.login-keyword');
+                keywords.forEach(keyword => {{
+                    keyword.addEventListener('click', function(e) {{
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const feature = this.getAttribute('data-feature');
+                        showFeature(feature);
                     }});
                 }});
             }})();
             </script>
             """
+        html_feature_panel = html_feature_panel.replace("__LOGO_IMG__", logo_img)
         components.html(html_feature_panel, height=740, scrolling=False)
 
     continue_clicked = False
