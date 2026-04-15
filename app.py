@@ -3963,11 +3963,8 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
 
     left_col, right_col = st.columns([3, 2], gap="large")
     with left_col:
-        st.write("Login panel here")
-        # html_feature_panel = """
-        # """
-        # html_feature_panel = html_feature_panel.replace("__LOGO_IMG__", logo_img)
-        # components.html(html_feature_panel, height=600, scrolling=False)
+        logo_img = f'<img src="data:image/gif;base64,{logo_data}" alt="Mercedes-Benz logo">' if logo_data else ''
+        st.write("Login panel - feature keywords here")
 
     continue_clicked = False
     with right_col:
