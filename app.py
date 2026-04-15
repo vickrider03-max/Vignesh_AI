@@ -3836,45 +3836,41 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             .feature-description li {
                 margin-bottom: 8px;
             }
-            #feature-bottom-banner {
-                position: fixed;
-                bottom: 0;
-                left: 0;
-                right: 0;
-                background: linear-gradient(90deg, rgba(124, 92, 255, 0.95), rgba(0, 194, 255, 0.9));
-                padding: 24px 40px;
-                z-index: 9998;
-                display: none;
-                box-shadow: 0 -4px 30px rgba(124, 92, 255, 0.3);
-                border-top: 2px solid rgba(124, 92, 255, 0.5);
-                min-height: 80px;
+            #feature-popup-card {
+                position: relative;
+                margin-top: 24px;
+                padding: 22px 24px;
+                background: linear-gradient(135deg, #E5E3DD, #F9F6EE);
+                border: 1px solid rgba(145, 140, 132, 0.24);
+                border-radius: 20px;
+                box-shadow: 0 18px 40px rgba(26, 28, 34, 0.08);
+                opacity: 0;
+                transform: translateX(-110%);
+                visibility: hidden;
+                transition: transform 0.7s ease, opacity 0.7s ease, visibility 0.7s ease;
                 display: flex;
                 align-items: center;
                 justify-content: flex-start;
                 overflow: hidden;
             }
-            #feature-bottom-banner.show {
-                display: flex;
-                animation: slideInFromRight 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+            #feature-popup-card.show {
+                opacity: 1;
+                transform: translateX(0);
+                visibility: visible;
             }
-            #feature-banner-content {
-                color: #ffffff;
+            #feature-popup-content {
+                color: #2F3136;
                 font-size: 1rem;
-                font-weight: 500;
-                white-space: nowrap;
-                animation: marqueeText 12s linear infinite;
+                font-weight: 600;
+                line-height: 1.5;
+                white-space: normal;
+                max-width: 100%;
             }
-            @keyframes slideInFromRight {
-                from {
-                    transform: translateX(100%);
-                    opacity: 0;
-                }
-                to {
-                    transform: translateX(0);
-                    opacity: 1;
-                }
+            #feature-popup-content span {
+                display: inline-block;
+                animation: slideText 12s linear infinite;
             }
-            @keyframes marqueeText {
+            @keyframes slideText {
                 from {
                     transform: translateX(100%);
                 }
@@ -4084,43 +4080,41 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 .feature-description li {
                     margin-bottom: 8px;
                 }
-                #feature-bottom-banner {
+                #feature-popup-card {
                     position: relative;
                     margin-top: 24px;
-                    background: linear-gradient(90deg, rgba(220, 220, 220, 0.98), rgba(250, 249, 240, 0.98));
-                    padding: 18px 24px;
-                    display: none;
-                    box-shadow: 0 18px 40px rgba(25, 27, 31, 0.08);
-                    border: 1px solid rgba(171, 168, 160, 0.24);
-                    border-radius: 18px;
-                    min-height: 62px;
+                    padding: 22px 24px;
+                    background: linear-gradient(135deg, #E5E3DD, #F9F6EE);
+                    border: 1px solid rgba(145, 140, 132, 0.24);
+                    border-radius: 20px;
+                    box-shadow: 0 18px 40px rgba(26, 28, 34, 0.08);
+                    opacity: 0;
+                    transform: translateX(-110%);
+                    visibility: hidden;
+                    transition: transform 0.7s ease, opacity 0.7s ease, visibility 0.7s ease;
                     display: flex;
                     align-items: center;
                     justify-content: flex-start;
                     overflow: hidden;
                 }
-                #feature-bottom-banner.show {
-                    display: flex;
-                    animation: slideInFromRight 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+                #feature-popup-card.show {
+                    opacity: 1;
+                    transform: translateX(0);
+                    visibility: visible;
                 }
-                #feature-banner-content {
+                #feature-popup-content {
                     color: #2F3136;
                     font-size: 1rem;
                     font-weight: 600;
-                    white-space: nowrap;
-                    animation: marqueeText 12s linear infinite;
+                    line-height: 1.5;
+                    white-space: normal;
+                    max-width: 100%;
                 }
-                @keyframes slideInFromRight {
-                    from {
-                        transform: translateX(100%);
-                        opacity: 0;
-                    }
-                    to {
-                        transform: translateX(0);
-                        opacity: 1;
-                    }
+                #feature-popup-content span {
+                    display: inline-block;
+                    animation: slideText 12s linear infinite;
                 }
-                @keyframes marqueeText {
+                @keyframes slideText {
                     from {
                         transform: translateX(100%);
                     }
@@ -4146,8 +4140,8 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                         <span class="login-keyword" data-feature="compare">🔄 Compare</span>
                         <span class="login-keyword" data-feature="capl">🚗 CAPL</span>
                     </div>
-                    <div id="feature-bottom-banner">
-                        <div id="feature-banner-content">Click a feature to preview the description here.</div>
+                    <div id="feature-popup-card">
+                        <div id="feature-popup-content">Click a feature to preview it here.</div>
                     </div>
                     <div id="feature-descriptions">
                         <div id="chat-description" class="feature-description">
@@ -4188,9 +4182,6 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                             <div style="margin-top: 8px; padding: 8px; background: rgba(0,194,255,0.1); border-radius: 8px;">Analyze → Suggest Fix → Apply Fix → Save</div>
                         </div>
                     </div>
-                    <div id="feature-bottom-banner">
-                        <div id="feature-banner-content"></div>
-                    </div>
                 </div>
             </div>
             
@@ -4202,17 +4193,14 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                     const titleElement = selected.querySelector('strong');
                     const title = titleElement ? titleElement.textContent : '';
                     const items = Array.from(selected.querySelectorAll('li')).map(li => li.textContent.trim());
-                    let bannerText = title;
-                    if (items.length > 0) {{
-                        bannerText += ' • ' + items.join(' • ');
-                    }}
-                    const banner = document.getElementById('feature-bottom-banner');
-                    const content = document.getElementById('feature-banner-content');
-                    if (banner && content) {{
-                        content.textContent = bannerText;
-                        banner.classList.remove('show');
-                        void banner.offsetWidth;
-                        banner.classList.add('show');
+                    let popupText = '<strong>' + title + '</strong><br>' + items.join(' • ');
+                    const popup = document.getElementById('feature-popup-card');
+                    const content = document.getElementById('feature-popup-content');
+                    if (popup && content) {{
+                        content.innerHTML = popupText;
+                        popup.classList.remove('show');
+                        void popup.offsetWidth;
+                        popup.classList.add('show');
                     }}
                 }}
                 const keywords = document.querySelectorAll('.login-keyword');
