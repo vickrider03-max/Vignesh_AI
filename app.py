@@ -3542,341 +3542,103 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         """
         <style>
             body {
-                background: #0B0F1A !important;
-                color: #E6EAF2 !important;
+                background:
+                    radial-gradient(circle at top left, rgba(26, 47, 92, 0.22), transparent 28%),
+                    radial-gradient(circle at top right, rgba(63, 190, 255, 0.18), transparent 24%),
+                    linear-gradient(180deg, #06101f 0%, #0a1528 48%, #050c18 100%) !important;
+                color: #E6EEF8 !important;
             }
             .login-split {
                 display: grid;
-                grid-template-columns: 1.35fr 1fr;
-                gap: 32px;
+                grid-template-columns: minmax(210px, 260px) minmax(0, 1fr);
+                gap: 36px;
                 align-items: center;
-                min-height: 78vh;
-                padding: 32px 0;
-                max-width: 1240px;
+                min-height: 82vh;
+                padding: 24px 0 32px;
+                max-width: 1180px;
                 margin: 0 auto;
-                width: min(100%, 1240px);
+                width: min(100%, 1180px);
             }
-            .login-left-panel {
+            .login-form-panel {
                 position: relative;
+                padding: 30px 28px 32px;
+                border-radius: 34px;
                 overflow: hidden;
-                border-radius: 32px;
-                padding: 40px 36px;
-                background: radial-gradient(circle at top left, rgba(124, 92, 255, 0.22), transparent 28%),
-                            radial-gradient(circle at top right, rgba(0, 194, 255, 0.16), transparent 26%),
-                            linear-gradient(180deg, rgba(19, 29, 56, 0.96) 0%, rgba(11, 15, 26, 0.95) 100%);
-                box-shadow: 0 36px 100px rgba(0, 0, 0, 0.35);
-                border: 1px solid rgba(124, 92, 255, 0.14);
+                background: linear-gradient(145deg, rgba(9, 19, 38, 0.82), rgba(14, 27, 52, 0.66));
+                border: 1px solid rgba(165, 205, 255, 0.16);
+                box-shadow: 0 32px 90px rgba(1, 8, 22, 0.48);
             }
-            .login-left-panel::before {
-                content: '';
+            .login-form-panel::before {
+                content: "";
                 position: absolute;
-                inset: 0;
-                background: radial-gradient(circle at 20% 20%, rgba(124, 92, 255, 0.24), transparent 16%),
-                            radial-gradient(circle at 80% 15%, rgba(0, 194, 255, 0.14), transparent 20%),
-                            radial-gradient(circle at 30% 80%, rgba(255, 255, 255, 0.06), transparent 24%);
+                inset: 1px;
+                border-radius: 33px;
+                background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.02));
+                opacity: 0.55;
                 pointer-events: none;
             }
-            .login-left-content {
+            .login-form-header {
                 position: relative;
                 z-index: 1;
-                max-width: 460px;
+                margin-bottom: 26px;
             }
-            .login-logo {
-                display: flex;
+            .login-eyebrow {
+                display: inline-flex;
                 align-items: center;
-                gap: 14px;
-                margin-bottom: 28px;
-            }
-            .login-logo img {
-                width: 52px;
-                height: 52px;
-                border-radius: 16px;
-                object-fit: cover;
-                box-shadow: 0 22px 48px rgba(0, 0, 0, 0.32);
-                border: 1px solid rgba(255,255,255,0.12);
-            }
-            .login-logo-text {
-                display: grid;
-                gap: 4px;
-            }
-            .login-logo-text .brand-tag {
-                font-size: 0.82rem;
-                letter-spacing: 0.24em;
-                text-transform: uppercase;
-                color: #A497FF;
-                font-weight: 700;
-            }
-            .login-heading {
-                font-size: clamp(2.4rem, 3vw, 3.4rem);
-                line-height: 1.03;
-                margin-bottom: 18px;
-                color: #F7F9FF;
-                letter-spacing: -0.04em;
-            }
-            .login-tagline {
-                color: #B8C4DD;
-                font-size: 1rem;
-                line-height: 1.75;
-                max-width: 420px;
-                margin-bottom: 32px;
-            }
-            .login-keywords {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 12px;
-            }
-            .login-keyword {
-                padding: 10px 14px;
+                gap: 8px;
+                margin-bottom: 14px;
+                padding: 8px 14px;
                 border-radius: 999px;
-                border: 1px solid rgba(124, 92, 255, 0.24);
-                background: rgba(124, 92, 255, 0.08);
-                color: #D9E1FF;
-                font-size: 0.92rem;
+                background: rgba(154, 210, 255, 0.09);
+                border: 1px solid rgba(154, 210, 255, 0.14);
+                color: #bcdcff;
+                font-size: 0.82rem;
+                letter-spacing: 0.12em;
+                text-transform: uppercase;
             }
-            .glass-card {
-                position: relative;
-                padding: 40px 34px;
-                border-radius: 30px;
-                background: rgba(255, 255, 255, 0.06);
-                backdrop-filter: blur(24px);
-                box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28);
-                border: 1px solid rgba(255, 255, 255, 0.12);
-            }
-            .glass-card h2 {
+            .login-form-title {
                 margin: 0;
-                color: #F4F7FF;
-                font-size: 2.05rem;
+                color: #f5fbff;
+                font-size: clamp(2rem, 3.1vw, 3.15rem);
                 letter-spacing: -0.03em;
+                line-height: 1.04;
             }
-            .glass-card p {
-                margin: 14px 0 26px;
-                color: #A5B1D6;
+            .login-form-copy {
+                margin: 14px 0 0;
+                max-width: 540px;
+                color: #9ab2cf;
                 font-size: 1rem;
-                line-height: 1.75;
-            }
-            .glass-input-label {
-                display: flex;
-                align-items: center;
-                gap: 10px;
-                color: #A9B5D2;
-                font-size: 0.95rem;
-                margin-bottom: 8px;
-            }
-            .glass-card .stTextInput > label {
-                display: none !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                height: 0 !important;
-                width: 0 !important;
-                overflow: hidden !important;
-            }
-            .glass-card .stTextInput {
-                margin-top: 0 !important;
-                padding-top: 0 !important;
-            }
-            .glass-card .stTextInput > label + div {
-                margin-top: 0 !important;
-            }
-            .glass-card .stTextInput input {
-                background: rgba(255, 255, 255, 0.08) !important;
-                border: 1px solid rgba(255, 255, 255, 0.14) !important;
-                color: #F4F7FF !important;
-                border-radius: 18px !important;
-                padding: 18px 18px !important;
-                min-height: 52px !important;
-                box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04) !important;
-                transition: all 0.2s ease !important;
-            }
-            .glass-card .stTextInput input:focus {
-                border-color: rgba(124, 92, 255, 0.8) !important;
-                box-shadow: 0 0 0 6px rgba(124, 92, 255, 0.12) !important;
-                outline: none !important;
-            }
-            .glass-card .stTextInput input::placeholder {
-                color: rgba(244, 247, 255, 0.62) !important;
-            }
-            .login-access-shell {
-                position: relative;
-                margin-bottom: 30px;
-                padding: 24px 22px;
-                border-radius: 24px;
-                background: rgba(14, 21, 38, 0.75);
-                backdrop-filter: blur(24px);
-                border: 1px solid rgba(124, 92, 255, 0.18);
-                box-shadow: 0 28px 80px rgba(10, 16, 34, 0.55);
-            }
-            .login-access-shell::before {
-                content: '';
-                position: absolute;
-                inset: -1px;
-                border-radius: inherit;
-                background: linear-gradient(135deg, rgba(0, 194, 255, 0.28), rgba(124, 92, 255, 0.32));
-                filter: blur(18px);
-                opacity: 0.75;
-                z-index: -1;
-            }
-            .login-access-title {
-                margin: 0 0 10px;
-                color: #F4F7FF;
-                font-size: clamp(1.85rem, 2.5vw, 2.15rem);
-                letter-spacing: -0.04em;
-                font-weight: 700;
-            }
-            .login-access-subtitle {
-                margin: 0;
-                color: #B8C4DD;
-                font-size: 0.96rem;
                 line-height: 1.7;
             }
             .glass-input-label {
                 display: flex;
                 align-items: center;
-                gap: 10px;
-                color: #B8C4DD;
+                gap: 12px;
+                margin: 0 0 12px;
+                color: #cfe3f6;
                 font-size: 0.95rem;
-                margin-bottom: 10px;
-                letter-spacing: 0.01em;
+                letter-spacing: 0.02em;
             }
             .glass-input-label + div .stTextInput input {
-                background: rgba(255, 255, 255, 0.08) !important;
-                border: 1px solid rgba(124, 92, 255, 0.32) !important;
-                color: #F4F7FF !important;
-                border-radius: 18px !important;
-                padding: 18px 20px !important;
-                min-height: 56px !important;
-                box-shadow: 0 8px 32px rgba(124, 92, 255, 0.08), inset 0 2px 8px rgba(255,255,255,0.06) !important;
-                transition: all 0.28s ease !important;
-                backdrop-filter: blur(8px) !important;
+                background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.08)) !important;
+                border: 1px solid rgba(158, 210, 255, 0.22) !important;
+                color: #f3f9ff !important;
+                border-radius: 22px !important;
+                padding: 19px 22px !important;
+                min-height: 60px !important;
+                backdrop-filter: blur(24px) saturate(165%) !important;
+                box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), inset 0 -1px 0 rgba(255, 255, 255, 0.05), 0 16px 40px rgba(7, 18, 39, 0.22) !important;
+                transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease, background 0.22s ease !important;
             }
             .glass-input-label + div .stTextInput input:focus {
-                border-color: rgba(124, 92, 255, 0.76) !important;
-                box-shadow: 0 16px 48px rgba(124, 92, 255, 0.20), inset 0 2px 8px rgba(255,255,255,0.08) !important;
-                background: rgba(255, 255, 255, 0.12) !important;
+                transform: translateY(-1px) !important;
+                border-color: rgba(125, 216, 255, 0.52) !important;
+                background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.10)) !important;
+                box-shadow: 0 0 0 4px rgba(105, 208, 255, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 22px 52px rgba(8, 24, 48, 0.28) !important;
                 outline: none !important;
             }
             .glass-input-label + div .stTextInput input::placeholder {
-                color: rgba(244, 247, 255, 0.48) !important;
-            }
-            .feature-cards-container {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 14px;
-                margin-top: 28px;
-            }
-            .feature-card {
-                position: relative;
-                padding: 18px 16px;
-                border-radius: 18px;
-                background: rgba(124, 92, 255, 0.08);
-                border: 1px solid rgba(124, 92, 255, 0.22);
-                box-shadow: 0 12px 32px rgba(124, 92, 255, 0.06);
-                cursor: pointer;
-                transition: all 0.28s ease;
-                text-align: center;
-                backdrop-filter: blur(10px);
-            }
-            .feature-card:hover {
-                background: rgba(124, 92, 255, 0.15);
-                border-color: rgba(124, 92, 255, 0.42);
-                box-shadow: 0 18px 48px rgba(124, 92, 255, 0.14);
-                transform: translateY(-2px);
-            }
-            .feature-card-icon {
-                font-size: 2rem;
-                margin-bottom: 8px;
-            }
-            .feature-card-title {
-                color: #E6EAF2;
-                font-size: 0.95rem;
-                font-weight: 600;
-                margin: 0;
-                letter-spacing: 0.2px;
-            }
-            .feature-cards-label {
-                color: #B8C4DD;
-                font-size: 0.9rem;
-                margin-bottom: 12px;
-                letter-spacing: 0.3px;
-                text-transform: uppercase;
-            }
-            .login-keyword {
-                padding: 10px 14px;
-                border-radius: 999px;
-                border: 1px solid rgba(124, 92, 255, 0.24);
-                background: rgba(124, 92, 255, 0.08);
-                color: #D9E1FF;
-                font-size: 0.92rem;
-                cursor: pointer;
-                transition: all 0.28s ease;
-            }
-            .login-keyword:hover {
-                background: rgba(124, 92, 255, 0.16);
-                border-color: rgba(124, 92, 255, 0.42);
-                box-shadow: 0 6px 20px rgba(124, 92, 255, 0.12);
-                transform: translateY(-1px);
-            }
-            .feature-description {
-                display: none;
-                margin-top: 20px;
-                padding: 20px;
-                border-radius: 18px;
-                background: rgba(124, 92, 255, 0.08);
-                border: 1px solid rgba(124, 92, 255, 0.22);
-                color: #D9C8E8;
-                font-size: 0.9rem;
-                line-height: 1.7;
-            }
-            .feature-description.active {
-                display: block;
-            }
-            .feature-description ul {
-                margin: 10px 0;
-                padding-left: 20px;
-            }
-            .feature-description li {
-                margin-bottom: 8px;
-            }
-            #feature-popup-card {
-                position: relative;
-                margin-top: 24px;
-                padding: 22px 24px;
-                background: linear-gradient(135deg, #E5E3DD, #F9F6EE);
-                border: 1px solid rgba(145, 140, 132, 0.24);
-                border-radius: 20px;
-                box-shadow: 0 18px 40px rgba(26, 28, 34, 0.08);
-                opacity: 0;
-                transform: translateX(-110%);
-                visibility: hidden;
-                transition: transform 0.7s ease, opacity 0.7s ease, visibility 0.7s ease;
-                display: flex;
-                align-items: center;
-                justify-content: flex-start;
-                overflow: hidden;
-            }
-            #feature-popup-card.show {
-                opacity: 1;
-                transform: translateX(0);
-                visibility: visible;
-            }
-            #feature-popup-content {
-                color: #2F3136;
-                font-size: 1rem;
-                font-weight: 600;
-                line-height: 1.5;
-                white-space: normal;
-                max-width: 100%;
-            }
-            #feature-popup-content span {
-                display: inline-block;
-                animation: slideText 12s linear infinite;
-            }
-            @keyframes slideText {
-                from {
-                    transform: translateX(100%);
-                }
-                to {
-                    transform: translateX(-100%);
-                }
+                color: rgba(233, 243, 255, 0.55) !important;
             }
             @keyframes slideInUp {
                 from {
@@ -3890,78 +3652,49 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             }
             .glass-button-spacer + div .stButton > button {
                 width: 100% !important;
-                border-radius: 18px !important;
+                min-height: 58px !important;
+                border-radius: 22px !important;
                 padding: 16px 0 !important;
                 font-size: 1rem !important;
                 font-weight: 700 !important;
-                color: #F4F7FF !important;
-                background: linear-gradient(135deg, #00C2FF 0%, #7C5CFF 100%) !important;
-                border: none !important;
-                box-shadow: 0 20px 60px rgba(124, 92, 255, 0.28) !important;
+                letter-spacing: 0.02em !important;
+                color: #041122 !important;
+                background: linear-gradient(135deg, #d8f6ff 0%, #8fd6ff 38%, #6ce0ff 100%) !important;
+                border: 1px solid rgba(201, 242, 255, 0.68) !important;
+                box-shadow: 0 22px 48px rgba(69, 191, 255, 0.24) !important;
                 transition: transform 0.2s ease, box-shadow 0.2s ease !important;
             }
             .glass-button-spacer + div .stButton > button:hover {
-                transform: translateY(-2px) !important;
-                box-shadow: 0 26px 72px rgba(124, 92, 255, 0.32) !important;
+                transform: translateY(-2px) scale(1.01) !important;
+                box-shadow: 0 28px 64px rgba(69, 191, 255, 0.30) !important;
             }
             .glass-button-spacer + div .stButton > button:focus {
                 outline: none !important;
-                box-shadow: 0 0 0 4px rgba(124, 92, 255, 0.16) !important;
-            }
-            .login-access-note {
-                color: #96A6D4;
-                font-size: 0.92rem;
-                margin-top: 18px;
-                line-height: 1.65;
+                box-shadow: 0 0 0 4px rgba(115, 225, 255, 0.22) !important;
             }
             .login-subtle {
-                color: #8D9CC9;
-                font-size: 0.93rem;
+                color: #8ea9c5;
+                font-size: 0.94rem;
                 margin-top: 18px;
                 line-height: 1.7;
             }
-            .login-help {
-                margin-top: 22px;
-                font-size: 0.95rem;
-                color: #BAC8E8;
-            }
-            .login-help a {
-                color: #7C5CFF;
-                text-decoration: none;
-                font-weight: 600;
-            }
-            .login-help a:hover {
-                text-decoration: underline;
-            }
-            .login-expander > button {
-                width: 100% !important;
-                background: rgba(255,255,255,0.06) !important;
-                color: #E6EAF2 !important;
-                border: 1px solid rgba(255,255,255,0.12) !important;
-            }
             @media (max-width: 980px) {
                 .login-split {grid-template-columns: 1fr;}
-                .login-left-panel, .glass-card {border-radius: 24px;}
-                .login-left-panel {padding: 32px 24px;}
-                .glass-card {padding: 32px 24px;}
-                .login-heading {font-size: 2.2rem;}
-                .login-tagline {font-size: 0.95rem;}
+                .login-form-panel {padding: 26px 22px 28px;}
+                .login-form-title {font-size: 2.25rem;}
             }
             @media (max-width: 767px) {
-                .login-split {padding: 16px 0;}
-                .login-left-panel {padding: 24px 16px;}
-                .glass-card {padding: 24px 16px;}
-                .login-heading {font-size: 1.8rem; margin-bottom: 12px;}
-                .login-tagline {font-size: 0.9rem; margin-bottom: 24px;}
-                .login-keywords {gap: 8px;}
-                .login-keyword {padding: 8px 12px; font-size: 0.85rem;}
+                .login-split {padding: 10px 0 24px;}
+                .login-form-panel {padding: 22px 16px 24px; border-radius: 28px;}
+                .login-form-title {font-size: 1.8rem;}
+                .login-form-copy {font-size: 0.92rem;}
             }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    left_col, right_col = st.columns([3, 2], gap="large")
+    left_col, right_col = st.columns([1, 1.85], gap="large")
     with left_col:
         logo_img = f'<img src="data:image/gif;base64,{logo_data}" alt="Mercedes-Benz logo">' if logo_data else ''
         html_feature_panel = """
@@ -3976,91 +3709,72 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 .login-left-panel {
                     position: relative;
                     overflow: hidden;
-                    border-radius: 32px;
-                    padding: 34px 30px 26px;
-                    background: radial-gradient(circle at top left, rgba(124, 92, 255, 0.22), transparent 28%),
-                                radial-gradient(circle at top right, rgba(0, 194, 255, 0.16), transparent 26%),
-                                linear-gradient(180deg, rgba(19, 29, 56, 0.96) 0%, rgba(11, 15, 26, 0.95) 100%);
-                    box-shadow: 0 32px 80px rgba(0, 0, 0, 0.30);
-                    border: 1px solid rgba(124, 92, 255, 0.14);
-                    min-height: auto;
+                    border-radius: 34px;
+                    width: 220px;
+                    margin: 0 auto;
+                    padding: 18px 12px;
+                    background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05));
+                    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 30px 75px rgba(0, 9, 23, 0.42);
+                    border: 1px solid rgba(195, 232, 255, 0.18);
+                    backdrop-filter: blur(30px) saturate(150%);
                 }
                 .login-left-panel::before {
                     content: '';
                     position: absolute;
-                    inset: 0;
-                    background: radial-gradient(circle at 20% 20%, rgba(124, 92, 255, 0.24), transparent 16%),
-                                radial-gradient(circle at 80% 15%, rgba(0, 194, 255, 0.14), transparent 20%),
-                                radial-gradient(circle at 30% 80%, rgba(255, 255, 255, 0.06), transparent 24%);
+                    width: 190px;
+                    height: 190px;
+                    left: var(--mx, 50%);
+                    top: var(--my, 24%);
+                    transform: translate(-50%, -50%);
+                    border-radius: 999px;
+                    background: radial-gradient(circle, rgba(122, 220, 255, 0.34), rgba(122, 220, 255, 0.08) 38%, transparent 72%);
+                    filter: blur(8px);
+                    opacity: 0.95;
                     pointer-events: none;
+                    transition: left 0.12s ease, top 0.12s ease;
                 }
                 .login-left-content {
                     position: relative;
                     z-index: 1;
-                    max-width: 460px;
                     display: flex;
                     flex-direction: column;
-                    gap: 20px;
+                    gap: 16px;
                 }
-                .login-logo {
-                    display: flex;
-                    align-items: center;
-                    gap: 14px;
-                    margin-bottom: 28px;
-                }
-                .login-logo img {
-                    width: 52px;
-                    height: 52px;
-                    border-radius: 16px;
-                    object-fit: cover;
-                    box-shadow: 0 22px 48px rgba(0, 0, 0, 0.32);
-                    border: 1px solid rgba(255,255,255,0.12);
-                }
-                .login-logo-text {
-                    display: grid;
-                    gap: 4px;
-                }
-                .brand-tag {
-                    font-size: 0.82rem;
-                    letter-spacing: 0.24em;
-                    text-transform: uppercase;
-                    color: #A497FF;
-                    font-weight: 700;
-                }
-                .login-heading {
-                    font-size: clamp(2.4rem, 3vw, 3.4rem);
-                    line-height: 1.03;
-                    margin-bottom: 18px;
-                    color: #F7F9FF;
-                    letter-spacing: -0.04em;
-                }
-                .login-tagline {
-                    color: #B8C4DD;
-                    font-size: 1rem;
-                    line-height: 1.75;
-                    max-width: 420px;
-                    margin-bottom: 32px;
+                .login-logo,
+                .login-heading,
+                .login-tagline,
+                #feature-popup-card,
+                #feature-descriptions {
+                    display: none !important;
                 }
                 .login-keywords {
                     display: flex;
+                    flex-direction: column;
                     flex-wrap: wrap;
-                    gap: 12px;
+                    gap: 16px;
                 }
                 .login-keyword {
-                    padding: 10px 14px;
-                    border-radius: 999px;
-                    border: 1px solid rgba(124, 92, 255, 0.24);
-                    background: rgba(124, 92, 255, 0.08);
-                    color: #D9E1FF;
-                    font-size: 0.92rem;
+                    position: relative;
+                    display: flex;
+                    align-items: center;
+                    gap: 14px;
+                    padding: 16px 18px;
+                    border-radius: 24px;
+                    border: 1px solid rgba(202, 236, 255, 0.08);
+                    background: linear-gradient(160deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06));
+                    color: #ecf7ff;
+                    font-size: 1rem;
+                    font-weight: 600;
                     cursor: pointer;
-                    transition: all 0.28s ease;
+                    overflow: hidden;
+                    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+                    transition: transform 0.22s ease, border-color 0.22s ease, background 0.22s ease, box-shadow 0.22s ease;
                 }
                 .login-keyword:hover {
-                    background: rgba(124, 92, 255, 0.16);
-                    border-color: rgba(124, 92, 255, 0.42);
-                    box-shadow: 0 6px 20px rgba(124, 92, 255, 0.12);
-                    transform: translateY(-1px);
+                    transform: translateY(-2px) scale(1.015);
+                    border-color: rgba(125, 220, 255, 0.34);
+                    background: linear-gradient(160deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.10));
+                    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 16px 36px rgba(17, 66, 110, 0.18);
                 }
                 .feature-description {
                     display: none;
@@ -4083,51 +3797,31 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 .feature-description li {
                     margin-bottom: 8px;
                 }
-                #feature-popup-card {
-                    position: relative;
-                    margin-top: 18px;
-                    padding: 20px 22px;
-                    background: linear-gradient(135deg, #E5E3DD, #F9F6EE);
-                    border: 1px solid rgba(145, 140, 132, 0.24);
-                    border-radius: 20px;
-                    box-shadow: 0 18px 40px rgba(26, 28, 34, 0.08);
-                    opacity: 0;
-                    transform: translateX(-110%);
-                    visibility: hidden;
-                    transition: transform 0.7s ease, opacity 0.7s ease, visibility 0.7s ease;
-                    display: flex;
-                    align-items: center;
-                    justify-content: flex-start;
-                    overflow: hidden;
-                }
-                #feature-popup-card.show {
-                    opacity: 1;
-                    transform: translateX(0);
-                    visibility: visible;
-                }
-                #feature-popup-content {
-                    color: #2F3136;
-                    font-size: 1rem;
-                    font-weight: 600;
-                    line-height: 1.5;
-                    white-space: normal;
-                    max-width: 100%;
-                }
+                #feature-popup-card,
+                #feature-popup-card.show,
+                #feature-popup-content,
                 #feature-popup-content span {
-                    display: inline-block;
-                    animation: slideText 12s linear infinite;
+                    display: none !important;
                 }
-                @keyframes slideText {
-                    from {
-                        transform: translateX(100%);
-                    }
+                .dock-ripple {
+                    position: absolute;
+                    border-radius: 999px;
+                    background: rgba(183, 239, 255, 0.34);
+                    transform: translate(-50%, -50%) scale(0);
+                    animation: ripple 0.7s ease-out forwards;
+                    pointer-events: none;
+                    mix-blend-mode: screen;
+                }
+                @keyframes ripple {
                     to {
-                        transform: translateX(-100%);
+                        opacity: 0;
+                        transform: translate(-50%, -50%) scale(4.5);
                     }
                 }
             </style>
             <div class="login-left-panel">
                 <div class="login-left-content">
+                    <div style="margin:2px 8px 4px;color:rgba(221,240,255,0.72);font-size:0.74rem;letter-spacing:0.18em;text-transform:uppercase;">Workspace</div>
                     <div class="login-logo">
                         __LOGO_IMG__
                         <div class="login-logo-text">
@@ -4190,39 +3884,50 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             
             <script>
             (function() {
-                function showFeature(feature) {
-                    const selected = document.getElementById(feature + '-description');
-                    if (!selected) return;
-                    const titleElement = selected.querySelector('strong');
-                    const title = titleElement ? titleElement.textContent : '';
-                    const items = Array.from(selected.querySelectorAll('li')).map(li => li.textContent.trim());
-                    let popupText = '<strong>' + title + '</strong><br>' + items.join(' • ');
-                    const popup = document.getElementById('feature-popup-card');
-                    const content = document.getElementById('feature-popup-content');
-                    if (popup && content) {
-                        content.innerHTML = popupText;
-                        popup.classList.remove('show');
-                        void popup.offsetWidth;
-                        popup.classList.add('show');
-                    }
-                }
+                const dock = document.querySelector('.login-left-panel');
+                if (!dock) return;
+                dock.addEventListener('mousemove', function(event) {
+                    const rect = dock.getBoundingClientRect();
+                    dock.style.setProperty('--mx', (event.clientX - rect.left) + 'px');
+                    dock.style.setProperty('--my', (event.clientY - rect.top) + 'px');
+                });
                 const keywords = document.querySelectorAll('.login-keyword');
                 keywords.forEach(keyword => {
                     keyword.addEventListener('click', function(e) {
                         e.preventDefault();
                         e.stopPropagation();
-                        const feature = this.getAttribute('data-feature');
-                        showFeature(feature);
+                        const rect = this.getBoundingClientRect();
+                        const ripple = document.createElement('span');
+                        ripple.className = 'dock-ripple';
+                        ripple.style.left = (e.clientX - rect.left) + 'px';
+                        ripple.style.top = (e.clientY - rect.top) + 'px';
+                        ripple.style.width = ripple.style.height = Math.max(rect.width, rect.height) + 'px';
+                        this.appendChild(ripple);
+                        ripple.addEventListener('animationend', function() {
+                            ripple.remove();
+                        });
                     });
                 });
             })();
             </script>
             """
         html_feature_panel = html_feature_panel.replace("__LOGO_IMG__", logo_img)
-        components.html(html_feature_panel, height=620, scrolling=False)
+        components.html(html_feature_panel, height=660, scrolling=False)
 
     continue_clicked = False
     with right_col:
+        st.markdown(
+            """
+                <div class="login-form-panel">
+                    <div class="login-form-header">
+                        <div class="login-eyebrow">Smart Access</div>
+                        <h1 class="login-form-title">IntelliDoc AI Smart Document Assistant</h1>
+                        <p class="login-form-copy">The login panel now uses a glass dock treatment, while Chat, Dashboard, Compare, and CAPL live in a floating rail on the left.</p>
+                    </div>
+                </div>
+            """,
+            unsafe_allow_html=True,
+        )
         st.markdown('<div class="glass-input-label">👤 Username</div>', unsafe_allow_html=True)
         login_username = st.text_input(
             "",
@@ -4231,7 +3936,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             label_visibility="collapsed",
         )
 
-        st.markdown('<div class="glass-input-label">🔒 Password <span style="font-size:0.88rem;color:#7C5CFF;">(optional)</span></div>', unsafe_allow_html=True)
+        st.markdown('<div class="glass-input-label">🔒 Password <span style="font-size:0.88rem;color:#8ad8ff;">(optional)</span></div>', unsafe_allow_html=True)
         login_password = st.text_input(
             "",
             type="password",
