@@ -3967,8 +3967,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
 
     left_col, right_col = st.columns([3, 2], gap="large")
     with left_col:
-        st.markdown(
-            f"""
+        html_feature_panel = f"""
             <div class="login-left-panel">
                 <div class="login-left-content">
                     <div class="login-logo">
@@ -3981,10 +3980,10 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                     <div class="login-heading">Where Documents Become Intelligence</div>
                     <div class="login-tagline">A premium command center for AI-powered document analysis, comparison, automation, and insights.</div>
                     <div class="login-keywords" id="login-keywords-container">
-                        <span class="login-keyword" data-feature="chat" style="cursor: pointer;">💬 Chat</span>
-                        <span class="login-keyword" data-feature="dashboard" style="cursor: pointer;">📊 Dashboard</span>
-                        <span class="login-keyword" data-feature="compare" style="cursor: pointer;">🔄 Compare</span>
-                        <span class="login-keyword" data-feature="capl" style="cursor: pointer;">🚗 CAPL</span>
+                        <span class="login-keyword" data-feature="chat">💬 Chat</span>
+                        <span class="login-keyword" data-feature="dashboard">📊 Dashboard</span>
+                        <span class="login-keyword" data-feature="compare">🔄 Compare</span>
+                        <span class="login-keyword" data-feature="capl">🚗 CAPL</span>
                     </div>
                     <div id="feature-descriptions">
                         <div id="chat-description" class="feature-description">
@@ -4032,77 +4031,41 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             </div>
             
             <script>
-            // Wait for DOM to be ready
             (function() {{
-                // Function to handle feature clicks
                 function showFeature(feature) {{
-                    console.log('Feature clicked:', feature);
-                    
-                    // Get the description element
                     const selected = document.getElementById(feature + '-description');
-                    if (!selected) {{
-                        console.log('Description element not found:', feature + '-description');
-                        return;
-                    }}
-                    
-                    // Extract text content from the description
+                    if (!selected) return;
                     const titleElement = selected.querySelector('strong');
                     const title = titleElement ? titleElement.textContent : '';
-                    
-                    // Extract list items
                     const items = Array.from(selected.querySelectorAll('li')).map(li => li.textContent.trim());
-                    
-                    // Build the banner content
                     let bannerText = title;
                     if (items.length > 0) {{
                         bannerText += ' • ' + items.join(' • ');
                     }}
-                    
-                    console.log('Banner text:', bannerText);
-                    
-                    // Get or create the banner
-                    let banner = document.getElementById('feature-bottom-banner');
-                    let content = document.getElementById('feature-banner-content');
-                    
+                    const banner = document.getElementById('feature-bottom-banner');
+                    const content = document.getElementById('feature-banner-content');
                     if (banner && content) {{
-                        // Update content
                         content.textContent = bannerText;
-                        
-                        // Remove animation class to restart it
                         banner.classList.remove('show');
-                        
-                        // Trigger reflow to restart animation
                         void banner.offsetWidth;
-                        
-                        // Add animation class
                         banner.classList.add('show');
-                        console.log('Banner shown successfully');
-                    }} else {{
-                        console.log('Banner or content element not found');
                     }}
                 }}
-                
-                // Add click event listeners to the keyword spans
-                setTimeout(function() {{
+                document.addEventListener('DOMContentLoaded', function() {{
                     const keywords = document.querySelectorAll('.login-keyword');
-                    console.log('Found keywords:', keywords.length);
-                    
                     keywords.forEach(keyword => {{
                         keyword.addEventListener('click', function(e) {{
                             e.preventDefault();
                             e.stopPropagation();
-                            
                             const feature = this.getAttribute('data-feature');
-                            console.log('Keyword clicked, feature:', feature);
                             showFeature(feature);
                         }});
                     }});
-                }}, 100);
+                }});
             }})();
             </script>
-            """,
-            unsafe_allow_html=True,
-        )
+            """
+        components.html(html_feature_panel, height=740, scrolling=False)
 
     continue_clicked = False
     with right_col:
