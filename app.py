@@ -1196,14 +1196,25 @@ if st.session_state.is_authenticated:
     components.html(
         """
         <style>
+            section.main > div:first-child {
+                margin-top: -10px !important;
+            }
             @keyframes brainGlow {
                 0%, 100% {
-                    box-shadow: 0 0 12px rgba(59, 130, 246, 0.32), 0 0 28px rgba(59, 130, 246, 0.18);
+                    box-shadow: 0 0 16px rgba(59, 130, 246, 0.45), 0 0 32px rgba(79, 70, 229, 0.22);
                     transform: scale(1);
                 }
+                25% {
+                    box-shadow: 0 0 20px rgba(14, 165, 233, 0.55), 0 0 38px rgba(168, 85, 247, 0.20);
+                    transform: scale(1.03);
+                }
                 50% {
-                    box-shadow: 0 0 24px rgba(59, 130, 246, 0.72), 0 0 42px rgba(59, 130, 246, 0.28);
-                    transform: scale(1.04);
+                    box-shadow: 0 0 24px rgba(168, 85, 247, 0.65), 0 0 44px rgba(59, 130, 246, 0.28);
+                    transform: scale(1.05);
+                }
+                75% {
+                    box-shadow: 0 0 20px rgba(59, 130, 246, 0.55), 0 0 40px rgba(14, 165, 233, 0.24);
+                    transform: scale(1.03);
                 }
             }
             .header-brain-icon-large {
@@ -1215,7 +1226,7 @@ if st.session_state.is_authenticated:
             }
             .header-brain-icon-large:hover {
                 transform: scale(1.08);
-                box-shadow: 0 0 28px rgba(59, 130, 246, 0.46), 0 0 48px rgba(59, 130, 246, 0.24);
+                box-shadow: 0 0 30px rgba(79, 70, 229, 0.46), 0 0 52px rgba(14, 165, 233, 0.24);
             }
         </style>
         <script>
@@ -1265,8 +1276,9 @@ if st.session_state.is_authenticated:
     )
 
     if not st.session_state.get('welcome_shown', False):
-        st.toast("Welcome back!", icon="🎉")
-        st.session_state.welcome_shown = True
+      user = st.session_state.get("username", "User")
+    st.toast(f"Welcome back, {user} ", icon="🎉")
+    st.session_state.welcome_shown = True
 
     render_status_strip()
 else:
@@ -5395,6 +5407,8 @@ if active_main_tab == "💬 Chat":
                             else:
                                 response = "⚠️ AI model is unavailable. Use direct extraction questions such as 'count(\"keyword\")', 'find(\"phrase\")', 'summarize', or 'overview'."
                         st.session_state.messages.append({"role": "assistant", "content": response})
+                        if "⚠️" in response or "not found" in response.lower() or "please select" in response.lower() or "ai model is unavailable" in response.lower():
+                            set_help_popup_state("chat", True)
 
         for msg in st.session_state.messages:
             role = "🧑" if msg["role"] == "user" else "🤖"
