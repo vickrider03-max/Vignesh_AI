@@ -3964,7 +3964,259 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
     left_col, right_col = st.columns([3, 2], gap="large")
     with left_col:
         logo_img = f'<img src="data:image/gif;base64,{logo_data}" alt="Mercedes-Benz logo">' if logo_data else ''
-        st.write("Login panel - feature keywords here")
+        html_feature_panel = """
+            <style>
+                html, body {
+                    margin: 0;
+                    padding: 0;
+                    background: transparent;
+                    color: #E6EAF2;
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                }
+                .login-left-panel {
+                    position: relative;
+                    overflow: hidden;
+                    border-radius: 32px;
+                    padding: 34px 30px;
+                    background: radial-gradient(circle at top left, rgba(124, 92, 255, 0.22), transparent 28%),
+                                radial-gradient(circle at top right, rgba(0, 194, 255, 0.16), transparent 26%),
+                                linear-gradient(180deg, rgba(19, 29, 56, 0.96) 0%, rgba(11, 15, 26, 0.95) 100%);
+                    box-shadow: 0 32px 80px rgba(0, 0, 0, 0.30);
+                    border: 1px solid rgba(124, 92, 255, 0.14);
+                    min-height: 580px;
+                }
+                .login-left-panel::before {
+                    content: '';
+                    position: absolute;
+                    inset: 0;
+                    background: radial-gradient(circle at 20% 20%, rgba(124, 92, 255, 0.24), transparent 16%),
+                                radial-gradient(circle at 80% 15%, rgba(0, 194, 255, 0.14), transparent 20%),
+                                radial-gradient(circle at 30% 80%, rgba(255, 255, 255, 0.06), transparent 24%);
+                    pointer-events: none;
+                }
+                .login-left-content {
+                    position: relative;
+                    z-index: 1;
+                    max-width: 460px;
+                }
+                .login-logo {
+                    display: flex;
+                    align-items: center;
+                    gap: 14px;
+                    margin-bottom: 28px;
+                }
+                .login-logo img {
+                    width: 52px;
+                    height: 52px;
+                    border-radius: 16px;
+                    object-fit: cover;
+                    box-shadow: 0 22px 48px rgba(0, 0, 0, 0.32);
+                    border: 1px solid rgba(255,255,255,0.12);
+                }
+                .login-logo-text {
+                    display: grid;
+                    gap: 4px;
+                }
+                .brand-tag {
+                    font-size: 0.82rem;
+                    letter-spacing: 0.24em;
+                    text-transform: uppercase;
+                    color: #A497FF;
+                    font-weight: 700;
+                }
+                .login-heading {
+                    font-size: clamp(2.4rem, 3vw, 3.4rem);
+                    line-height: 1.03;
+                    margin-bottom: 18px;
+                    color: #F7F9FF;
+                    letter-spacing: -0.04em;
+                }
+                .login-tagline {
+                    color: #B8C4DD;
+                    font-size: 1rem;
+                    line-height: 1.75;
+                    max-width: 420px;
+                    margin-bottom: 32px;
+                }
+                .login-keywords {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 12px;
+                }
+                .login-keyword {
+                    padding: 10px 14px;
+                    border-radius: 999px;
+                    border: 1px solid rgba(124, 92, 255, 0.24);
+                    background: rgba(124, 92, 255, 0.08);
+                    color: #D9E1FF;
+                    font-size: 0.92rem;
+                    cursor: pointer;
+                    transition: all 0.28s ease;
+                }
+                .login-keyword:hover {
+                    background: rgba(124, 92, 255, 0.16);
+                    border-color: rgba(124, 92, 255, 0.42);
+                    box-shadow: 0 6px 20px rgba(124, 92, 255, 0.12);
+                    transform: translateY(-1px);
+                }
+                .feature-description {
+                    display: none;
+                    margin-top: 20px;
+                    padding: 20px;
+                    border-radius: 18px;
+                    background: rgba(124, 92, 255, 0.08);
+                    border: 1px solid rgba(124, 92, 255, 0.22);
+                    color: #D9C8E8;
+                    font-size: 0.9rem;
+                    line-height: 1.7;
+                }
+                .feature-description.active {
+                    display: block;
+                }
+                .feature-description ul {
+                    margin: 10px 0;
+                    padding-left: 20px;
+                }
+                .feature-description li {
+                    margin-bottom: 8px;
+                }
+                #feature-popup-card {
+                    position: relative;
+                    margin-top: 24px;
+                    padding: 22px 24px;
+                    background: linear-gradient(135deg, #E5E3DD, #F9F6EE);
+                    border: 1px solid rgba(145, 140, 132, 0.24);
+                    border-radius: 20px;
+                    box-shadow: 0 18px 40px rgba(26, 28, 34, 0.08);
+                    opacity: 0;
+                    transform: translateX(-110%);
+                    visibility: hidden;
+                    transition: transform 0.7s ease, opacity 0.7s ease, visibility 0.7s ease;
+                    display: flex;
+                    align-items: center;
+                    justify-content: flex-start;
+                    overflow: hidden;
+                }
+                #feature-popup-card.show {
+                    opacity: 1;
+                    transform: translateX(0);
+                    visibility: visible;
+                }
+                #feature-popup-content {
+                    color: #2F3136;
+                    font-size: 1rem;
+                    font-weight: 600;
+                    line-height: 1.5;
+                    white-space: normal;
+                    max-width: 100%;
+                }
+                #feature-popup-content span {
+                    display: inline-block;
+                    animation: slideText 12s linear infinite;
+                }
+                @keyframes slideText {
+                    from {
+                        transform: translateX(100%);
+                    }
+                    to {
+                        transform: translateX(-100%);
+                    }
+                }
+            </style>
+            <div class="login-left-panel">
+                <div class="login-left-content">
+                    <div class="login-logo">
+                        __LOGO_IMG__
+                        <div class="login-logo-text">
+                            <div class="brand-tag">Mercedes-Benz Intelligence</div>
+                            <div style="font-size:1.2rem;color:#DDE4FF;">AI Control Room</div>
+                        </div>
+                    </div>
+                    <div class="login-heading">Where Documents Become Intelligence</div>
+                    <div class="login-tagline">A premium command center for AI-powered document analysis, comparison, automation, and insights.</div>
+                    <div class="login-keywords" id="login-keywords-container">
+                        <span class="login-keyword" data-feature="chat">💬 Chat</span>
+                        <span class="login-keyword" data-feature="dashboard">📊 Dashboard</span>
+                        <span class="login-keyword" data-feature="compare">🔄 Compare</span>
+                        <span class="login-keyword" data-feature="capl">🚗 CAPL</span>
+                    </div>
+                    <div id="feature-popup-card">
+                        <div id="feature-popup-content">Click a feature to preview it here.</div>
+                    </div>
+                    <div id="feature-descriptions">
+                        <div id="chat-description" class="feature-description">
+                            <strong>🧠 AI Chat (RAG System)</strong>
+                            <ul>
+                                <li>Ask questions about uploaded files</li>
+                                <li>Context-aware responses</li>
+                                <li>Multi-file semantic understanding</li>
+                            </ul>
+                        </div>
+                        <div id="dashboard-description" class="feature-description">
+                            <strong>📊 Dashboard & Analytics</strong>
+                            <ul>
+                                <li>Excel/CSV visualization</li>
+                                <li>Trends & statistics</li>
+                                <li>Interactive charts (Plotly)</li>
+                                <li>Export insights</li>
+                            </ul>
+                        </div>
+                        <div id="compare-description" class="feature-description">
+                            <strong>🔄 File Comparison</strong>
+                            <ul>
+                                <li>Compare 2+ files</li>
+                                <li>Word-level diff</li>
+                                <li>Inline visual comparison</li>
+                                <li>Export results to Excel</li>
+                            </ul>
+                        </div>
+                        <div id="capl-description" class="feature-description">
+                            <strong>🚗 CAPL Script Analyzer</strong>
+                            <ul>
+                                <li>Upload or create .can files</li>
+                                <li>Built-in CAPL editor</li>
+                                <li>Code analysis & issue detection</li>
+                                <li>Suggestions & improvements</li>
+                            </ul>
+                            <strong style="display: block; margin-top: 12px;">🤖 AI CAPL Auto-Fix</strong>
+                            <div style="margin-top: 8px; padding: 8px; background: rgba(0,194,255,0.1); border-radius: 8px;">Analyze → Suggest Fix → Apply Fix → Save</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <script>
+            (function() {
+                function showFeature(feature) {
+                    const selected = document.getElementById(feature + '-description');
+                    if (!selected) return;
+                    const titleElement = selected.querySelector('strong');
+                    const title = titleElement ? titleElement.textContent : '';
+                    const items = Array.from(selected.querySelectorAll('li')).map(li => li.textContent.trim());
+                    let popupText = '<strong>' + title + '</strong><br>' + items.join(' • ');
+                    const popup = document.getElementById('feature-popup-card');
+                    const content = document.getElementById('feature-popup-content');
+                    if (popup && content) {
+                        content.innerHTML = popupText;
+                        popup.classList.remove('show');
+                        void popup.offsetWidth;
+                        popup.classList.add('show');
+                    }
+                }
+                const keywords = document.querySelectorAll('.login-keyword');
+                keywords.forEach(keyword => {
+                    keyword.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const feature = this.getAttribute('data-feature');
+                        showFeature(feature);
+                    });
+                });
+            })();
+            </script>
+            """
+        html_feature_panel = html_feature_panel.replace("__LOGO_IMG__", logo_img)
+        components.html(html_feature_panel, height=660, scrolling=False)
 
     continue_clicked = False
     with right_col:
