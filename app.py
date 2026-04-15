@@ -4293,10 +4293,10 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                     <div class="login-heading">Where Documents Become Intelligence</div>
                     <div class="login-tagline">A premium command center for AI-powered document analysis, comparison, automation, and insights.</div>
                     <div class="login-keywords">
-                        <span class="login-keyword">Analyze</span>
+                        <span class="login-keyword">Chat</span>
+                        <span class="login-keyword">Dashboard</span>
                         <span class="login-keyword">Compare</span>
-                        <span class="login-keyword">Automate</span>
-                        <span class="login-keyword">Intelligence</span>
+                        <span class="login-keyword">CAPL</span>
                     </div>
                 </div>
             </div>
@@ -4329,31 +4329,6 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         st.markdown(
             """
                 <div class="login-subtle">Standard users may leave the password empty.</div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        st.markdown(
-            """
-            <div class="feature-cards-label">📌 Core Features</div>
-            <div class="feature-cards-container">
-                <div class="feature-card">
-                    <div class="feature-card-icon">💬</div>
-                    <div class="feature-card-title">Chat</div>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-card-icon">📊</div>
-                    <div class="feature-card-title">Dashboard</div>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-card-icon">🔄</div>
-                    <div class="feature-card-title">Compare</div>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-card-icon">🚗</div>
-                    <div class="feature-card-title">CAPL</div>
-                </div>
-            </div>
             """,
             unsafe_allow_html=True,
         )
