@@ -309,6 +309,8 @@ st.markdown(
         html, body {
             min-width: 0;
             overflow-x: hidden;
+            overflow-y: auto !important;
+            height: auto !important;
             background: var(--background);
             color: var(--text);
             transition: background 0.3s ease, color 0.3s ease;
@@ -328,13 +330,14 @@ st.markdown(
         }
 
         .stSidebar {
-            min-width: 280px !important;
-            max-width: 360px !important;
-            width: clamp(280px, 18vw, 360px) !important;
+            min-width: clamp(220px, 18vw, 300px) !important;
+            max-width: clamp(260px, 20vw, 380px) !important;
+            width: clamp(220px, 18vw, 360px) !important;
         }
 
         .stSidebarNav {
-            min-width: 280px !important;
+            min-width: clamp(220px, 18vw, 280px) !important;
+            width: 100% !important;
         }
 
         /* Main content positioning */
@@ -354,11 +357,38 @@ st.markdown(
             opacity: 1 !important;
         }
 
-        /* Fix for laptop/desktop layouts */
-        @media (min-width: 768px) {
+        /* Responsive spacing for smaller and larger screens */
+        @media (min-width: 640px) {
+            .main .block-container {
+                padding-left: 1.5rem !important;
+                padding-right: 1.5rem !important;
+            }
+        }
+
+        @media (min-width: 900px) {
             .main .block-container {
                 padding-left: 2rem !important;
                 padding-right: 2rem !important;
+            }
+        }
+
+        @media (min-width: 1200px) {
+            .main .block-container {
+                padding-left: 3rem !important;
+                padding-right: 3rem !important;
+            }
+        }
+
+        @media (max-width: 900px) {
+            .stSidebar,
+            .stSidebarNav {
+                width: 100% !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+            }
+            .stSidebar {
+                position: relative !important;
+                transform: none !important;
             }
         }
 
@@ -369,26 +399,46 @@ st.markdown(
             }
         }
 
-        /* Streamlit app container */
-        .stApp {
-            display: flex !important;
-            flex-direction: row !important;
-            min-height: 100vh !important;
+        /* Streamlit page container fixes */
+        .stApp,
+        div[data-testid="stAppViewContainer"] {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            min-height: auto !important;
         }
 
-        /* Sidebar positioning */
-        .stSidebar {
-            flex: 0 0 auto !important;
-            order: -1 !important; /* Sidebar first */
+        section.main,
+        .main,
+        .main .block-container,
+        div[data-testid="stAppViewContainer"],
+        div[data-testid="stMainContent"],
+        div[data-testid="main"] {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow-x: hidden !important;
+            overflow-y: visible !important;
         }
 
-        /* Main content area */
-        .main {
-            flex: 1 1 auto !important;
-            order: 1 !important; /* Main content after sidebar */
-            min-width: 0 !important; /* Allow shrinking */
+        section.main {
+            display: block !important;
+            min-height: auto !important;
         }
-        
+
+        .main .block-container {
+            max-width: 100% !important;
+            width: 100% !important;
+        }
+
+        /* Make sure sidebar and content layout stays aligned */
+        div[data-testid="stAppViewContainer"] > div {
+            min-width: 0 !important;
+            overflow-x: hidden !important;
+        }
+
         .dashboard-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
