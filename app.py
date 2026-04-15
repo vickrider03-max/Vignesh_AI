@@ -4150,10 +4150,10 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                         <div id="chat-description" class="feature-description">
                             <strong>🧠 AI Chat (RAG System)</strong>
                             <div style="margin-top:10px; line-height:1.8;">
-                             • Ask questions about uploaded files<br>
-                             • Context-aware responses<br>
-                             • Multi-file semantic understanding
-                               </div>
+                              • Ask questions about uploaded files<br>
+                              • Context-aware responses<br>
+                              • Multi-file semantic understanding
+                         </div>
                         </div>
                         <div id="dashboard-description" class="feature-description">
                             <strong>📊 Dashboard & Analytics</strong>
