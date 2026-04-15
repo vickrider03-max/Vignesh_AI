@@ -841,10 +841,10 @@ st.markdown(
             document.querySelectorAll('button').forEach(btn => {
                 if (btn.textContent.trim() === '🧠') {
                     btn.style.setProperty('font-size', '4.2rem', 'important');
-                    btn.style.setProperty('padding', '0.6rem 0.85rem', 'important');
-                    btn.style.setProperty('min-width', '3.2rem', 'important');
-                    btn.style.setProperty('height', '3.2rem', 'important');
-                    btn.style.setProperty('line-height', '1', 'important');
+                    btn.style.setProperty('padding', '1.3rem 2.85rem', 'important');
+                    btn.style.setProperty('min-width', '5.2rem', 'important');
+                    btn.style.setProperty('height', '6.2rem', 'important');
+                    btn.style.setProperty('line-height', '2', 'important');
                 }
             });
         };
