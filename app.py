@@ -837,60 +837,11 @@ st.markdown(
             });
         };
 
-const applyBrainIconStyles = () => {
-    document.querySelectorAll('button').forEach(btn => {
-        const text = (btn.textContent || '').trim();
-
-        if (text === '🧠') {
-
-            // 🔥 Make emoji BIG
-            btn.style.setProperty('font-size', '4rem', 'important');
-
-            // 🔥 Force size (this is the key fix)
-            btn.style.setProperty('width', '70px', 'important');
-            btn.style.setProperty('height', '70px', 'important');
-
-            // 🔥 Remove internal spacing constraints
-            btn.style.setProperty('padding', '0', 'important');
-            btn.style.setProperty('line-height', '1', 'important');
-
-            // 🔥 Make it visually centered
-            btn.style.setProperty('display', 'flex', 'important');
-            btn.style.setProperty('align-items', 'center', 'important');
-            btn.style.setProperty('justify-content', 'center', 'important');
-
-            // 🔥 Remove Streamlit default styling impact
-            btn.style.setProperty('min-width', 'unset', 'important');
-
-            // 🔥 Make it premium
-            btn.style.setProperty('border-radius', '16px', 'important');
-
-            // 🔥 Optional: glow
-            btn.style.setProperty(
-                'box-shadow',
-                '0 0 20px rgba(124,92,255,0.6)',
-                'important'
-            );
-
-            // 🔥 Scale if still constrained
-            btn.style.setProperty('transform', 'scale(1.2)', 'important');
-
-            // 🔥 Fix inner span (VERY IMPORTANT)
-            btn.querySelectorAll('*').forEach(child => {
-                child.style.setProperty('font-size', '4rem', 'important');
-                child.style.setProperty('line-height', '1', 'important');
-            });
-        }
-    });
-};
-
         const buttonObserver = new MutationObserver(() => {
             applyLightButtonStyles();
-            applyBrainIconStyles();
         });
         buttonObserver.observe(document.body, { childList: true, subtree: true });
         applyLightButtonStyles();
-        applyBrainIconStyles();
     </script>
     """,
     unsafe_allow_html=True
@@ -1241,6 +1192,52 @@ if st.session_state.is_authenticated:
             st.rerun()
 
     st.divider()
+
+    components.html(
+        """
+        <style>
+            .header-brain-icon-large {
+                transition: transform 0.2s ease, box-shadow 0.2s ease;
+            }
+            .header-brain-icon-large:hover {
+                transform: scale(1.05);
+                box-shadow: 0 0 18px rgba(59, 130, 246, 0.22);
+            }
+        </style>
+        <script>
+            const applyBrainIconStyles = () => {
+                document.querySelectorAll('button').forEach(btn => {
+                    const text = (btn.innerText || '').trim().replace(/\s+/g, '');
+                    if (text === '🧠') {
+                        btn.classList.add('header-brain-icon-large');
+                        btn.style.setProperty('font-size', '3.6rem', 'important');
+                        btn.style.setProperty('padding', '0.45rem 0.9rem', 'important');
+                        btn.style.setProperty('min-width', '4.2rem', 'important');
+                        btn.style.setProperty('min-height', '4.2rem', 'important');
+                        btn.style.setProperty('width', 'auto', 'important');
+                        btn.style.setProperty('height', 'auto', 'important');
+                        btn.style.setProperty('display', 'inline-flex', 'important');
+                        btn.style.setProperty('align-items', 'center', 'important');
+                        btn.style.setProperty('justify-content', 'center', 'important');
+                        btn.style.setProperty('overflow', 'visible', 'important');
+                        btn.style.setProperty('border-radius', '1rem', 'important');
+                        btn.style.setProperty('line-height', '1', 'important');
+                        Array.from(btn.querySelectorAll('*')).forEach(child => {
+                            child.style.setProperty('font-size', '3.6rem', 'important');
+                            child.style.setProperty('line-height', '1', 'important');
+                        });
+                    }
+                });
+            };
+
+            const brainObserver = new MutationObserver(() => applyBrainIconStyles());
+            brainObserver.observe(document.body, { childList: true, subtree: true });
+            requestAnimationFrame(applyBrainIconStyles);
+        </script>
+        """,
+        height=0,
+        scrolling=False,
+    )
 
     if not st.session_state.get('welcome_shown', False):
         st.toast("Welcome back!", icon="🎉")
