@@ -3981,10 +3981,10 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                     <div class="login-heading">Where Documents Become Intelligence</div>
                     <div class="login-tagline">A premium command center for AI-powered document analysis, comparison, automation, and insights.</div>
                     <div class="login-keywords" id="login-keywords-container">
-                        <span class="login-keyword" onclick="showFeature(event, 'chat')">💬 Chat</span>
-                        <span class="login-keyword" onclick="showFeature(event, 'dashboard')">📊 Dashboard</span>
-                        <span class="login-keyword" onclick="showFeature(event, 'compare')">🔄 Compare</span>
-                        <span class="login-keyword" onclick="showFeature(event, 'capl')">🚗 CAPL</span>
+                        <span class="login-keyword" data-feature="chat" style="cursor: pointer;">💬 Chat</span>
+                        <span class="login-keyword" data-feature="dashboard" style="cursor: pointer;">📊 Dashboard</span>
+                        <span class="login-keyword" data-feature="compare" style="cursor: pointer;">🔄 Compare</span>
+                        <span class="login-keyword" data-feature="capl" style="cursor: pointer;">🚗 CAPL</span>
                     </div>
                     <div id="feature-descriptions">
                         <div id="chat-description" class="feature-description">
@@ -4030,51 +4030,75 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                     </div>
                 </div>
             </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        
-        st.markdown(
-            """
+            
             <script>
-            function showFeature(event, feature) {
-                event.preventDefault();
-                
-                // Get the description element
-                const selected = document.getElementById(feature + '-description');
-                if (!selected) return;
-                
-                // Extract text content from the description
-                const titleElement = selected.querySelector('strong');
-                const title = titleElement ? titleElement.textContent : '';
-                
-                // Extract list items
-                const items = Array.from(selected.querySelectorAll('li')).map(li => li.textContent.trim());
-                
-                // Build the banner content
-                let bannerText = title;
-                if (items.length > 0) {
-                    bannerText += ' • ' + items.join(' • ');
-                }
-                
-                // Get or create the banner
-                let banner = document.getElementById('feature-bottom-banner');
-                let content = document.getElementById('feature-banner-content');
-                
-                if (banner && content) {
-                    // Update content
-                    content.textContent = bannerText;
+            // Wait for DOM to be ready
+            (function() {{
+                // Function to handle feature clicks
+                function showFeature(feature) {{
+                    console.log('Feature clicked:', feature);
                     
-                    // Remove animation class to restart it
-                    banner.classList.remove('show');
+                    // Get the description element
+                    const selected = document.getElementById(feature + '-description');
+                    if (!selected) {{
+                        console.log('Description element not found:', feature + '-description');
+                        return;
+                    }}
                     
-                    // Trigger reflow to restart animation
-                    void banner.offsetWidth;
+                    // Extract text content from the description
+                    const titleElement = selected.querySelector('strong');
+                    const title = titleElement ? titleElement.textContent : '';
                     
-                    // Add animation class
-                    banner.classList.add('show');
-                }
-            }
+                    // Extract list items
+                    const items = Array.from(selected.querySelectorAll('li')).map(li => li.textContent.trim());
+                    
+                    // Build the banner content
+                    let bannerText = title;
+                    if (items.length > 0) {{
+                        bannerText += ' • ' + items.join(' • ');
+                    }}
+                    
+                    console.log('Banner text:', bannerText);
+                    
+                    // Get or create the banner
+                    let banner = document.getElementById('feature-bottom-banner');
+                    let content = document.getElementById('feature-banner-content');
+                    
+                    if (banner && content) {{
+                        // Update content
+                        content.textContent = bannerText;
+                        
+                        // Remove animation class to restart it
+                        banner.classList.remove('show');
+                        
+                        // Trigger reflow to restart animation
+                        void banner.offsetWidth;
+                        
+                        // Add animation class
+                        banner.classList.add('show');
+                        console.log('Banner shown successfully');
+                    }} else {{
+                        console.log('Banner or content element not found');
+                    }}
+                }}
+                
+                // Add click event listeners to the keyword spans
+                setTimeout(function() {{
+                    const keywords = document.querySelectorAll('.login-keyword');
+                    console.log('Found keywords:', keywords.length);
+                    
+                    keywords.forEach(keyword => {{
+                        keyword.addEventListener('click', function(e) {{
+                            e.preventDefault();
+                            e.stopPropagation();
+                            
+                            const feature = this.getAttribute('data-feature');
+                            console.log('Keyword clicked, feature:', feature);
+                            showFeature(feature);
+                        }});
+                    }});
+                }}, 100);
+            }})();
             </script>
             """,
             unsafe_allow_html=True,
