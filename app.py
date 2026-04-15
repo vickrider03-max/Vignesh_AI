@@ -1276,8 +1276,14 @@ if st.session_state.is_authenticated:
     )
 
     if not st.session_state.get('welcome_shown', False):
-      user = st.session_state.get("username", "User")
-    st.toast(f"Welcome back, {user} ", icon="🎉")
+
+     user = st.session_state.get("username")
+
+    if user:
+        st.toast(f"Welcome back, {user} 🎉", icon="🧠")
+    else:
+        st.toast("Welcome back 🎉", icon="🧠")
+
     st.session_state.welcome_shown = True
 
     render_status_strip()
