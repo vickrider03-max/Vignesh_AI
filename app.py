@@ -837,9 +837,25 @@ st.markdown(
             });
         };
 
-        const buttonObserver = new MutationObserver(() => applyLightButtonStyles());
+        const applyBrainIconStyles = () => {
+            document.querySelectorAll('button').forEach(btn => {
+                if (btn.textContent.trim() === '🧠') {
+                    btn.style.setProperty('font-size', '2rem', 'important');
+                    btn.style.setProperty('padding', '0.6rem 0.85rem', 'important');
+                    btn.style.setProperty('min-width', '3.2rem', 'important');
+                    btn.style.setProperty('height', '3.2rem', 'important');
+                    btn.style.setProperty('line-height', '1', 'important');
+                }
+            });
+        };
+
+        const buttonObserver = new MutationObserver(() => {
+            applyLightButtonStyles();
+            applyBrainIconStyles();
+        });
         buttonObserver.observe(document.body, { childList: true, subtree: true });
         applyLightButtonStyles();
+        applyBrainIconStyles();
     </script>
     """,
     unsafe_allow_html=True
@@ -1130,7 +1146,7 @@ if st.session_state.is_authenticated:
     header_col, logout_col = st.columns([8, 1])
 
     with header_col:
-        brain_col, title_col = st.columns([7, 7.3])
+        brain_col, title_col = st.columns([0.7, 7.3])
         with brain_col:
             if st.button("🧠", key="header_brain_icon", help="Click to show/hide helper tips"):
                 helper_tab_map = {
