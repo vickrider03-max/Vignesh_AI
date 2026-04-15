@@ -336,6 +336,58 @@ st.markdown(
         .stSidebarNav {
             min-width: 280px !important;
         }
+
+        /* Main content positioning */
+        .main .block-container {
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            padding-left: 1rem !important;
+            padding-right: 1rem !important;
+            width: 100% !important;
+            max-width: none !important;
+        }
+
+        /* Ensure main content is visible */
+        section.main {
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+        }
+
+        /* Fix for laptop/desktop layouts */
+        @media (min-width: 768px) {
+            .main .block-container {
+                padding-left: 2rem !important;
+                padding-right: 2rem !important;
+            }
+        }
+
+        @media (min-width: 1024px) {
+            .main .block-container {
+                padding-left: 3rem !important;
+                padding-right: 3rem !important;
+            }
+        }
+
+        /* Streamlit app container */
+        .stApp {
+            display: flex !important;
+            flex-direction: row !important;
+            min-height: 100vh !important;
+        }
+
+        /* Sidebar positioning */
+        .stSidebar {
+            flex: 0 0 auto !important;
+            order: -1 !important; /* Sidebar first */
+        }
+
+        /* Main content area */
+        .main {
+            flex: 1 1 auto !important;
+            order: 1 !important; /* Main content after sidebar */
+            min-width: 0 !important; /* Allow shrinking */
+        }
         
         .dashboard-grid {
             display: grid;
