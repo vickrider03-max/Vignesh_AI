@@ -1206,14 +1206,17 @@ if st.session_state.is_authenticated:
         </style>
         <script>
             const applyBrainIconStyles = () => {
-                document.querySelectorAll('button').forEach(btn => {
+                const root = window.parent ? window.parent.document : document;
+                const buttons = Array.from(root.querySelectorAll('button'));
+                buttons.forEach(btn => {
+                    const title = (btn.getAttribute('title') || '').trim();
                     const text = (btn.innerText || '').trim().replace(/\s+/g, '');
-                    if (text === '🧠') {
+                    if (title === 'Click to show/hide helper tips' || text === '🧠') {
                         btn.classList.add('header-brain-icon-large');
-                        btn.style.setProperty('font-size', '3.6rem', 'important');
-                        btn.style.setProperty('padding', '0.45rem 0.9rem', 'important');
-                        btn.style.setProperty('min-width', '4.2rem', 'important');
-                        btn.style.setProperty('min-height', '4.2rem', 'important');
+                        btn.style.setProperty('font-size', '3.8rem', 'important');
+                        btn.style.setProperty('padding', '0.5rem 0.85rem', 'important');
+                        btn.style.setProperty('min-width', '4.4rem', 'important');
+                        btn.style.setProperty('min-height', '4.4rem', 'important');
                         btn.style.setProperty('width', 'auto', 'important');
                         btn.style.setProperty('height', 'auto', 'important');
                         btn.style.setProperty('display', 'inline-flex', 'important');
@@ -1222,8 +1225,10 @@ if st.session_state.is_authenticated:
                         btn.style.setProperty('overflow', 'visible', 'important');
                         btn.style.setProperty('border-radius', '1rem', 'important');
                         btn.style.setProperty('line-height', '1', 'important');
+                        btn.style.setProperty('box-sizing', 'border-box', 'important');
+                        btn.style.setProperty('transform', 'none', 'important');
                         Array.from(btn.querySelectorAll('*')).forEach(child => {
-                            child.style.setProperty('font-size', '3.6rem', 'important');
+                            child.style.setProperty('font-size', '3.8rem', 'important');
                             child.style.setProperty('line-height', '1', 'important');
                         });
                     }
@@ -1231,8 +1236,11 @@ if st.session_state.is_authenticated:
             };
 
             const brainObserver = new MutationObserver(() => applyBrainIconStyles());
-            brainObserver.observe(document.body, { childList: true, subtree: true });
+            if (window.parent && window.parent.document) {
+                brainObserver.observe(window.parent.document.body, { childList: true, subtree: true });
+            }
             requestAnimationFrame(applyBrainIconStyles);
+            setTimeout(applyBrainIconStyles, 300);
         </script>
         """,
         height=0,
