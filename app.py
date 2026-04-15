@@ -3977,13 +3977,13 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                     position: relative;
                     overflow: hidden;
                     border-radius: 32px;
-                    padding: 34px 30px;
+                    padding: 34px 30px 26px;
                     background: radial-gradient(circle at top left, rgba(124, 92, 255, 0.22), transparent 28%),
                                 radial-gradient(circle at top right, rgba(0, 194, 255, 0.16), transparent 26%),
                                 linear-gradient(180deg, rgba(19, 29, 56, 0.96) 0%, rgba(11, 15, 26, 0.95) 100%);
                     box-shadow: 0 32px 80px rgba(0, 0, 0, 0.30);
                     border: 1px solid rgba(124, 92, 255, 0.14);
-                    min-height: 580px;
+                    min-height: auto;
                 }
                 .login-left-panel::before {
                     content: '';
@@ -3998,6 +3998,9 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                     position: relative;
                     z-index: 1;
                     max-width: 460px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 20px;
                 }
                 .login-logo {
                     display: flex;
@@ -4082,8 +4085,8 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 }
                 #feature-popup-card {
                     position: relative;
-                    margin-top: 24px;
-                    padding: 22px 24px;
+                    margin-top: 18px;
+                    padding: 20px 22px;
                     background: linear-gradient(135deg, #E5E3DD, #F9F6EE);
                     border: 1px solid rgba(145, 140, 132, 0.24);
                     border-radius: 20px;
@@ -4216,7 +4219,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             </script>
             """
         html_feature_panel = html_feature_panel.replace("__LOGO_IMG__", logo_img)
-        components.html(html_feature_panel, height=660, scrolling=False)
+        components.html(html_feature_panel, height=620, scrolling=False)
 
     continue_clicked = False
     with right_col:
