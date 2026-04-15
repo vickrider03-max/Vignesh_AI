@@ -1365,411 +1365,6 @@ if "active_main_tab" not in st.session_state:
     st.session_state.active_main_tab = "💬 Chat"
 
 # -------------------------------
-# README LOADING
-# -------------------------------
-# Loads the README text from file or uses default embedded content.
-# Used for the help/guide functionality.
-def load_readme_text():
-    """Load README from file if it exists, otherwise use default"""
-    readme_path = os.path.join(os.path.dirname(__file__), "README.txt")
-    if os.path.exists(readme_path):
-        try:
-            with open(readme_path, "r", encoding="utf-8", errors="ignore") as f:
-                return f.read()
-        except Exception as e:
-            st.warning(f"Could not load README.txt: {e}")
-    # Return default README if file not found
-    return """README.txt
-==========
-
-# 🧠 IntelliDoc AI – Smart Document Assistant
-
----
-
-## 🚀 Overview
-
-**IntelliDoc AI** is a powerful **multi-utility document analyzer** built with Streamlit.  
-It enables users to **upload, analyze, compare, and interact with files using AI**, along with specialized support for **CAPL script analysis and auto-fixing**.
-
----
-
-## 🧩 Features
-
-### 📂 File Management
-- Upload multiple formats:
-  `PDF, DOCX, PPTX, XLSX, TXT, HTML, CAPL (.can)`
-- Multi-file selection & filtering
-- Persistent preview system
-
----
-
-### 🔍 Smart Document Preview
-- Open preview in new tab
-- Keyword highlighting
-- Page-level PDF preview
-- Extract:
-  - Text
-  - Tables
-  - Images
-  - Metadata
-
----
-
-### 🧠 AI Chat (RAG System)
-- Ask questions about uploaded files
-- Context-aware responses
-- Multi-file semantic understanding
-- Powered by:
-  - FAISS (vector DB)
-  - HuggingFace models
-
----
-
-### 📊 Dashboard & Analytics
-- Excel/CSV visualization
-- Trends & statistics
-- Interactive charts (Plotly)
-- Export insights
-
----
-
-### 🔄 File Comparison
-- Compare 2+ files
-- Word-level diff
-- Inline visual comparison
-- Export results to Excel
-
----
-
-### 🚗 CAPL Script Analyzer
-- Upload or create `.can` files
-- Built-in CAPL editor
-- Code analysis & issue detection
-- Suggestions & improvements
-
----
-
-### 🤖 AI CAPL Auto-Fix
-```text
-Analyze → Suggest Fix → Apply Fix → Save
-
-🧭 Application Flow
-Sidebar:
-+----------------------+
-| Upload Files         |
-| Select Files         |
-| Filter CAPL (.can)   |
-+----------------------+
-
-Tabs:
-[ Chat ] → AI Q&A  
-[ Dashboard ] → Analytics  
-[ Compare ] → Diff  
-[ CAPL ] → Editor + AI Fix  
-
-🛠️ CAPL Workflow
-Create/Edit Script
-        ↓
-Analyze Code
-        ↓
-AI Suggest Fix?
-    ↓        ↓
-   Yes       No
-    ↓         ↓
-Apply Fix    Save
-    ↓
-Update Editor
-
-
-⚠️ Notes
-CAPL files must use .can extension
-AI features require configured models/API
-Limit large file comparisons for better performance
-
-🙌 Credits
-Built with ❤️ using Streamlit
-AI powered by HuggingFace + LangChain
-Visualization via Plotly
-
-
-📧 Contact
-📩 vigneshs075@gmail.com
-"""
-
-README_TEXT = load_readme_text()
-
-# -------------------------------
-# README FORMATTING
-# -------------------------------
-# Formats README text with HTML for display in the help panel.
-def _format_readme_inline(text):
-    text = html.escape(text)
-    text = re.sub(r'`([^`]+)`', r'<code>\1</code>', text)
-    text = re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', r'<img alt="\1" src="\2" class="readme-badge">', text)
-    text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2" target="_blank">\1</a>', text)
-    return text
-
-def build_animated_readme_html(readme_text):
-    """Render README text into animated HTML for the help panel."""
-    lines = readme_text.splitlines()
-    parts = []
-    in_list = False
-    in_code = False
-
-    for raw_line in lines:
-        line = raw_line.rstrip()
-        stripped = line.strip()
-
-        if stripped.startswith("```"):
-            if in_list:
-                parts.append("</ul>")
-                in_list = False
-            parts.append("</pre>" if in_code else "<pre class='readme-code'>")
-            in_code = not in_code
-            continue
-
-        if in_code:
-            parts.append(html.escape(line))
-            continue
-
-        if not stripped:
-            if in_list:
-                parts.append("</ul>")
-                in_list = False
-            continue
-
-        if stripped in {"---", "***"}:
-            if in_list:
-                parts.append("</ul>")
-                in_list = False
-            parts.append("<div class='readme-divider'></div>")
-            continue
-
-        if stripped.startswith("# "):
-            if in_list:
-                parts.append("</ul>")
-                in_list = False
-            parts.append(f"<h1 class='readme-h1'>{_format_readme_inline(stripped[2:])}</h1>")
-            continue
-
-        if stripped.startswith("## "):
-            if in_list:
-                parts.append("</ul>")
-                in_list = False
-            parts.append(f"<h2 class='readme-h2'>{_format_readme_inline(stripped[3:])}</h2>")
-            continue
-
-        if stripped.startswith("### "):
-            if in_list:
-                parts.append("</ul>")
-                in_list = False
-            parts.append(f"<h3 class='readme-h3'>{_format_readme_inline(stripped[4:])}</h3>")
-            continue
-
-        if stripped.startswith("- "):
-            if not in_list:
-                parts.append("<ul class='readme-list'>")
-                in_list = True
-            parts.append(f"<li>{_format_readme_inline(stripped[2:])}</li>")
-            continue
-
-        if stripped.endswith(".svg)") and "![" in stripped:
-            if in_list:
-                parts.append("</ul>")
-                in_list = False
-            parts.append(f"<div class='readme-badges'>{_format_readme_inline(stripped)}</div>")
-            continue
-
-        if in_list:
-            parts.append("</ul>")
-            in_list = False
-
-        parts.append(f"<p class='readme-p'>{_format_readme_inline(stripped)}</p>")
-
-    if in_list:
-        parts.append("</ul>")
-
-    if in_code:
-        parts.append("</pre>")
-
-    content_html = "".join(parts)
-    return f"""
-    <style>
-        body {{
-            margin: 0;
-            background: linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%);
-            font-family: 'Segoe UI', Tahoma, sans-serif;
-            color: #1e293b;
-        }}
-        .readme-shell {{
-            position: relative;
-            overflow: hidden;
-            padding: 20px;
-            border-radius: 22px;
-            border: 1px solid rgba(168, 216, 240, 0.12);
-            background:
-                radial-gradient(circle at top right, rgba(168, 216, 240, 0.16), transparent 32%),
-                radial-gradient(circle at bottom left, rgba(16, 185, 129, 0.18), transparent 28%),
-                rgba(255, 255, 255, 0.84);
-            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
-        }}
-        .readme-shell::before {{
-            content: "";
-            position: absolute;
-            inset: -30% auto auto -10%;
-            width: 200px;
-            height: 200px;
-            border-radius: 50%;
-            background: rgba(168, 216, 240, 0.08);
-            filter: blur(10px);
-            animation: orbDrift 12s ease-in-out infinite;
-        }}
-        .readme-titlebar {{
-            position: relative;
-            z-index: 1;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            margin-bottom: 18px;
-            padding: 14px 16px;
-            border-radius: 16px;
-            background: linear-gradient(135deg, rgba(168, 216, 240, 0.12), rgba(16, 185, 129, 0.12));
-            animation: panelIn 0.65s ease-out;
-        }}
-        .readme-kicker {{
-            font-size: 0.78rem;
-            text-transform: uppercase;
-            letter-spacing: 0.12em;
-            font-weight: 700;
-            color: #a8d8f0;
-        }}
-        .readme-subtitle {{
-            font-size: 0.95rem;
-            color: #475569;
-            margin-top: 4px;
-        }}
-        .readme-icon {{
-            width: 46px;
-            height: 46px;
-            border-radius: 14px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            background: rgba(255, 255, 255, 0.72);
-            box-shadow: 0 8px 18px rgba(168, 216, 240, 0.2);
-            font-size: 22px;
-            animation: pulseIcon 2.6s ease-in-out infinite;
-        }}
-        .readme-content > * {{
-            position: relative;
-            z-index: 1;
-            animation: itemIn 0.45s ease-out;
-        }}
-        .readme-h1, .readme-h2, .readme-h3 {{
-            margin: 18px 0 10px;
-            color: #102a43;
-        }}
-        .readme-h1 {{ font-size: 1.7rem; }}
-        .readme-h2 {{
-            font-size: 1.18rem;
-            padding-left: 12px;
-            border-left: 4px solid #1f4f91;
-        }}
-        .readme-h3 {{ font-size: 1rem; color: #1565c0; }}
-        .readme-p {{
-            margin: 10px 0;
-            line-height: 1.65;
-            color: #334155;
-        }}
-        .readme-list {{
-            margin: 8px 0 14px;
-            padding-left: 24px;
-            color: #334155;
-        }}
-        .readme-list li {{
-            margin: 8px 0;
-            line-height: 1.55;
-        }}
-        .readme-divider {{
-            height: 1px;
-            margin: 18px 0;
-            background: linear-gradient(90deg, transparent, rgba(168, 216, 240, 0.3), transparent);
-        }}
-        .readme-code {{
-            overflow-x: auto;
-            padding: 14px;
-            border-radius: 14px;
-            background: #0f172a;
-            color: #e2e8f0;
-            line-height: 1.5;
-            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
-        }}
-        .readme-badges {{
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin: 12px 0 18px;
-        }}
-        .readme-badge {{
-            height: 24px;
-            border-radius: 999px;
-            box-shadow: 0 8px 16px rgba(15, 23, 42, 0.1);
-            animation: badgeFloat 3.4s ease-in-out infinite;
-        }}
-        .readme-badge:nth-child(2) {{ animation-delay: 0.25s; }}
-        .readme-badge:nth-child(3) {{ animation-delay: 0.5s; }}
-        .readme-badge:nth-child(4) {{ animation-delay: 0.75s; }}
-        code {{
-            padding: 2px 6px;
-            border-radius: 6px;
-            background: rgba(168, 216, 240, 0.08);
-            color: #a8d8f0;
-        }}
-        a {{
-            color: #1565c0;
-            text-decoration: none;
-            font-weight: 600;
-        }}
-        @keyframes panelIn {{
-            from {{ opacity: 0; transform: translateY(10px); }}
-            to {{ opacity: 1; transform: translateY(0); }}
-        }}
-        @keyframes itemIn {{
-            from {{ opacity: 0; transform: translateY(8px); }}
-            to {{ opacity: 1; transform: translateY(0); }}
-        }}
-        @keyframes pulseIcon {{
-            0%, 100% {{ transform: scale(1); }}
-            50% {{ transform: scale(1.06); }}
-        }}
-        @keyframes badgeFloat {{
-            0%, 100% {{ transform: translateY(0); }}
-            50% {{ transform: translateY(-4px); }}
-        }}
-        @keyframes orbDrift {{
-            0%, 100% {{ transform: translate(0, 0); }}
-            50% {{ transform: translate(30px, 18px); }}
-        }}
-    </style>
-    <div class="readme-shell">
-        <div class="readme-titlebar">
-            <div>
-                <div class="readme-kicker">Interactive Help</div>
-                <div class="readme-subtitle">Animated quick guide for IntelliDoc AI</div>
-            </div>
-            <div class="readme-icon">📘</div>
-        </div>
-        <div class="readme-content">{content_html}</div>
-    </div>
-    """
-
-def render_readme_help_panel(expanded=False):
-    """Render the README as a collapsible animated help panel."""
-    with st.expander("Help & README", expanded=expanded):
-        components.html(build_animated_readme_html(README_TEXT), height=720, scrolling=True)
-
-# -------------------------------
 # DOCUMENT PREVIEW FUNCTION
 # -------------------------------
 # Preview processing helpers:
@@ -4204,6 +3799,54 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 letter-spacing: 0.3px;
                 text-transform: uppercase;
             }
+            .login-keyword {
+                padding: 10px 14px;
+                border-radius: 999px;
+                border: 1px solid rgba(124, 92, 255, 0.24);
+                background: rgba(124, 92, 255, 0.08);
+                color: #D9E1FF;
+                font-size: 0.92rem;
+                cursor: pointer;
+                transition: all 0.28s ease;
+            }
+            .login-keyword:hover {
+                background: rgba(124, 92, 255, 0.16);
+                border-color: rgba(124, 92, 255, 0.42);
+                box-shadow: 0 6px 20px rgba(124, 92, 255, 0.12);
+                transform: translateY(-1px);
+            }
+            .feature-description {
+                display: none;
+                margin-top: 20px;
+                padding: 20px;
+                border-radius: 18px;
+                background: rgba(124, 92, 255, 0.08);
+                border: 1px solid rgba(124, 92, 255, 0.22);
+                color: #D9C8E8;
+                font-size: 0.9rem;
+                line-height: 1.7;
+                animation: slideInUp 0.3s ease;
+            }
+            .feature-description.active {
+                display: block;
+            }
+            .feature-description ul {
+                margin: 10px 0;
+                padding-left: 20px;
+            }
+            .feature-description li {
+                margin-bottom: 8px;
+            }
+            @keyframes slideInUp {
+                from {
+                    opacity: 0;
+                    transform: translateY(10px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
             .glass-button-spacer + div .stButton > button {
                 width: 100% !important;
                 border-radius: 18px !important;
@@ -4292,14 +3935,70 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                     </div>
                     <div class="login-heading">Where Documents Become Intelligence</div>
                     <div class="login-tagline">A premium command center for AI-powered document analysis, comparison, automation, and insights.</div>
-                    <div class="login-keywords">
-                        <span class="login-keyword">Chat</span>
-                        <span class="login-keyword">Dashboard</span>
-                        <span class="login-keyword">Compare</span>
-                        <span class="login-keyword">CAPL</span>
+                    <div class="login-keywords" id="login-keywords-container">
+                        <span class="login-keyword" onclick="showFeature(event, 'chat')">💬 Chat</span>
+                        <span class="login-keyword" onclick="showFeature(event, 'dashboard')">📊 Dashboard</span>
+                        <span class="login-keyword" onclick="showFeature(event, 'compare')">🔄 Compare</span>
+                        <span class="login-keyword" onclick="showFeature(event, 'capl')">🚗 CAPL</span>
+                    </div>
+                    <div id="feature-descriptions">
+                        <div id="chat-description" class="feature-description">
+                            <strong>🧠 AI Chat (RAG System)</strong>
+                            <ul>
+                                <li>Ask questions about uploaded files</li>
+                                <li>Context-aware responses</li>
+                                <li>Multi-file semantic understanding</li>
+                            </ul>
+                        </div>
+                        <div id="dashboard-description" class="feature-description">
+                            <strong>📊 Dashboard & Analytics</strong>
+                            <ul>
+                                <li>Excel/CSV visualization</li>
+                                <li>Trends & statistics</li>
+                                <li>Interactive charts (Plotly)</li>
+                                <li>Export insights</li>
+                            </ul>
+                        </div>
+                        <div id="compare-description" class="feature-description">
+                            <strong>🔄 File Comparison</strong>
+                            <ul>
+                                <li>Compare 2+ files</li>
+                                <li>Word-level diff</li>
+                                <li>Inline visual comparison</li>
+                                <li>Export results to Excel</li>
+                            </ul>
+                        </div>
+                        <div id="capl-description" class="feature-description">
+                            <strong>🚗 CAPL Script Analyzer</strong>
+                            <ul>
+                                <li>Upload or create .can files</li>
+                                <li>Built-in CAPL editor</li>
+                                <li>Code analysis & issue detection</li>
+                                <li>Suggestions & improvements</li>
+                            </ul>
+                            <strong style="display: block; margin-top: 12px;">🤖 AI CAPL Auto-Fix</strong>
+                            <div style="margin-top: 8px; padding: 8px; background: rgba(0,194,255,0.1); border-radius: 8px;">Analyze → Suggest Fix → Apply Fix → Save</div>
+                        </div>
                     </div>
                 </div>
             </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        
+        st.markdown(
+            """
+            <script>
+            function showFeature(event, feature) {
+                event.preventDefault();
+                const descriptions = document.querySelectorAll('.feature-description');
+                descriptions.forEach(desc => desc.classList.remove('active'));
+                const selected = document.getElementById(feature + '-description');
+                if (selected) {
+                    selected.classList.add('active');
+                }
+            }
+            </script>
             """,
             unsafe_allow_html=True,
         )
