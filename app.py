@@ -3825,7 +3825,6 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 color: #D9C8E8;
                 font-size: 0.9rem;
                 line-height: 1.7;
-                animation: slideInUp 0.3s ease;
             }
             .feature-description.active {
                 display: block;
@@ -3836,6 +3835,52 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             }
             .feature-description li {
                 margin-bottom: 8px;
+            }
+            #feature-bottom-banner {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                background: linear-gradient(90deg, rgba(124, 92, 255, 0.95), rgba(0, 194, 255, 0.9));
+                padding: 24px 40px;
+                z-index: 9998;
+                display: none;
+                box-shadow: 0 -4px 30px rgba(124, 92, 255, 0.3);
+                border-top: 2px solid rgba(124, 92, 255, 0.5);
+                min-height: 80px;
+                display: flex;
+                align-items: center;
+                justify-content: flex-start;
+                overflow: hidden;
+            }
+            #feature-bottom-banner.show {
+                display: flex;
+                animation: slideInFromRight 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+            }
+            #feature-banner-content {
+                color: #ffffff;
+                font-size: 1rem;
+                font-weight: 500;
+                white-space: nowrap;
+                animation: marqueeText 12s linear infinite;
+            }
+            @keyframes slideInFromRight {
+                from {
+                    transform: translateX(100%);
+                    opacity: 0;
+                }
+                to {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
+            }
+            @keyframes marqueeText {
+                from {
+                    transform: translateX(100%);
+                }
+                to {
+                    transform: translateX(-100%);
+                }
             }
             @keyframes slideInUp {
                 from {
@@ -3980,6 +4025,9 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                             <div style="margin-top: 8px; padding: 8px; background: rgba(0,194,255,0.1); border-radius: 8px;">Analyze → Suggest Fix → Apply Fix → Save</div>
                         </div>
                     </div>
+                    <div id="feature-bottom-banner">
+                        <div id="feature-banner-content"></div>
+                    </div>
                 </div>
             </div>
             """,
@@ -3991,11 +4039,40 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             <script>
             function showFeature(event, feature) {
                 event.preventDefault();
-                const descriptions = document.querySelectorAll('.feature-description');
-                descriptions.forEach(desc => desc.classList.remove('active'));
+                
+                // Get the description element
                 const selected = document.getElementById(feature + '-description');
-                if (selected) {
-                    selected.classList.add('active');
+                if (!selected) return;
+                
+                // Extract text content from the description
+                const titleElement = selected.querySelector('strong');
+                const title = titleElement ? titleElement.textContent : '';
+                
+                // Extract list items
+                const items = Array.from(selected.querySelectorAll('li')).map(li => li.textContent.trim());
+                
+                // Build the banner content
+                let bannerText = title;
+                if (items.length > 0) {
+                    bannerText += ' • ' + items.join(' • ');
+                }
+                
+                // Get or create the banner
+                let banner = document.getElementById('feature-bottom-banner');
+                let content = document.getElementById('feature-banner-content');
+                
+                if (banner && content) {
+                    // Update content
+                    content.textContent = bannerText;
+                    
+                    // Remove animation class to restart it
+                    banner.classList.remove('show');
+                    
+                    // Trigger reflow to restart animation
+                    void banner.offsetWidth;
+                    
+                    // Add animation class
+                    banner.classList.add('show');
                 }
             }
             </script>
