@@ -1130,14 +1130,14 @@ if st.session_state.is_authenticated:
     header_col, logout_col = st.columns([8, 1])
 
     with header_col:
-        brain_col, title_col = st.columns([0.7, 7.3])
+        brain_col, title_col = st.columns([7, 7.3])
         with brain_col:
             if st.button("🧠", key="header_brain_icon", help="Click to show/hide helper tips"):
                 helper_tab_map = {
                     "💬 Chat": "chat",
                     "📊 Dashboard": "dashboard",
                     "📂 Compare": "compare",
-                    "🧠 CAPL": "capl"
+                    "📡 CAPL": "capl"
                 }
                 current_helper_tab = helper_tab_map.get(st.session_state.get("active_main_tab", "💬 Chat"), "chat")
                 state_key = _help_state_key(current_helper_tab)
@@ -5153,7 +5153,7 @@ st.markdown("""
 # -------------------------------
 # Creates the horizontal tab navigation with custom styling.
 # Each tab corresponds to a major feature area of the application.
-main_tab_options = ["💬 Chat", "📊 Dashboard", "📂 Compare", "🧠 CAPL"]
+main_tab_options = ["💬 Chat", "📊 Dashboard", "📂 Compare", "📡 CAPL"]
 active_main_tab = st.radio("Open Section", main_tab_options, horizontal=True, key="active_main_tab", label_visibility="collapsed")
 
 # -------------------------------
@@ -5961,7 +5961,7 @@ if active_main_tab == "📂 Compare":
 # CAPL tab:
 # Dedicated to CAPL file selection, live editing, compile/analyze checks, issue
 # reporting, and optional AI-assisted fix generation for CAPL scripts.
-if active_main_tab == "🧠 CAPL":
+if active_main_tab == "📡 CAPL":
     capl_header_col, capl_reset_col = st.columns([8, 1])
     with capl_header_col:
         st.subheader("⚙️ CAPL Compiler & Analyzer")
