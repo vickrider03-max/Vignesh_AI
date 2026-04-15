@@ -837,26 +837,52 @@ st.markdown(
             });
         };
 
-        const applyBrainIconStyles = () => {
-            document.querySelectorAll('button').forEach(btn => {
-                const text = (btn.textContent || '').trim();
-                if (text.includes('🧠') && text.replace(/\s+/g, '') === '🧠') {
-                    btn.style.setProperty('font-size', '3.8rem', 'important');
-                    btn.style.setProperty('padding', '0.8rem', 'important');
-                    btn.style.setProperty('min-width', '5.5rem', 'important');
-                    btn.style.setProperty('height', 'auto', 'important');
-                    btn.style.setProperty('line-height', '1', 'important');
-                    btn.style.setProperty('border-radius', '50%', 'important');
-                    btn.style.setProperty('display', 'inline-flex', 'important');
-                    btn.style.setProperty('align-items', 'center', 'important');
-                    btn.style.setProperty('justify-content', 'center', 'important');
-                    Array.from(btn.querySelectorAll('*')).forEach(child => {
-                        child.style.setProperty('font-size', '3.8rem', 'important');
-                        child.style.setProperty('line-height', '1', 'important');
-                    });
-                }
+const applyBrainIconStyles = () => {
+    document.querySelectorAll('button').forEach(btn => {
+        const text = (btn.textContent || '').trim();
+
+        if (text === '🧠') {
+
+            // 🔥 Make emoji BIG
+            btn.style.setProperty('font-size', '4rem', 'important');
+
+            // 🔥 Force size (this is the key fix)
+            btn.style.setProperty('width', '70px', 'important');
+            btn.style.setProperty('height', '70px', 'important');
+
+            // 🔥 Remove internal spacing constraints
+            btn.style.setProperty('padding', '0', 'important');
+            btn.style.setProperty('line-height', '1', 'important');
+
+            // 🔥 Make it visually centered
+            btn.style.setProperty('display', 'flex', 'important');
+            btn.style.setProperty('align-items', 'center', 'important');
+            btn.style.setProperty('justify-content', 'center', 'important');
+
+            // 🔥 Remove Streamlit default styling impact
+            btn.style.setProperty('min-width', 'unset', 'important');
+
+            // 🔥 Make it premium
+            btn.style.setProperty('border-radius', '16px', 'important');
+
+            // 🔥 Optional: glow
+            btn.style.setProperty(
+                'box-shadow',
+                '0 0 20px rgba(124,92,255,0.6)',
+                'important'
+            );
+
+            // 🔥 Scale if still constrained
+            btn.style.setProperty('transform', 'scale(1.2)', 'important');
+
+            // 🔥 Fix inner span (VERY IMPORTANT)
+            btn.querySelectorAll('*').forEach(child => {
+                child.style.setProperty('font-size', '4rem', 'important');
+                child.style.setProperty('line-height', '1', 'important');
             });
-        };
+        }
+    });
+};
 
         const buttonObserver = new MutationObserver(() => {
             applyLightButtonStyles();
