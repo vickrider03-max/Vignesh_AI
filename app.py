@@ -1196,12 +1196,26 @@ if st.session_state.is_authenticated:
     components.html(
         """
         <style>
+            @keyframes brainGlow {
+                0%, 100% {
+                    box-shadow: 0 0 12px rgba(59, 130, 246, 0.32), 0 0 28px rgba(59, 130, 246, 0.18);
+                    transform: scale(1);
+                }
+                50% {
+                    box-shadow: 0 0 24px rgba(59, 130, 246, 0.72), 0 0 42px rgba(59, 130, 246, 0.28);
+                    transform: scale(1.04);
+                }
+            }
             .header-brain-icon-large {
-                transition: transform 0.2s ease, box-shadow 0.2s ease;
+                animation: brainGlow 2.2s ease-in-out infinite;
+                transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+                background: rgba(219, 234, 254, 0.95) !important;
+                color: #1d4ed8 !important;
+                border: 1px solid rgba(59, 130, 246, 0.35) !important;
             }
             .header-brain-icon-large:hover {
-                transform: scale(1.05);
-                box-shadow: 0 0 18px rgba(59, 130, 246, 0.22);
+                transform: scale(1.08);
+                box-shadow: 0 0 28px rgba(59, 130, 246, 0.46), 0 0 48px rgba(59, 130, 246, 0.24);
             }
         </style>
         <script>
@@ -1227,6 +1241,9 @@ if st.session_state.is_authenticated:
                         btn.style.setProperty('line-height', '1', 'important');
                         btn.style.setProperty('box-sizing', 'border-box', 'important');
                         btn.style.setProperty('transform', 'none', 'important');
+                        btn.style.setProperty('background-color', 'rgba(219, 234, 254, 0.95)', 'important');
+                        btn.style.setProperty('border', '1px solid rgba(59, 130, 246, 0.35)', 'important');
+                        btn.style.setProperty('color', '#1d4ed8', 'important');
                         Array.from(btn.querySelectorAll('*')).forEach(child => {
                             child.style.setProperty('font-size', '3.8rem', 'important');
                             child.style.setProperty('line-height', '1', 'important');
@@ -4932,8 +4949,9 @@ def show_help_popup(tab_name, selected_files):
         <style>
         .helper-popup-overlay {{
             position: fixed;
-            top: 84px;
+            bottom: 18px;
             right: 18px;
+            top: auto;
             width: min(380px, 88vw);
             max-height: 72vh;
             padding: 18px 20px;
@@ -4950,6 +4968,24 @@ def show_help_popup(tab_name, selected_files):
             margin: 0 0 10px;
             font-size: 1.05rem;
             color: #3c2e2a;
+        }}
+        .helper-popup-overlay .helper-close-btn {{
+            position: absolute;
+            top: 12px;
+            right: 14px;
+            width: 34px;
+            height: 34px;
+            border: none;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.95);
+            color: #7a4f3a;
+            font-size: 1.1rem;
+            line-height: 1;
+            cursor: pointer;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        }}
+        .helper-popup-overlay .helper-close-btn:hover {{
+            background: #fee7d0;
         }}
         .helper-popup-overlay .helper-meta {{
             margin-bottom: 12px;
@@ -4985,6 +5021,7 @@ def show_help_popup(tab_name, selected_files):
         }}
         </style>
         <div class="helper-popup-overlay">
+            <button class="helper-close-btn" onclick="this.closest('.helper-popup-overlay').style.display='none'" aria-label="Close helper">×</button>
             <h3>{html.escape(helper_def['title'])}</h3>
             <div class="helper-meta">Skill: <strong>{skill_level.title()}</strong> · Queries: <strong>{tracker.get('queries', 0)}</strong></div>
             <p>{html.escape(helper_def['text'])}</p>
