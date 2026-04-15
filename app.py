@@ -841,17 +841,17 @@ st.markdown(
             document.querySelectorAll('button').forEach(btn => {
                 const text = (btn.textContent || '').trim();
                 if (text.includes('🧠') && text.replace(/\s+/g, '') === '🧠') {
-                    btn.style.setProperty('font-size', '2.4rem', 'important');
-                    btn.style.setProperty('padding', '0.55rem 0.9rem', 'important');
-                    btn.style.setProperty('min-width', '3.4rem', 'important');
+                    btn.style.setProperty('font-size', '3.8rem', 'important');
+                    btn.style.setProperty('padding', '0.8rem', 'important');
+                    btn.style.setProperty('min-width', '5.5rem', 'important');
                     btn.style.setProperty('height', 'auto', 'important');
                     btn.style.setProperty('line-height', '1', 'important');
-                    btn.style.setProperty('border-radius', '1rem', 'important');
+                    btn.style.setProperty('border-radius', '50%', 'important');
                     btn.style.setProperty('display', 'inline-flex', 'important');
                     btn.style.setProperty('align-items', 'center', 'important');
                     btn.style.setProperty('justify-content', 'center', 'important');
                     Array.from(btn.querySelectorAll('*')).forEach(child => {
-                        child.style.setProperty('font-size', '2.4rem', 'important');
+                        child.style.setProperty('font-size', '3.8rem', 'important');
                         child.style.setProperty('line-height', '1', 'important');
                     });
                 }
