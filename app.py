@@ -840,11 +840,12 @@ st.markdown(
         const applyBrainIconStyles = () => {
             document.querySelectorAll('button').forEach(btn => {
                 if (btn.textContent.trim() === '🧠') {
-                    btn.style.setProperty('font-size', '4.2rem', 'important');
-                    btn.style.setProperty('padding', '1.3rem 2.85rem', 'important');
-                    btn.style.setProperty('min-width', '5.2rem', 'important');
-                    btn.style.setProperty('height', '6.2rem', 'important');
-                    btn.style.setProperty('line-height', '2', 'important');
+                    btn.style.setProperty('font-size', '2rem', 'important');
+                    btn.style.setProperty('padding', '0.6rem 1rem', 'important');
+                    btn.style.setProperty('min-width', '3rem', 'important');
+                    btn.style.setProperty('height', 'auto', 'important');
+                    btn.style.setProperty('line-height', '1', 'important');
+                    btn.style.setProperty('border-radius', '1rem', 'important');
                 }
             });
         };
