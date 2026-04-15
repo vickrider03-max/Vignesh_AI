@@ -4143,22 +4143,66 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 letter-spacing: 0.01em;
             }
             .glass-input-label + div .stTextInput input {
-                background: rgba(255, 255, 255, 0.06) !important;
-                border: 1px solid rgba(124, 92, 255, 0.26) !important;
+                background: rgba(255, 255, 255, 0.08) !important;
+                border: 1px solid rgba(124, 92, 255, 0.32) !important;
                 color: #F4F7FF !important;
-                border-radius: 16px !important;
-                padding: 18px 18px !important;
+                border-radius: 18px !important;
+                padding: 18px 20px !important;
                 min-height: 56px !important;
-                box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04) !important;
-                transition: all 0.25s ease !important;
+                box-shadow: 0 8px 32px rgba(124, 92, 255, 0.08), inset 0 2px 8px rgba(255,255,255,0.06) !important;
+                transition: all 0.28s ease !important;
+                backdrop-filter: blur(8px) !important;
             }
             .glass-input-label + div .stTextInput input:focus {
-                border-color: rgba(124, 92, 255, 0.95) !important;
-                box-shadow: 0 0 0 8px rgba(124, 92, 255, 0.14) !important;
+                border-color: rgba(124, 92, 255, 0.76) !important;
+                box-shadow: 0 16px 48px rgba(124, 92, 255, 0.20), inset 0 2px 8px rgba(255,255,255,0.08) !important;
+                background: rgba(255, 255, 255, 0.12) !important;
                 outline: none !important;
             }
             .glass-input-label + div .stTextInput input::placeholder {
-                color: rgba(244, 247, 255, 0.55) !important;
+                color: rgba(244, 247, 255, 0.48) !important;
+            }
+            .feature-cards-container {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 14px;
+                margin-top: 28px;
+            }
+            .feature-card {
+                position: relative;
+                padding: 18px 16px;
+                border-radius: 18px;
+                background: rgba(124, 92, 255, 0.08);
+                border: 1px solid rgba(124, 92, 255, 0.22);
+                box-shadow: 0 12px 32px rgba(124, 92, 255, 0.06);
+                cursor: pointer;
+                transition: all 0.28s ease;
+                text-align: center;
+                backdrop-filter: blur(10px);
+            }
+            .feature-card:hover {
+                background: rgba(124, 92, 255, 0.15);
+                border-color: rgba(124, 92, 255, 0.42);
+                box-shadow: 0 18px 48px rgba(124, 92, 255, 0.14);
+                transform: translateY(-2px);
+            }
+            .feature-card-icon {
+                font-size: 2rem;
+                margin-bottom: 8px;
+            }
+            .feature-card-title {
+                color: #E6EAF2;
+                font-size: 0.95rem;
+                font-weight: 600;
+                margin: 0;
+                letter-spacing: 0.2px;
+            }
+            .feature-cards-label {
+                color: #B8C4DD;
+                font-size: 0.9rem;
+                margin-bottom: 12px;
+                letter-spacing: 0.3px;
+                text-transform: uppercase;
             }
             .glass-button-spacer + div .stButton > button {
                 width: 100% !important;
@@ -4262,9 +4306,6 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
 
     continue_clicked = False
     with right_col:
-        if "show_login_readme" not in st.session_state:
-            st.session_state.show_login_readme = False
-
         st.markdown('<div class="glass-input-label">👤 Username</div>', unsafe_allow_html=True)
         login_username = st.text_input(
             "",
@@ -4292,11 +4333,30 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             unsafe_allow_html=True,
         )
 
-        if st.button("View Guide", key="login_view_guide_btn"):
-            st.session_state.show_login_readme = True
-
-        if st.session_state.get("show_login_readme", False):
-            components.html(build_animated_readme_html(README_TEXT), height=520, scrolling=True)
+        st.markdown(
+            """
+            <div class="feature-cards-label">📌 Core Features</div>
+            <div class="feature-cards-container">
+                <div class="feature-card">
+                    <div class="feature-card-icon">💬</div>
+                    <div class="feature-card-title">Chat</div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-card-icon">📊</div>
+                    <div class="feature-card-title">Dashboard</div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-card-icon">🔄</div>
+                    <div class="feature-card-title">Compare</div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-card-icon">🚗</div>
+                    <div class="feature-card-title">CAPL</div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     if continue_clicked:
         cleaned_username = (st.session_state.get("login_username", "") or "").strip()
