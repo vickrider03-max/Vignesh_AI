@@ -1177,6 +1177,7 @@ if st.session_state.is_authenticated:
                 active_users = [u for u in active_users if u["username"] != st.session_state.logged_in_username]
                 with open(active_file, "w") as f:
                     json.dump(active_users, f)
+            goodbye_user = st.session_state.logged_in_username or "User"
             st.session_state.is_authenticated = False
             st.session_state.logged_in_username = ""
             st.session_state.user_role = None
@@ -1188,7 +1189,7 @@ if st.session_state.is_authenticated:
             st.session_state.chat_summary_downloads = {"images": [], "tables": []}
             st.session_state.messages = []
             st.session_state.welcome_shown = False
-            st.success("Logged out successfully.")
+            st.success(f"Goodbye, {goodbye_user}! You have been logged out.")
             st.rerun()
 
     st.divider()
@@ -1276,15 +1277,12 @@ if st.session_state.is_authenticated:
     )
 
     if not st.session_state.get('welcome_shown', False):
-
-     user = st.session_state.get("username")
-
-    if user:
-        st.toast(f"Welcome back, {user} 🎉", icon="🧠")
-    else:
-        st.toast("Welcome back 🎉", icon="🧠")
-
-    st.session_state.welcome_shown = True
+        user = st.session_state.get("logged_in_username", "")
+        if user:
+            st.toast(f"Welcome back, {user} 🎉", icon="🧠")
+        else:
+            st.toast("Welcome back 🎉", icon="🧠")
+        st.session_state.welcome_shown = True
 
     render_status_strip()
 else:
@@ -4102,21 +4100,91 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             .glass-card .stTextInput input::placeholder {
                 color: rgba(244, 247, 255, 0.62) !important;
             }
-            .glass-card .stButton > button {
+            .login-access-shell {
+                position: relative;
+                margin-bottom: 30px;
+                padding: 24px 22px;
+                border-radius: 24px;
+                background: rgba(14, 21, 38, 0.75);
+                backdrop-filter: blur(24px);
+                border: 1px solid rgba(124, 92, 255, 0.18);
+                box-shadow: 0 28px 80px rgba(10, 16, 34, 0.55);
+            }
+            .login-access-shell::before {
+                content: '';
+                position: absolute;
+                inset: -1px;
+                border-radius: inherit;
+                background: linear-gradient(135deg, rgba(0, 194, 255, 0.28), rgba(124, 92, 255, 0.32));
+                filter: blur(18px);
+                opacity: 0.75;
+                z-index: -1;
+            }
+            .login-access-title {
+                margin: 0 0 10px;
+                color: #F4F7FF;
+                font-size: clamp(1.85rem, 2.5vw, 2.15rem);
+                letter-spacing: -0.04em;
+                font-weight: 700;
+            }
+            .login-access-subtitle {
+                margin: 0;
+                color: #B8C4DD;
+                font-size: 0.96rem;
+                line-height: 1.7;
+            }
+            .glass-input-label {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                color: #B8C4DD;
+                font-size: 0.95rem;
+                margin-bottom: 10px;
+                letter-spacing: 0.01em;
+            }
+            .glass-input-label + div .stTextInput input {
+                background: rgba(255, 255, 255, 0.06) !important;
+                border: 1px solid rgba(124, 92, 255, 0.26) !important;
+                color: #F4F7FF !important;
+                border-radius: 16px !important;
+                padding: 18px 18px !important;
+                min-height: 56px !important;
+                box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04) !important;
+                transition: all 0.25s ease !important;
+            }
+            .glass-input-label + div .stTextInput input:focus {
+                border-color: rgba(124, 92, 255, 0.95) !important;
+                box-shadow: 0 0 0 8px rgba(124, 92, 255, 0.14) !important;
+                outline: none !important;
+            }
+            .glass-input-label + div .stTextInput input::placeholder {
+                color: rgba(244, 247, 255, 0.55) !important;
+            }
+            .glass-button-spacer + div .stButton > button {
                 width: 100% !important;
-                border-radius: 20px !important;
+                border-radius: 18px !important;
                 padding: 16px 0 !important;
                 font-size: 1rem !important;
                 font-weight: 700 !important;
-                color: #F7F9FF !important;
-                background: linear-gradient(135deg, #6A70FF 0%, #00C2FF 100%) !important;
+                color: #F4F7FF !important;
+                background: linear-gradient(135deg, #00C2FF 0%, #7C5CFF 100%) !important;
                 border: none !important;
-                box-shadow: 0 18px 42px rgba(0, 194, 255, 0.24) !important;
+                box-shadow: 0 20px 60px rgba(124, 92, 255, 0.28) !important;
                 transition: transform 0.2s ease, box-shadow 0.2s ease !important;
             }
-            .glass-card .stButton > button:hover {
+            .glass-button-spacer + div .stButton > button:hover {
                 transform: translateY(-2px) !important;
-                box-shadow: 0 26px 58px rgba(0, 194, 255, 0.32) !important;
+                box-shadow: 0 26px 72px rgba(124, 92, 255, 0.32) !important;
+            }
+            .glass-button-spacer + div .stButton > button:focus {
+                outline: none !important;
+                box-shadow: 0 0 0 4px rgba(124, 92, 255, 0.16) !important;
+            }
+            .login-access-note {
+                color: #96A6D4;
+                font-size: 0.92rem;
+                margin-top: 18px;
+                line-height: 1.65;
             }
             .login-subtle {
                 color: #8D9CC9;
@@ -4197,6 +4265,16 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         if "show_login_readme" not in st.session_state:
             st.session_state.show_login_readme = False
 
+        st.markdown(
+            """
+            <div class="login-access-shell">
+                <div class="login-access-title">🧠 Secure Access Terminal</div>
+                <div class="login-access-subtitle">Authenticate to enter AI Control Room</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
         st.markdown('<div class="glass-input-label">👤 Username</div>', unsafe_allow_html=True)
         login_username = st.text_input(
             "",
@@ -4214,12 +4292,12 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             label_visibility="collapsed",
         )
 
+        st.markdown('<div class="glass-button-spacer"></div>', unsafe_allow_html=True)
         continue_clicked = st.button("Access →", key="login_access_btn")
 
         st.markdown(
             """
                 <div class="login-subtle">Standard users may leave the password empty.</div>
-            </div>
             """,
             unsafe_allow_html=True,
         )
