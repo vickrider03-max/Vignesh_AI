@@ -3585,7 +3585,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             .login-right {
                 position: relative;
                 z-index: 1;
-                min-height: 640px;
+                min-height: auto;
             }
 
             .login-left {
