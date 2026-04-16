@@ -3552,21 +3552,15 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 padding: 28px;
                 border-radius: 36px;
                 overflow: hidden;
-                background:
-                    radial-gradient(circle at 18% 18%, rgba(124, 92, 255, 0.22), transparent 22%),
-                    radial-gradient(circle at 82% 14%, rgba(0, 194, 255, 0.16), transparent 24%),
-                    linear-gradient(160deg, rgba(17, 25, 44, 0.94) 0%, rgba(10, 15, 28, 0.98) 100%);
-                border: 1px solid rgba(163, 195, 255, 0.14);
-                box-shadow: 0 40px 110px rgba(0, 0, 0, 0.34);
-                animation: loginCardFloat 9s ease-in-out infinite;
+                background: linear-gradient(180deg, #090b12 0%, #0f1624 100%);
+                border: 1px solid rgba(255, 255, 255, 0.06);
+                box-shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
             }
             .login-unified-card::before {
                 content: "";
                 position: absolute;
                 inset: 0;
-                background:
-                    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 38%),
-                    radial-gradient(circle at 50% 100%, rgba(255, 255, 255, 0.06), transparent 34%);
+                background: radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.04), transparent 28%);
                 pointer-events: none;
             }
             .login-unified-card::after {
@@ -3574,12 +3568,8 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 position: absolute;
                 inset: 1px;
                 border-radius: 35px;
-                border: 1px solid rgba(255, 255, 255, 0.06);
+                border: 1px solid rgba(255, 255, 255, 0.04);
                 pointer-events: none;
-            }
-            @keyframes loginCardFloat {
-                0%, 100% { transform: translateY(0); }
-                50% { transform: translateY(-8px); }
             }
             .login-form-panel {
                 position: relative;
@@ -3596,19 +3586,15 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 overflow: hidden;
                 border-radius: 32px;
                 padding: 40px 36px;
-                background: radial-gradient(circle at top left, rgba(124, 92, 255, 0.22), transparent 28%),
-                            radial-gradient(circle at top right, rgba(0, 194, 255, 0.16), transparent 26%),
-                            linear-gradient(180deg, rgba(19, 29, 56, 0.96) 0%, rgba(11, 15, 26, 0.95) 100%);
-                box-shadow: 0 36px 100px rgba(0, 0, 0, 0.35);
-                border: 1px solid rgba(124, 92, 255, 0.14);
+                background: #08101d;
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.32);
+                border: 1px solid rgba(255, 255, 255, 0.05);
             }
             .login-left-panel::before {
                 content: '';
                 position: absolute;
                 inset: 0;
-                background: radial-gradient(circle at 20% 20%, rgba(124, 92, 255, 0.24), transparent 16%),
-                            radial-gradient(circle at 80% 15%, rgba(0, 194, 255, 0.14), transparent 20%),
-                            radial-gradient(circle at 30% 80%, rgba(255, 255, 255, 0.06), transparent 24%);
+                background: radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.04), transparent 22%);
                 pointer-events: none;
             }
             .login-left-content {
