@@ -3703,8 +3703,24 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             .glass-card .stTextInput > label + div {
                 margin-top: 0 !important;
             }
+            .glass-card .stTextInput,
+            .login-form-panel .stTextInput {
+                background: transparent !important;
+                margin-top: 0 !important;
+                padding-top: 0 !important;
+            }
+            .glass-card .stTextInput > label + div,
+            .login-form-panel .stTextInput > label + div {
+                background: rgba(255, 255, 255, 0.05) !important;
+                border: 1px solid rgba(255, 255, 255, 0.12) !important;
+                border-radius: 18px !important;
+                padding: 0 !important;
+                box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04) !important;
+            }
             .glass-card .stTextInput input,
-            .login-form-panel .stTextInput input {
+            .login-form-panel .stTextInput input,
+            input[id$="login_username"],
+            input[id$="login_password"] {
                 background: rgba(255, 255, 255, 0.05) !important;
                 border: 1px solid rgba(255, 255, 255, 0.12) !important;
                 color: #F4F7FF !important;
@@ -3715,13 +3731,17 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 transition: all 0.2s ease !important;
             }
             .glass-card .stTextInput input:focus,
-            .login-form-panel .stTextInput input:focus {
+            .login-form-panel .stTextInput input:focus,
+            input[id$="login_username"]:focus,
+            input[id$="login_password"]:focus {
                 border-color: rgba(124, 92, 255, 0.9) !important;
                 box-shadow: 0 0 0 6px rgba(124, 92, 255, 0.18) !important;
                 outline: none !important;
             }
             .glass-card .stTextInput input::placeholder,
-            .login-form-panel .stTextInput input::placeholder {
+            .login-form-panel .stTextInput input::placeholder,
+            input[id$="login_username"]::placeholder,
+            input[id$="login_password"]::placeholder {
                 color: rgba(244, 247, 255, 0.52) !important;
             }
             .login-access-shell {
@@ -3927,18 +3947,19 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 font-size: 1rem !important;
                 font-weight: 700 !important;
                 color: #F4F7FF !important;
-                background: linear-gradient(135deg, #00C2FF 0%, #7C5CFF 100%) !important;
-                border: none !important;
-                box-shadow: 0 20px 60px rgba(124, 92, 255, 0.28) !important;
-                transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+                background: linear-gradient(135deg, #1a2640 0%, #25334f 100%) !important;
+                border: 1px solid rgba(124, 92, 255, 0.26) !important;
+                box-shadow: 0 18px 45px rgba(0, 0, 0, 0.24) !important;
+                transition: transform 0.22s ease, box-shadow 0.22s ease, background 0.22s ease !important;
             }
             .glass-button-spacer + div .stButton > button:hover {
-                transform: translateY(-2px) !important;
-                box-shadow: 0 26px 72px rgba(124, 92, 255, 0.32) !important;
+                transform: translateY(-1px) !important;
+                background: linear-gradient(135deg, #273353 0%, #324060 100%) !important;
+                box-shadow: 0 22px 55px rgba(0, 0, 0, 0.28) !important;
             }
             .glass-button-spacer + div .stButton > button:focus {
                 outline: none !important;
-                box-shadow: 0 0 0 4px rgba(124, 92, 255, 0.16) !important;
+                box-shadow: 0 0 0 4px rgba(124, 92, 255, 0.14) !important;
             }
             .login-access-note {
                 color: #96A6D4;
@@ -4307,6 +4328,14 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
     continue_clicked = False
     with right_col:
         st.markdown('<div class="login-form-panel">', unsafe_allow_html=True)
+        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="login-access-shell">'
+            '  <h2 class="login-access-title">Secure Access</h2>'
+            '  <p class="login-access-subtitle">Sign in to continue to IntelliDoc AI.</p>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
         st.markdown('<div class="glass-input-label">👤 Username</div>', unsafe_allow_html=True)
         login_username = st.text_input(
             "",
@@ -4333,6 +4362,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             """,
             unsafe_allow_html=True,
         )
+        st.markdown('</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True)
