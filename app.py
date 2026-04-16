@@ -1286,6 +1286,7 @@ if st.session_state.is_authenticated:
 
     render_status_strip()
 
+
 # -------------------------------
 # SESSION STATE INITIALIZATION
 # -------------------------------
@@ -3521,215 +3522,402 @@ CREATOR_PASSWORD = "Rider@100"
 # Login gate:
 # This runs before the main app tabs are shown. It keeps the creator/user access
 # flow in one place so authentication checks do not have to be repeated per tab.
+# ================================
+# PREMIUM LOGIN EXPERIENCE
+# Replace your current login gate block with this
+# ================================
 if not st.session_state.is_authenticated and "preview_token" not in query_params:
-    st.markdown(
-        """
-        <style>
-            html, body, [data-testid="stAppViewContainer"], .stApp {
-                height: 100%;
-                min-height: 100vh !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                overflow: hidden !important;
-                background:
-                    radial-gradient(circle at top left, rgba(52, 84, 201, 0.22), transparent 28%),
-                    radial-gradient(circle at bottom right, rgba(0, 153, 255, 0.16), transparent 24%),
-                    linear-gradient(135deg, #030817 0%, #08132D 45%, #0A1C38 100%) !important;
+    st.markdown("""
+    <style>
+        /* Hide default wide layout feel for login page */
+        .block-container {
+            max-width: 100% !important;
+            padding-top: 1.2rem !important;
+            padding-bottom: 1rem !important;
+        }
+
+        /* Page background */
+        .stApp {
+            background:
+                radial-gradient(circle at 15% 20%, rgba(124, 92, 255, 0.22), transparent 25%),
+                radial-gradient(circle at 85% 18%, rgba(0, 194, 255, 0.18), transparent 22%),
+                radial-gradient(circle at 70% 80%, rgba(255, 0, 128, 0.10), transparent 24%),
+                linear-gradient(135deg, #08111f 0%, #0b1020 35%, #111827 100%) !important;
+        }
+
+        /* Reduce default streamlit white wrappers feeling */
+        [data-testid="stVerticalBlock"] > div:has(.premium-login-shell) {
+            width: 100%;
+        }
+
+        .premium-login-shell {
+            position: relative;
+            min-height: 82vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px 12px 8px 12px;
+        }
+
+        .premium-login-grid {
+            width: min(1280px, 96vw);
+            display: grid;
+            grid-template-columns: 1.15fr 0.85fr;
+            gap: 28px;
+            align-items: stretch;
+        }
+
+        .premium-brand-panel {
+            position: relative;
+            overflow: hidden;
+            border-radius: 28px;
+            padding: 42px 38px;
+            min-height: 640px;
+            background:
+                linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.025)),
+                rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.10);
+            box-shadow:
+                0 18px 80px rgba(0, 0, 0, 0.35),
+                inset 0 1px 0 rgba(255,255,255,0.06);
+            backdrop-filter: blur(16px);
+        }
+
+        .premium-brand-panel::before {
+            content: "";
+            position: absolute;
+            inset: auto -80px -80px auto;
+            width: 260px;
+            height: 260px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(124, 92, 255, 0.35), transparent 65%);
+            filter: blur(8px);
+        }
+
+        .premium-brand-panel::after {
+            content: "";
+            position: absolute;
+            inset: -70px auto auto -70px;
+            width: 220px;
+            height: 220px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(0, 194, 255, 0.20), transparent 65%);
+            filter: blur(8px);
+        }
+
+        .brand-topline {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.82rem;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: rgba(230, 234, 242, 0.72);
+            margin-bottom: 26px;
+            font-weight: 700;
+        }
+
+        .brand-title {
+            font-size: clamp(2rem, 3vw, 3.4rem);
+            line-height: 1.05;
+            font-weight: 800;
+            color: #f7fbff;
+            margin: 0 0 14px 0;
+            letter-spacing: -0.03em;
+        }
+
+        .brand-subtitle {
+            max-width: 620px;
+            font-size: 1.04rem;
+            line-height: 1.75;
+            color: rgba(230, 234, 242, 0.78);
+            margin-bottom: 26px;
+        }
+
+        .brand-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin: 28px 0 34px 0;
+        }
+
+        .brand-badge {
+            padding: 10px 14px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.08);
+            color: #eef6ff;
+            font-size: 0.9rem;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+        }
+
+        .brand-feature-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 16px;
+            margin-top: 30px;
+        }
+
+        .brand-feature-card {
+            border-radius: 20px;
+            padding: 18px 18px 16px 18px;
+            background: rgba(255,255,255,0.045);
+            border: 1px solid rgba(255,255,255,0.08);
+            color: #f3f7fb;
+        }
+
+        .brand-feature-card h4 {
+            margin: 0 0 8px 0;
+            font-size: 1rem;
+            font-weight: 700;
+        }
+
+        .brand-feature-card p {
+            margin: 0;
+            color: rgba(230, 234, 242, 0.72);
+            font-size: 0.92rem;
+            line-height: 1.6;
+        }
+
+        .premium-login-card {
+            position: relative;
+            overflow: hidden;
+            border-radius: 28px;
+            padding: 28px 26px 22px 26px;
+            min-height: 640px;
+            background:
+                linear-gradient(180deg, rgba(255,255,255,0.11), rgba(255,255,255,0.05));
+            border: 1px solid rgba(255,255,255,0.12);
+            box-shadow:
+                0 18px 80px rgba(0, 0, 0, 0.38),
+                inset 0 1px 0 rgba(255,255,255,0.08);
+            backdrop-filter: blur(20px);
+        }
+
+        .premium-login-card::before {
+            content: "";
+            position: absolute;
+            top: -50px;
+            right: -50px;
+            width: 160px;
+            height: 160px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(0,194,255,0.22), transparent 68%);
+        }
+
+        .login-card-header {
+            text-align: center;
+            margin-bottom: 18px;
+        }
+
+        .login-logo {
+            width: 68px;
+            height: 68px;
+            margin: 0 auto 14px auto;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.7rem;
+            background: linear-gradient(135deg, rgba(124,92,255,0.20), rgba(0,194,255,0.16));
+            border: 1px solid rgba(255,255,255,0.10);
+            box-shadow: 0 8px 28px rgba(0,0,0,0.24);
+        }
+
+        .login-card-title {
+            font-size: 1.7rem;
+            font-weight: 800;
+            color: #f8fbff;
+            margin: 0;
+            letter-spacing: -0.02em;
+        }
+
+        .login-card-subtitle {
+            margin-top: 8px;
+            color: rgba(230, 234, 242, 0.74);
+            font-size: 0.96rem;
+        }
+
+        .premium-note {
+            margin-top: 6px;
+            margin-bottom: 8px;
+            color: rgba(230, 234, 242, 0.72);
+            font-size: 0.88rem;
+            text-align: center;
+        }
+
+        .premium-help-caption {
+            margin-top: 14px;
+            margin-bottom: 8px;
+            color: rgba(230, 234, 242, 0.80);
+            font-size: 0.92rem;
+            font-weight: 600;
+        }
+
+        .premium-footer-line {
+            text-align: center;
+            margin-top: 18px;
+            color: rgba(230, 234, 242, 0.56);
+            font-size: 0.82rem;
+            line-height: 1.6;
+        }
+
+        /* Streamlit input styling */
+        .premium-login-card .stTextInput label,
+        .premium-login-card .stCheckbox label,
+        .premium-login-card .stMarkdown,
+        .premium-login-card p,
+        .premium-login-card div {
+            color: #eef6ff !important;
+        }
+
+        .premium-login-card [data-testid="stTextInput"] input {
+            background: rgba(255,255,255,0.07) !important;
+            color: #f8fbff !important;
+            border: 1px solid rgba(255,255,255,0.10) !important;
+            border-radius: 16px !important;
+            min-height: 54px !important;
+            padding-left: 14px !important;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.04) !important;
+        }
+
+        .premium-login-card [data-testid="stTextInput"] input:focus {
+            border: 1px solid rgba(0, 194, 255, 0.55) !important;
+            box-shadow: 0 0 0 1px rgba(0, 194, 255, 0.22), 0 0 22px rgba(124, 92, 255, 0.16) !important;
+        }
+
+        .premium-login-card .stCheckbox {
+            margin-top: 2px;
+            margin-bottom: 10px;
+        }
+
+        .premium-login-card .stCheckbox label {
+            font-size: 0.94rem !important;
+            color: rgba(237, 244, 255, 0.84) !important;
+        }
+
+        .premium-login-card .stButton > button {
+            width: 100% !important;
+            min-height: 52px !important;
+            border-radius: 16px !important;
+            border: 0 !important;
+            background: linear-gradient(90deg, #00c2ff 0%, #7c5cff 100%) !important;
+            color: white !important;
+            font-weight: 700 !important;
+            font-size: 1rem !important;
+            box-shadow: 0 12px 28px rgba(64, 120, 255, 0.28) !important;
+            transition: 0.25s ease !important;
+        }
+
+        .premium-login-card .stButton > button:hover {
+            transform: translateY(-1px) !important;
+            box-shadow: 0 16px 34px rgba(64, 120, 255, 0.34) !important;
+            filter: brightness(1.04);
+        }
+
+        .premium-login-card details {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 16px;
+            padding: 6px 10px;
+        }
+
+        .premium-login-card summary {
+            color: #eef6ff;
+            font-weight: 600;
+        }
+
+        @media (max-width: 980px) {
+            .premium-login-grid {
+                grid-template-columns: 1fr;
             }
-
-            .block-container {
-                padding-top: 0.5rem !important;
-                padding-bottom: 0.5rem !important;
+            .premium-brand-panel,
+            .premium-login-card {
+                min-height: auto;
             }
-
-            .login-page-wrap {
-                min-height: calc(100vh - 1rem);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                padding: 0.5rem;
+            .brand-feature-grid {
+                grid-template-columns: 1fr;
             }
+        }
+    </style>
+    """, unsafe_allow_html=True)
 
-            .login-card {
-                width: 100%;
-                max-width: 480px;
-                padding: 28px 26px 24px;
-                border-radius: 24px;
-                background: rgba(10, 18, 36, 0.82);
-                border: 1px solid rgba(255,255,255,0.10);
-                box-shadow: 0 30px 80px rgba(0,0,0,0.42);
-                backdrop-filter: blur(18px);
-            }
+    st.markdown("""
+    <div class="premium-login-shell">
+      <div class="premium-login-grid">
+        <div class="premium-brand-panel">
+          <div class="brand-topline">Mercedes-Benz • AI Workspace</div>
+          <h1 class="brand-title">Where documents become intelligence.</h1>
+          <div class="brand-subtitle">
+            IntelliDoc AI is designed as a premium control room for document analysis,
+            comparison, dashboard exploration, and CAPL-assisted workflows.
+            Fast, focused, and built to feel enterprise-grade from the first screen.
+          </div>
 
-            .login-brand {
-                display: flex;
-                align-items: center;
-                gap: 14px;
-                margin-bottom: 20px;
-            }
+          <div class="brand-badges">
+            <div class="brand-badge">Analyze</div>
+            <div class="brand-badge">Compare</div>
+            <div class="brand-badge">Visualize</div>
+            <div class="brand-badge">Automate</div>
+          </div>
 
-            .login-brand img,
-            .login-brand-fallback {
-                width: 48px;
-                height: 48px;
-                border-radius: 14px;
-                object-fit: contain;
-                background: rgba(255,255,255,0.06);
-                border: 1px solid rgba(255,255,255,0.10);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: #F8FBFF;
-                font-weight: 700;
-            }
-
-            .login-brand-text {
-                min-width: 0;
-            }
-
-            .login-brand-mini {
-                color: #9FB3FF;
-                text-transform: uppercase;
-                letter-spacing: 0.18em;
-                font-size: 0.72rem;
-                font-weight: 700;
-                margin-bottom: 4px;
-            }
-
-            .login-brand-title {
-                color: #F8FBFF;
-                font-size: 1.35rem;
-                line-height: 1.2;
-                font-weight: 800;
-                margin: 0;
-            }
-
-            .login-subtitle {
-                color: #B8C6E3;
-                font-size: 0.94rem;
-                line-height: 1.6;
-                margin-bottom: 18px;
-            }
-
-            .login-form-card .stTextInput > label {
-                display: none !important;
-            }
-
-            .login-form-card .stTextInput input {
-                background: rgba(255,255,255,0.08) !important;
-                color: #F7FAFF !important;
-                border: 1px solid rgba(255,255,255,0.14) !important;
-                border-radius: 14px !important;
-                min-height: 52px !important;
-                padding: 14px 16px !important;
-            }
-
-            .login-form-card .stTextInput input:focus {
-                border-color: rgba(100,140,255,0.9) !important;
-                box-shadow: 0 0 0 4px rgba(100,140,255,0.14) !important;
-                background: rgba(255,255,255,0.10) !important;
-            }
-
-            .login-form-card .stButton > button {
-                width: 100% !important;
-                min-height: 52px !important;
-                border-radius: 14px !important;
-                border: 1px solid rgba(120,146,255,0.24) !important;
-                background: linear-gradient(135deg, #4E73FF 0%, #243B7B 100%) !important;
-                color: #F8FBFF !important;
-                font-weight: 800 !important;
-                font-size: 1rem !important;
-                box-shadow: 0 18px 40px rgba(31,59,124,0.30) !important;
-            }
-
-            .login-form-card .stButton > button:hover {
-                background: linear-gradient(135deg, #6388FF 0%, #304C95 100%) !important;
-            }
-
-            .field-label {
-                color: #D7E1F5;
-                font-size: 0.92rem;
-                font-weight: 600;
-                margin: 10px 0 8px;
-            }
-
-            .login-note {
-                margin-top: 14px;
-                color: #90A1C6;
-                font-size: 0.84rem;
-                line-height: 1.5;
-            }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.markdown('<div class="login-page-wrap">', unsafe_allow_html=True)
-
-    st.markdown('<div class="login-card login-form-card">', unsafe_allow_html=True)
-
-    if logo_data:
-        st.markdown(
-            f"""
-            <div class="login-brand">
-                <img src="data:image/gif;base64,{logo_data}" alt="Mercedes-Benz logo">
-                <div class="login-brand-text">
-                    <div class="login-brand-mini">Mercedes-Benz</div>
-                    <div class="login-brand-title">🧠 IntelliDoc AI – Smart Document Assistant</div>
-                </div>
+          <div class="brand-feature-grid">
+            <div class="brand-feature-card">
+              <h4>Smart Analysis</h4>
+              <p>Explore uploaded content with clean workflows for document understanding and structured review.</p>
             </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    else:
-        st.markdown(
-            """
-            <div class="login-brand">
-                <div class="login-brand-fallback">MB</div>
-                <div class="login-brand-text">
-                    <div class="login-brand-mini">Mercedes-Benz</div>
-                    <div class="login-brand-title">🧠 IntelliDoc AI – Smart Document Assistant</div>
-                </div>
+            <div class="brand-feature-card">
+              <h4>Comparison Engine</h4>
+              <p>Inspect file differences with clarity, export results, and move faster with decision-ready views.</p>
             </div>
-            """,
-            unsafe_allow_html=True,
-        )
+            <div class="brand-feature-card">
+              <h4>Dashboard Insights</h4>
+              <p>Use structured reports and spreadsheets to surface trends, metrics, and visual summaries.</p>
+            </div>
+            <div class="brand-feature-card">
+              <h4>CAPL Assistance</h4>
+              <p>Work with CAPL files, analyze issues, and streamline script refinement in one place.</p>
+            </div>
+          </div>
+        </div>
+    """, unsafe_allow_html=True)
 
-    st.markdown(
-        '<div class="login-subtitle">Secure sign-in to your premium AI workspace for chat, file intelligence, comparison, and CAPL analysis.</div>',
-        unsafe_allow_html=True
-    )
+    st.markdown("""
+        <div class="premium-login-card">
+          <div class="login-card-header">
+            <div class="login-logo">🧠</div>
+            <h2 class="login-card-title">IntelliDoc AI</h2>
+            <div class="login-card-subtitle">Secure access to your smart document workspace</div>
+          </div>
+    """, unsafe_allow_html=True)
 
-    st.markdown('<div class="field-label">👤 Username</div>', unsafe_allow_html=True)
-    login_username = st.text_input(
-        "",
-        key="login_username",
-        placeholder="Enter your username",
-        label_visibility="collapsed",
-    )
+    login_username = st.text_input("Username", key="premium_login_username", placeholder="Enter your username")
+    login_password = st.text_input("Password", type="password", key="premium_login_password", placeholder="Enter your password")
+    st.markdown("<div class='premium-note'>Users can leave the password field empty.</div>", unsafe_allow_html=True)
 
-    st.markdown('<div class="field-label">🔒 Password</div>', unsafe_allow_html=True)
-    login_password = st.text_input(
-        "",
-        type="password",
-        key="login_password",
-        placeholder="Enter your password",
-        label_visibility="collapsed",
-    )
+    has_read_readme = st.checkbox("I have read the README and want to continue", key="premium_readme_checkbox")
 
-    continue_clicked = st.button("Enter Workspace", key="login_access_btn")
+    access_clicked = st.button("Continue →", key="premium_login_access_btn", use_container_width=True)
 
-    st.markdown(
-        '<div class="login-note">Users can continue with username only. Creator must use the configured creator credentials.</div>',
-        unsafe_allow_html=True
-    )
+    st.markdown("<div class='premium-help-caption'>Need help before signing in?</div>", unsafe_allow_html=True)
+   # render_readme_help_panel(expanded=False)
 
-    st.markdown('</div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown("""
+          <div class="premium-footer-line">
+            Elegant access for analysis, comparison, dashboards, and CAPL workflows.
+          </div>
+        </div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    if continue_clicked:
-        cleaned_username = (st.session_state.get("login_username", "") or "").strip()
-        cleaned_password = (st.session_state.get("login_password", "") or "").strip()
+    if access_clicked:
+        if not has_read_readme:
+            st.warning("Please read the README and confirm the checkbox before accessing the app.")
+            st.stop()
+
+        cleaned_username = (login_username or "").strip()
+        cleaned_password = (login_password or "").strip()
 
         if cleaned_username == CREATOR_USERNAME and cleaned_password == CREATOR_PASSWORD:
             st.session_state.is_authenticated = True
@@ -3740,7 +3928,6 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
 
             ist_tz = timezone('Asia/Kolkata')
             ist_time = datetime.now(ist_tz).strftime("%Y-%m-%d %H:%M:%S %Z")
-
             st.session_state.login_history.append({
                 "username": cleaned_username,
                 "role": "creator",
@@ -3757,19 +3944,19 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             else:
                 active_users = []
 
-            active_users = [
-                u for u in active_users
-                if datetime.fromisoformat(u["timestamp"]) > now - timedelta(hours=1)
-            ]
-            active_users.append({"username": cleaned_username, "timestamp": now.isoformat()})
+            active_users = [u for u in active_users if u.get("username") != cleaned_username]
+            active_users.append({
+                "username": cleaned_username,
+                "timestamp": now.isoformat()
+            })
 
             with open(active_file, "w") as f:
                 json.dump(active_users, f)
 
-            st.success("Creator access granted.")
+            st.success("Creator login successful.")
             st.rerun()
 
-        elif len(cleaned_username) > 3 and cleaned_password == "":
+        elif cleaned_username and cleaned_password == "":
             st.session_state.is_authenticated = True
             st.session_state.logged_in_username = cleaned_username
             st.session_state.user_role = "user"
@@ -3778,7 +3965,6 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
 
             ist_tz = timezone('Asia/Kolkata')
             ist_time = datetime.now(ist_tz).strftime("%Y-%m-%d %H:%M:%S %Z")
-
             st.session_state.login_history.append({
                 "username": cleaned_username,
                 "role": "user",
@@ -3795,20 +3981,20 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             else:
                 active_users = []
 
-            active_users = [
-                u for u in active_users
-                if datetime.fromisoformat(u["timestamp"]) > now - timedelta(hours=1)
-            ]
-            active_users.append({"username": cleaned_username, "timestamp": now.isoformat()})
+            active_users = [u for u in active_users if u.get("username") != cleaned_username]
+            active_users.append({
+                "username": cleaned_username,
+                "timestamp": now.isoformat()
+            })
 
             with open(active_file, "w") as f:
                 json.dump(active_users, f)
 
-            st.success("User access granted.")
+            st.success(f"Welcome, {cleaned_username}!")
             st.rerun()
 
         else:
-            st.error("Invalid login. For users: username must be more than 3 characters and password must be empty.")
+            st.error("Invalid credentials. Creator must use the correct password. Users should leave password empty.")
 
     st.stop()
 
