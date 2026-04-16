@@ -4016,335 +4016,290 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         unsafe_allow_html=True,
     )
 
-    left_col, right_col = st.columns([1.05, 1.25], gap="large")
+    st.markdown(
+        """
+        <style>
+            .login-unified-card {
+                position: relative;
+                max-width: 1120px;
+                margin: 48px auto;
+                display: grid;
+                grid-template-columns: 1.05fr 0.95fr;
+                gap: 28px;
+                padding: 0;
+                border-radius: 32px;
+                background: rgba(8, 12, 24, 0.96);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                box-shadow: 0 40px 120px rgba(0, 0, 0, 0.42);
+                overflow: hidden;
+            }
+            .login-unified-card::before {
+                content: '';
+                position: absolute;
+                inset: 0;
+                background:
+                    radial-gradient(circle at 20% 20%, rgba(124, 92, 255, 0.16), transparent 14%),
+                    radial-gradient(circle at 85% 20%, rgba(0, 194, 255, 0.12), transparent 20%);
+                pointer-events: none;
+            }
+            .login-brand-panel,
+            .login-form-panel {
+                position: relative;
+                z-index: 1;
+                min-height: 620px;
+            }
+            .login-brand-panel {
+                padding: 54px 44px;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                gap: 28px;
+                background: linear-gradient(180deg, rgba(8, 16, 34, 0.96), rgba(6, 10, 20, 0.94));
+            }
+            .brand-crest {
+                display: flex;
+                align-items: center;
+                gap: 16px;
+            }
+            .brand-crest img,
+            .brand-icon {
+                width: 52px;
+                height: 52px;
+                border-radius: 18px;
+                display: grid;
+                place-items: center;
+                font-size: 1.3rem;
+                background: rgba(255, 255, 255, 0.07);
+                box-shadow: 0 16px 36px rgba(0, 0, 0, 0.24);
+                border: 1px solid rgba(255, 255, 255, 0.12);
+            }
+            .brand-caption {
+                display: grid;
+                gap: 4px;
+            }
+            .brand-title {
+                font-size: 0.82rem;
+                letter-spacing: 0.24em;
+                text-transform: uppercase;
+                color: #A497FF;
+                font-weight: 700;
+            }
+            .brand-name {
+                font-size: 1.55rem;
+                line-height: 1.05;
+                color: #F4F7FF;
+                font-weight: 800;
+            }
+            .login-value {
+                margin: 0;
+                font-size: clamp(2.4rem, 4vw, 3.4rem);
+                line-height: 1.02;
+                color: #F4F7FF;
+                max-width: 520px;
+            }
+            .login-description {
+                margin: 0;
+                color: #B9C6E0;
+                font-size: 1rem;
+                line-height: 1.75;
+                max-width: 460px;
+            }
+            .login-feature-list {
+                display: grid;
+                gap: 14px;
+            }
+            .login-feature {
+                display: grid;
+                grid-template-columns: 44px 1fr;
+                gap: 14px;
+                align-items: start;
+                padding: 18px 16px;
+                border-radius: 18px;
+                background: rgba(255, 255, 255, 0.04);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+            }
+            .login-feature .icon {
+                width: 44px;
+                height: 44px;
+                border-radius: 14px;
+                display: grid;
+                place-items: center;
+                background: rgba(124, 92, 255, 0.18);
+                color: #E7F1FF;
+                font-size: 1.1rem;
+            }
+            .login-feature strong {
+                display: block;
+                margin-bottom: 4px;
+                color: #F4F7FF;
+                font-size: 0.98rem;
+                font-weight: 700;
+            }
+            .login-feature span {
+                color: #BCC8E4;
+                font-size: 0.94rem;
+                line-height: 1.6;
+            }
+            .login-note {
+                padding: 20px 22px;
+                border-radius: 18px;
+                background: rgba(255, 255, 255, 0.04);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                color: #B8C6E0;
+                font-size: 0.95rem;
+                line-height: 1.7;
+                max-width: 500px;
+            }
+            .login-form-panel {
+                padding: 54px 40px;
+                display: flex;
+                align-items: center;
+            }
+            .login-form-panel-inner {
+                width: 100%;
+                padding: 36px 32px;
+                border-radius: 28px;
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.14);
+                box-shadow: 0 30px 80px rgba(0, 0, 0, 0.22);
+                backdrop-filter: blur(18px);
+            }
+            .form-title {
+                margin: 0 0 10px;
+                color: #F9FBFF;
+                font-size: clamp(2rem, 3vw, 2.4rem);
+                font-weight: 800;
+                line-height: 1.05;
+            }
+            .form-subtitle {
+                margin: 0 0 28px;
+                color: #B7C5E1;
+                font-size: 1rem;
+                line-height: 1.8;
+            }
+            .login-field-label {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                color: #B8C4DD;
+                font-size: 0.95rem;
+                margin-bottom: 10px;
+                font-weight: 600;
+            }
+            .login-hint {
+                margin-top: 18px;
+                color: #95A4C6;
+                font-size: 0.94rem;
+                line-height: 1.7;
+            }
+            .login-form-card .stTextInput > label {
+                display: none !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                height: 0 !important;
+                width: 0 !important;
+                overflow: hidden !important;
+            }
+            .login-form-card .stTextInput {
+                margin-top: 0 !important;
+                padding-top: 0 !important;
+            }
+            .login-form-card .stTextInput > label + div {
+                margin-top: 0 !important;
+            }
+            .login-form-card .stTextInput input {
+                background: rgba(255, 255, 255, 0.08) !important;
+                border: 1px solid rgba(255, 255, 255, 0.16) !important;
+                color: #F6F9FF !important;
+                border-radius: 16px !important;
+                padding: 18px 20px !important;
+                min-height: 54px !important;
+                box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06) !important;
+                transition: all 0.24s ease !important;
+            }
+            .login-form-card .stTextInput input:focus {
+                border-color: rgba(124, 92, 255, 0.95) !important;
+                box-shadow: 0 0 0 6px rgba(124, 92, 255, 0.17) !important;
+                outline: none !important;
+                background: rgba(255, 255, 255, 0.12) !important;
+            }
+            .login-form-card .stTextInput input::placeholder {
+                color: rgba(238, 242, 255, 0.58) !important;
+            }
+            .login-form-card .stButton > button {
+                width: 100% !important;
+                border-radius: 16px !important;
+                padding: 16px 0 !important;
+                font-size: 1rem !important;
+                font-weight: 700 !important;
+                color: #F9FBFF !important;
+                background: linear-gradient(135deg, #4b72ff 0%, #233b7a 100%) !important;
+                border: 1px solid rgba(124, 92, 255, 0.32) !important;
+                box-shadow: 0 18px 48px rgba(20, 40, 84, 0.32) !important;
+                transition: transform 0.22s ease, box-shadow 0.22s ease !important;
+            }
+            .login-form-card .stButton > button:hover {
+                transform: translateY(-1px) !important;
+                background: linear-gradient(135deg, #648cff 0%, #34508a 100%) !important;
+                box-shadow: 0 24px 60px rgba(21, 44, 92, 0.34) !important;
+            }
+            .login-form-card .stButton > button:focus {
+                outline: none !important;
+                box-shadow: 0 0 0 4px rgba(124, 92, 255, 0.16) !important;
+            }
+            @media (max-width: 960px) {
+                .login-unified-card { grid-template-columns: 1fr; }
+                .login-form-panel, .login-brand-panel { min-height: auto; padding: 38px 28px; }
+                .login-form-panel-inner { padding: 30px 22px; }
+            }
+            @media (max-width: 640px) {
+                .login-unified-card { margin: 28px 16px; gap: 20px; }
+                .login-brand-panel { padding: 28px 22px; }
+                .login-value { font-size: 2rem; }
+                .brand-name { font-size: 1.35rem; }
+                .login-form-panel-inner { padding: 24px 18px; }
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    logo_img = f'<img src="data:image/gif;base64,{logo_data}" alt="Mercedes-Benz logo">' if logo_data else ''
+    st.markdown('<div class="login-unified-card">', unsafe_allow_html=True)
+    left_col, right_col = st.columns([1.05, 0.95], gap="large")
     with left_col:
-        st.markdown('<div class="login-dock-host">', unsafe_allow_html=True)
-        logo_img = f'<img src="data:image/gif;base64,{logo_data}" alt="Mercedes-Benz logo">' if logo_data else ''
-        html_feature_panel = """
-            <style>
-                html, body {
-                    margin: 0;
-                    padding: 0;
-                    background: transparent;
-                    color: #E6EAF2;
-                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                }
-                .login-left-panel {
-                    position: relative;
-                    overflow: hidden;
-                    border-radius: 28px;
-                    padding: 24px 22px;
-                    background: #08101e;
-                    box-shadow: 0 26px 80px rgba(0, 0, 0, 0.36);
-                    border: 1px solid rgba(255, 255, 255, 0.08);
-                    min-height: 580px;
-                }
-                .login-left-panel::before {
-                    content: '';
-                    position: absolute;
-                    width: 210px;
-                    height: 210px;
-                    left: var(--mx, 50%);
-                    top: var(--my, 28%);
-                    transform: translate(-50%, -50%);
-                    border-radius: 50%;
-                    background: radial-gradient(circle, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03) 48%, transparent 70%);
-                    filter: blur(18px);
-                    pointer-events: none;
-                    transition: left 0.12s ease, top 0.12s ease;
-                }
-                .login-left-content {
-                    position: relative;
-                    z-index: 1;
-                    max-width: 240px;
-                    margin: 0 auto;
-                }
-                .login-logo {
-                    display: none;
-                }
-                .login-logo img {
-                    width: 52px;
-                    height: 52px;
-                    border-radius: 16px;
-                    object-fit: cover;
-                    box-shadow: 0 22px 48px rgba(0, 0, 0, 0.32);
-                    border: 1px solid rgba(255,255,255,0.12);
-                }
-                .login-logo-text {
-                    display: grid;
-                    gap: 4px;
-                }
-                .brand-tag {
-                    font-size: 0.82rem;
-                    letter-spacing: 0.24em;
-                    text-transform: uppercase;
-                    color: #A497FF;
-                    font-weight: 700;
-                }
-                .login-title {
-                    font-size: clamp(1.5rem, 2.5vw, 2.1rem);
-                    color: #F4F7FF;
-                    margin: 16px 0 18px;
-                    letter-spacing: -0.03em;
-                    font-weight: 700;
-                    line-height: 1.1;
-                    max-width: 100%;
-                }
-                .login-heading {
-                    display: none;
-                }
-                .login-tagline {
-                    display: none;
-                }
-                .login-keywords {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 14px;
-                }
-                .login-keyword {
-                    position: relative;
-                    display: flex;
-                    align-items: center;
-                    gap: 14px;
-                    padding: 16px 18px;
-                    border-radius: 22px;
-                    border: 1px solid rgba(255, 255, 255, 0.10);
-                    background: rgba(255, 255, 255, 0.05);
-                    color: #E8F4FF;
-                    font-size: 0.98rem;
-                    font-weight: 600;
-                    cursor: pointer;
-                    overflow: hidden;
-                    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
-                    transition: transform 0.24s ease, border-color 0.24s ease, box-shadow 0.24s ease, background 0.24s ease;
-                }
-                .login-keyword:hover {
-                    background: rgba(255, 255, 255, 0.11);
-                    border-color: rgba(124, 220, 255, 0.32);
-                    box-shadow: 0 18px 36px rgba(0, 0, 0, 0.18);
-                    transform: translateY(-2px) scale(1.01);
-                }
-                .feature-description {
-                    display: none;
-                    margin-top: 20px;
-                    padding: 20px;
-                    border-radius: 18px;
-                    background: rgba(255, 255, 255, 0.06);
-                    border: 1px solid rgba(255, 255, 255, 0.08);
-                    color: #D9E4FF;
-                    font-size: 0.9rem;
-                    line-height: 1.7;
-                }
-                .feature-description.active {
-                    display: block;
-                }
-                .feature-description ul {
-                    margin: 10px 0;
-                    padding-left: 20px;
-                }
-                .feature-description li {
-                    margin-bottom: 8px;
-                }
-                #feature-popup-card {
-                    position: relative;
-                    margin-top: 24px;
-                    padding: 22px 24px;
-                    background: rgba(12, 24, 40, 0.95);
-                    border: 1px solid rgba(124, 92, 255, 0.24);
-                    border-radius: 20px;
-                    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35);
-                    opacity: 0;
-                    transform: translateX(-110%);
-                    transition: transform 0.7s ease, opacity 0.7s ease;
-                    display: flex;
-                    align-items: center;
-                    justify-content: flex-start;
-                    overflow: hidden;
-                    pointer-events: none;
-                }
-                #feature-popup-card.show {
-                    opacity: 1;
-                    transform: translateX(0);
-                    pointer-events: auto;
-                }
-                #feature-popup-content {
-                    color: #E8F4FF;
-                    font-size: 1rem;
-                    font-weight: 600;
-                    line-height: 1.5;
-                    white-space: normal;
-                    max-width: 100%;
-                }
-                #feature-popup-content span {
-                    display: inline-block;
-                    animation: slideText 12s linear infinite;
-                }
-                @keyframes slideText {
-                    from {
-                        transform: translateX(100%);
-                    }
-                    to {
-                        transform: translateX(-100%);
-                    }
-                }
-                .dock-ripple {
-                    position: absolute;
-                    border-radius: 999px;
-                    background: rgba(190, 240, 255, 0.36);
-                    transform: translate(-50%, -50%) scale(0);
-                    animation: ripple 0.7s ease-out forwards;
-                    pointer-events: none;
-                }
-                @keyframes ripple {
-                    to {
-                        opacity: 0;
-                        transform: translate(-50%, -50%) scale(4.5);
-                    }
-                }
-            </style>
-            <div class="login-left-panel">
-                <div class="login-left-content">
-                    <div style="margin:0 8px 10px;color:rgba(222,239,255,0.68);font-size:0.72rem;letter-spacing:0.22em;text-transform:uppercase;">Workspace</div>
-                    <div class="login-title">🧠 IntelliDoc AI– Smart Document Assistant</div>
-                    <div class="login-logo">
-                        __LOGO_IMG__
-                        <div class="login-logo-text">
-                            <div class="brand-tag">Mercedes-Benz Intelligence</div>
-                            <div style="font-size:1.2rem;color:#DDE4FF;">AI Control Room</div>
-                        </div>
-                    </div>
-                    <div class="login-heading">Where Documents Become Intelligence</div>
-                    <div class="login-tagline">A premium command center for AI-powered document analysis, comparison, automation, and insights.</div>
-                    <div class="login-keywords" id="login-keywords-container">
-                        <span class="login-keyword" data-feature="chat">💬 Chat</span>
-                        <span class="login-keyword" data-feature="dashboard">📊 Dashboard</span>
-                        <span class="login-keyword" data-feature="compare">🔄 Compare</span>
-                        <span class="login-keyword" data-feature="capl">🚗 CAPL</span>
-                    </div>
-                    <div id="feature-popup-card">
-                        <div id="feature-popup-content">Click a feature to preview it here.</div>
-                    </div>
-                    <div id="feature-descriptions">
-                        <div id="chat-description" class="feature-description">
-                            <strong>🧠 AI Chat (RAG System)</strong>
-                            <ul>
-                                <li>Ask questions about uploaded files</li>
-                                <li>Context-aware responses</li>
-                                <li>Multi-file semantic understanding</li>
-                            </ul>
-                        </div>
-                        <div id="dashboard-description" class="feature-description">
-                            <strong>📊 Dashboard & Analytics</strong>
-                            <ul>
-                                <li>Excel/CSV visualization</li>
-                                <li>Trends & statistics</li>
-                                <li>Interactive charts (Plotly)</li>
-                                <li>Export insights</li>
-                            </ul>
-                        </div>
-                        <div id="compare-description" class="feature-description">
-                            <strong>🔄 File Comparison</strong>
-                            <ul>
-                                <li>Compare 2+ files</li>
-                                <li>Word-level diff</li>
-                                <li>Inline visual comparison</li>
-                                <li>Export results to Excel</li>
-                            </ul>
-                        </div>
-                        <div id="capl-description" class="feature-description">
-                            <strong>🚗 CAPL Script Analyzer</strong>
-                            <ul>
-                                <li>Upload or create .can files</li>
-                                <li>Built-in CAPL editor</li>
-                                <li>Code analysis & issue detection</li>
-                                <li>Suggestions & improvements</li>
-                            </ul>
-                            <strong style="display: block; margin-top: 12px;">🤖 AI CAPL Auto-Fix</strong>
-                            <div style="margin-top: 8px; padding: 8px; background: rgba(0,194,255,0.1); border-radius: 8px;">Analyze → Suggest Fix → Apply Fix → Save</div>
-                        </div>
+        st.markdown(f'''
+            <div class="login-brand-panel">
+                <div class="brand-crest">
+                    {logo_img if logo_img else '<div class="brand-icon">🛡️</div>'}
+                    <div class="brand-caption">
+                        <div class="brand-title">Mercedes-Benz Intelligence</div>
+                        <div class="brand-name">IntelliDoc AI</div>
                     </div>
                 </div>
+                <h1 class="login-value">Enterprise document intelligence, delivered beautifully.</h1>
+                <p class="login-description">A secure and modern access experience for your AI document control room.</p>
+                <div class="login-feature-list">
+                    <div class="login-feature"><div class="icon">💬</div><div><strong>AI Chat</strong><span>Context-aware answers from documents.</span></div></div>
+                    <div class="login-feature"><div class="icon">📊</div><div><strong>Smart Dashboard</strong><span>Fast insights and visual summaries.</span></div></div>
+                    <div class="login-feature"><div class="icon">🔒</div><div><strong>Secure Workspace</strong><span>Designed for enterprise-ready login flows.</span></div></div>
+                </div>
+                <div class="login-note">Use your official credentials to access the IntelliDoc AI workspace. This login page is designed to look polished, trusted, and production-ready.</div>
             </div>
-            
-            <script>
-            (function() {
-                const dock = document.querySelector('.login-left-panel');
-                if (dock) {
-                    dock.addEventListener('mousemove', function(event) {
-                        const rect = dock.getBoundingClientRect();
-                        dock.style.setProperty('--mx', (event.clientX - rect.left) + 'px');
-                        dock.style.setProperty('--my', (event.clientY - rect.top) + 'px');
-                    });
-                }
-                let hideFeatureTimer = null;
-                function showFeature(feature) {
-                    const selected = document.getElementById(feature + '-description');
-                    if (!selected) return;
-                    const titleElement = selected.querySelector('strong');
-                    const title = titleElement ? titleElement.textContent : '';
-                    const items = Array.from(selected.querySelectorAll('li')).map(li => li.textContent.trim());
-                    let popupText = '<strong>' + title + '</strong><br>' + items.join(' • ');
-                    const popup = document.getElementById('feature-popup-card');
-                    const content = document.getElementById('feature-popup-content');
-                    if (popup && content) {
-                        content.innerHTML = popupText;
-                        popup.classList.remove('show');
-                        void popup.offsetWidth;
-                        popup.classList.add('show');
-                        if (hideFeatureTimer) {
-                            clearTimeout(hideFeatureTimer);
-                        }
-                        hideFeatureTimer = setTimeout(() => {
-                            popup.classList.remove('show');
-                        }, 2500);
-                    }
-                }
-                const keywords = document.querySelectorAll('.login-keyword');
-                keywords.forEach(keyword => {
-                    keyword.addEventListener('click', function(e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        const rect = this.getBoundingClientRect();
-                        const ripple = document.createElement('span');
-                        ripple.className = 'dock-ripple';
-                        ripple.style.left = (e.clientX - rect.left) + 'px';
-                        ripple.style.top = (e.clientY - rect.top) + 'px';
-                        ripple.style.width = ripple.style.height = Math.max(rect.width, rect.height) + 'px';
-                        this.appendChild(ripple);
-                        ripple.addEventListener('animationend', function() {
-                            ripple.remove();
-                        });
-                        const feature = this.getAttribute('data-feature');
-                        showFeature(feature);
-                    });
-                });
-            })();
-            </script>
-            """
-        html_feature_panel = html_feature_panel.replace("__LOGO_IMG__", logo_img)
-        components.html(html_feature_panel, height=660, scrolling=False)
-        st.markdown('</div>', unsafe_allow_html=True)
+        ''', unsafe_allow_html=True)
 
-    continue_clicked = False
     with right_col:
         st.markdown('<div class="login-form-panel">', unsafe_allow_html=True)
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        st.markdown(
-            '<div class="login-access-shell">'
-            '  <h2 class="login-access-title">Secure Access</h2>'
-            '  <p class="login-access-subtitle">Sign in to continue to IntelliDoc AI.</p>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-        st.markdown('<div class="glass-input-label">👤 Username</div>', unsafe_allow_html=True)
+        st.markdown('<div class="login-form-panel-inner login-form-card">', unsafe_allow_html=True)
+        st.markdown('<h2 class="form-title">Welcome back</h2><div class="form-subtitle">Sign in to continue to IntelliDoc AI.</div>', unsafe_allow_html=True)
+        st.markdown('<div class="login-field-label">👤 Username</div>', unsafe_allow_html=True)
         login_username = st.text_input(
             "",
             key="login_username",
             placeholder="Enter your username",
             label_visibility="collapsed",
         )
-
-        st.markdown('<div class="glass-input-label">🔒 Password <span style="font-size:0.88rem;color:#7C5CFF;">(optional)</span></div>', unsafe_allow_html=True)
+        st.markdown('<div class="login-field-label">🔒 Password <span style="font-size:0.88rem;color:#7C5CFF;">(optional)</span></div>', unsafe_allow_html=True)
         login_password = st.text_input(
             "",
             type="password",
@@ -4352,16 +4307,9 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             placeholder="Enter your password",
             label_visibility="collapsed",
         )
-
         st.markdown('<div class="glass-button-spacer"></div>', unsafe_allow_html=True)
         continue_clicked = st.button("Access →", key="login_access_btn")
-
-        st.markdown(
-            """
-                <div class="login-subtle">Standard users may leave the password empty.</div>
-            """,
-            unsafe_allow_html=True,
-        )
+        st.markdown('<div class="login-hint">Standard users may leave the password empty.</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
