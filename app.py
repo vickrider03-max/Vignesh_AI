@@ -3753,18 +3753,18 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             }
 
             .form-title {
-                margin: 0 0 10px;
+                margin: 0 0 8px;
                 color: #F7FAFF;
-                font-size: clamp(2rem, 2.6vw, 2.45rem);
-                line-height: 1.04;
+                font-size: clamp(1.7rem, 2vw, 2.1rem);
+                line-height: 1.05;
                 font-weight: 850;
             }
 
             .form-subtitle {
-                margin: 0 0 22px;
+                margin: 0 0 16px;
                 color: #B5C4E1;
-                font-size: 0.96rem;
-                line-height: 1.7;
+                font-size: 0.9rem;
+                line-height: 1.5;
             }
 
             .login-field-label {
