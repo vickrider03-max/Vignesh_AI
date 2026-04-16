@@ -3575,7 +3575,12 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 position: relative;
                 z-index: 1;
                 height: 100%;
-                padding: 28px 20px 18px 8px;
+                padding: 32px 28px 24px 24px;
+                background: rgba(7, 13, 24, 0.95);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 30px;
+                box-shadow: 0 28px 90px rgba(0, 0, 0, 0.35);
+                backdrop-filter: blur(16px);
             }
             .login-dock-host {
                 position: relative;
@@ -3698,23 +3703,26 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             .glass-card .stTextInput > label + div {
                 margin-top: 0 !important;
             }
-            .glass-card .stTextInput input {
-                background: rgba(255, 255, 255, 0.08) !important;
-                border: 1px solid rgba(255, 255, 255, 0.14) !important;
+            .glass-card .stTextInput input,
+            .login-form-panel .stTextInput input {
+                background: rgba(255, 255, 255, 0.05) !important;
+                border: 1px solid rgba(255, 255, 255, 0.12) !important;
                 color: #F4F7FF !important;
                 border-radius: 18px !important;
                 padding: 18px 18px !important;
                 min-height: 52px !important;
-                box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04) !important;
+                box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05) !important;
                 transition: all 0.2s ease !important;
             }
-            .glass-card .stTextInput input:focus {
-                border-color: rgba(124, 92, 255, 0.8) !important;
-                box-shadow: 0 0 0 6px rgba(124, 92, 255, 0.12) !important;
+            .glass-card .stTextInput input:focus,
+            .login-form-panel .stTextInput input:focus {
+                border-color: rgba(124, 92, 255, 0.9) !important;
+                box-shadow: 0 0 0 6px rgba(124, 92, 255, 0.18) !important;
                 outline: none !important;
             }
-            .glass-card .stTextInput input::placeholder {
-                color: rgba(244, 247, 255, 0.62) !important;
+            .glass-card .stTextInput input::placeholder,
+            .login-form-panel .stTextInput input::placeholder {
+                color: rgba(244, 247, 255, 0.52) !important;
             }
             .login-access-shell {
                 position: relative;
@@ -3758,25 +3766,28 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 margin-bottom: 10px;
                 letter-spacing: 0.01em;
             }
-            .glass-input-label + div .stTextInput input {
-                background: rgba(255, 255, 255, 0.08) !important;
-                border: 1px solid rgba(124, 92, 255, 0.32) !important;
+            .glass-input-label + div .stTextInput input,
+            .login-form-panel .stTextInput input {
+                background: rgba(255, 255, 255, 0.05) !important;
+                border: 1px solid rgba(124, 92, 255, 0.22) !important;
                 color: #F4F7FF !important;
                 border-radius: 18px !important;
                 padding: 18px 20px !important;
                 min-height: 56px !important;
-                box-shadow: 0 8px 32px rgba(124, 92, 255, 0.08), inset 0 2px 8px rgba(255,255,255,0.06) !important;
+                box-shadow: 0 8px 26px rgba(12, 18, 34, 0.32), inset 0 2px 8px rgba(255,255,255,0.06) !important;
                 transition: all 0.28s ease !important;
                 backdrop-filter: blur(8px) !important;
             }
-            .glass-input-label + div .stTextInput input:focus {
-                border-color: rgba(124, 92, 255, 0.76) !important;
-                box-shadow: 0 16px 48px rgba(124, 92, 255, 0.20), inset 0 2px 8px rgba(255,255,255,0.08) !important;
+            .glass-input-label + div .stTextInput input:focus,
+            .login-form-panel .stTextInput input:focus {
+                border-color: rgba(124, 92, 255, 0.84) !important;
+                box-shadow: 0 16px 48px rgba(124, 92, 255, 0.22), inset 0 2px 8px rgba(255,255,255,0.08) !important;
                 background: rgba(255, 255, 255, 0.12) !important;
                 outline: none !important;
             }
-            .glass-input-label + div .stTextInput input::placeholder {
-                color: rgba(244, 247, 255, 0.48) !important;
+            .glass-input-label + div .stTextInput input::placeholder,
+            .login-form-panel .stTextInput input::placeholder {
+                color: rgba(244, 247, 255, 0.52) !important;
             }
             .feature-cards-container {
                 display: grid;
