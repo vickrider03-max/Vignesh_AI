@@ -3552,17 +3552,17 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             }
 
             .login-shell {
-                max-width: 1180px;
-                margin: 24px auto 12px;
-                padding: 10px;
+                max-width: 1100px;
+                margin: 8px auto 0;
+                padding: 4px;
             }
 
             .login-wrap {
                 position: relative;
                 display: grid;
                 grid-template-columns: 1.08fr 0.92fr;
-                gap: 22px;
-                border-radius: 30px;
+                gap: 14px;
+                border-radius: 24px;
                 overflow: hidden;
                 background: rgba(8, 12, 24, 0.78);
                 border: 1px solid rgba(255,255,255,0.08);
@@ -3589,7 +3589,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             }
 
             .login-left {
-                padding: 34px 30px;
+                padding: 22px 22px;
                 background:
                     linear-gradient(180deg, rgba(9,16,34,0.96), rgba(7,11,22,0.96));
                 display: flex;
@@ -3657,8 +3657,8 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             }
 
             .hero-title {
-                margin: 0 0 14px;
-                font-size: clamp(2.1rem, 3vw, 3rem);
+                margin: 0 0 10px;
+                font-size: clamp(1.7rem, 2.2vw, 2.3rem);
                 line-height: 1.05;
                 font-weight: 850;
                 color: #F7FAFF;
@@ -3676,13 +3676,13 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             .feature-grid {
                 display: grid;
                 grid-template-columns: 1fr 1fr;
-                gap: 14px;
-                margin-top: 28px;
+                gap: 10px;
+                margin-top: 18px;
             }
 
             .feature-card {
-                padding: 16px;
-                border-radius: 18px;
+                padding: 12px;
+                border-radius: 14px;
                 background: rgba(255,255,255,0.045);
                 border: 1px solid rgba(255,255,255,0.08);
             }
@@ -3713,14 +3713,14 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             }
 
             .hero-footer {
-                margin-top: 26px;
-                padding: 18px 20px;
-                border-radius: 18px;
+                margin-top: 16px;
+                padding: 12px 14px;
+                border-radius: 14px;
                 background: rgba(255,255,255,0.04);
                 border: 1px solid rgba(255,255,255,0.08);
                 color: #AEBBDA;
-                font-size: 0.92rem;
-                line-height: 1.65;
+                font-size: 0.86rem;
+                line-height: 1.45;
             }
 
             .login-right {
@@ -3734,9 +3734,9 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
 
             .form-shell {
                 width: 100%;
-                max-width: 430px;
-                padding: 30px 26px;
-                border-radius: 24px;
+                max-width: 400px;
+                padding: 22px 20px;
+                border-radius: 20px;
                 background: rgba(255,255,255,0.065);
                 border: 1px solid rgba(255,255,255,0.14);
                 box-shadow: 0 22px 60px rgba(0,0,0,0.28);
@@ -3823,12 +3823,12 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             .login-meta {
                 display: grid;
                 grid-template-columns: repeat(3, 1fr);
-                gap: 10px;
-                margin-top: 18px;
+                gap: 8px;
+                margin-top: 12px;
             }
 
             .login-meta-card {
-                padding: 12px;
+                padding: 10px;
                 border-radius: 14px;
                 background: rgba(255,255,255,0.045);
                 border: 1px solid rgba(255,255,255,0.08);
@@ -3876,7 +3876,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                     padding: 24px 18px;
                 }
                 .login-right {
-                    padding: 18px;
+                    padding: 18px 18px;
                 }
                 .form-shell {
                     padding: 24px 18px;
