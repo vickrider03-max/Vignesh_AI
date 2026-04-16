@@ -4021,16 +4021,16 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         <style>
             .login-unified-card {
                 position: relative;
-                max-width: 1120px;
-                margin: 48px auto;
+                max-width: 1040px;
+                margin: 20px auto;
                 display: grid;
-                grid-template-columns: 1.05fr 0.95fr;
-                gap: 28px;
+                grid-template-columns: 1.15fr 0.85fr;
+                gap: 20px;
                 padding: 0;
-                border-radius: 32px;
+                border-radius: 28px;
                 background: rgba(8, 12, 24, 0.96);
                 border: 1px solid rgba(255, 255, 255, 0.08);
-                box-shadow: 0 40px 120px rgba(0, 0, 0, 0.42);
+                box-shadow: 0 36px 96px rgba(0, 0, 0, 0.34);
                 overflow: hidden;
             }
             .login-unified-card::before {
@@ -4046,31 +4046,31 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             .login-form-panel {
                 position: relative;
                 z-index: 1;
-                min-height: 620px;
+                min-height: auto;
             }
             .login-brand-panel {
-                padding: 54px 44px;
+                padding: 34px 30px;
                 display: flex;
                 flex-direction: column;
                 justify-content: center;
-                gap: 28px;
+                gap: 18px;
                 background: linear-gradient(180deg, rgba(8, 16, 34, 0.96), rgba(6, 10, 20, 0.94));
             }
             .brand-crest {
                 display: flex;
                 align-items: center;
-                gap: 16px;
+                gap: 14px;
             }
             .brand-crest img,
             .brand-icon {
-                width: 52px;
-                height: 52px;
-                border-radius: 18px;
+                width: 48px;
+                height: 48px;
+                border-radius: 16px;
                 display: grid;
                 place-items: center;
-                font-size: 1.3rem;
+                font-size: 1.2rem;
                 background: rgba(255, 255, 255, 0.07);
-                box-shadow: 0 16px 36px rgba(0, 0, 0, 0.24);
+                box-shadow: 0 14px 30px rgba(0, 0, 0, 0.22);
                 border: 1px solid rgba(255, 255, 255, 0.12);
             }
             .brand-caption {
@@ -4078,119 +4078,119 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 gap: 4px;
             }
             .brand-title {
-                font-size: 0.82rem;
+                font-size: 0.78rem;
                 letter-spacing: 0.24em;
                 text-transform: uppercase;
                 color: #A497FF;
                 font-weight: 700;
             }
             .brand-name {
-                font-size: 1.55rem;
+                font-size: 1.45rem;
                 line-height: 1.05;
                 color: #F4F7FF;
                 font-weight: 800;
             }
             .login-value {
                 margin: 0;
-                font-size: clamp(2.4rem, 4vw, 3.4rem);
-                line-height: 1.02;
+                font-size: clamp(2rem, 3vw, 2.8rem);
+                line-height: 1.04;
                 color: #F4F7FF;
-                max-width: 520px;
+                max-width: 480px;
             }
             .login-description {
                 margin: 0;
                 color: #B9C6E0;
-                font-size: 1rem;
-                line-height: 1.75;
-                max-width: 460px;
+                font-size: 0.98rem;
+                line-height: 1.7;
+                max-width: 420px;
             }
             .login-feature-list {
                 display: grid;
-                gap: 14px;
+                gap: 12px;
             }
             .login-feature {
                 display: grid;
-                grid-template-columns: 44px 1fr;
-                gap: 14px;
+                grid-template-columns: 34px 1fr;
+                gap: 12px;
                 align-items: start;
-                padding: 18px 16px;
-                border-radius: 18px;
+                padding: 12px 14px;
+                border-radius: 16px;
                 background: rgba(255, 255, 255, 0.04);
                 border: 1px solid rgba(255, 255, 255, 0.08);
             }
             .login-feature .icon {
-                width: 44px;
-                height: 44px;
-                border-radius: 14px;
+                width: 36px;
+                height: 36px;
+                border-radius: 12px;
                 display: grid;
                 place-items: center;
                 background: rgba(124, 92, 255, 0.18);
                 color: #E7F1FF;
-                font-size: 1.1rem;
+                font-size: 1rem;
             }
             .login-feature strong {
                 display: block;
-                margin-bottom: 4px;
+                margin-bottom: 3px;
                 color: #F4F7FF;
-                font-size: 0.98rem;
+                font-size: 0.96rem;
                 font-weight: 700;
             }
             .login-feature span {
                 color: #BCC8E4;
-                font-size: 0.94rem;
-                line-height: 1.6;
+                font-size: 0.92rem;
+                line-height: 1.55;
             }
             .login-note {
-                padding: 20px 22px;
+                padding: 18px 20px;
                 border-radius: 18px;
                 background: rgba(255, 255, 255, 0.04);
                 border: 1px solid rgba(255, 255, 255, 0.08);
                 color: #B8C6E0;
-                font-size: 0.95rem;
-                line-height: 1.7;
-                max-width: 500px;
+                font-size: 0.92rem;
+                line-height: 1.6;
+                max-width: 420px;
             }
             .login-form-panel {
-                padding: 54px 40px;
+                padding: 32px 30px;
                 display: flex;
                 align-items: center;
             }
             .login-form-panel-inner {
                 width: 100%;
-                padding: 36px 32px;
-                border-radius: 28px;
+                padding: 28px 24px;
+                border-radius: 24px;
                 background: rgba(255, 255, 255, 0.05);
                 border: 1px solid rgba(255, 255, 255, 0.14);
-                box-shadow: 0 30px 80px rgba(0, 0, 0, 0.22);
+                box-shadow: 0 24px 68px rgba(0, 0, 0, 0.22);
                 backdrop-filter: blur(18px);
             }
             .form-title {
-                margin: 0 0 10px;
+                margin: 0 0 8px;
                 color: #F9FBFF;
-                font-size: clamp(2rem, 3vw, 2.4rem);
+                font-size: clamp(1.9rem, 3vw, 2.2rem);
                 font-weight: 800;
                 line-height: 1.05;
             }
             .form-subtitle {
-                margin: 0 0 28px;
+                margin: 0 0 20px;
                 color: #B7C5E1;
-                font-size: 1rem;
-                line-height: 1.8;
+                font-size: 0.98rem;
+                line-height: 1.7;
             }
             .login-field-label {
                 display: flex;
                 align-items: center;
                 gap: 10px;
                 color: #B8C4DD;
-                font-size: 0.95rem;
+                font-size: 0.94rem;
                 margin-bottom: 10px;
                 font-weight: 600;
             }
             .login-hint {
-                margin-top: 18px;
+                margin-top: 14px;
                 color: #95A4C6;
-                font-size: 0.94rem;
-                line-height: 1.7;
+                font-size: 0.92rem;
+                line-height: 1.6;
             }
             .login-form-card .stTextInput > label {
                 display: none !important;
@@ -4249,15 +4249,15 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             }
             @media (max-width: 960px) {
                 .login-unified-card { grid-template-columns: 1fr; }
-                .login-form-panel, .login-brand-panel { min-height: auto; padding: 38px 28px; }
-                .login-form-panel-inner { padding: 30px 22px; }
+                .login-form-panel, .login-brand-panel { min-height: auto; padding: 28px 20px; }
+                .login-form-panel-inner { padding: 26px 20px; }
             }
             @media (max-width: 640px) {
-                .login-unified-card { margin: 28px 16px; gap: 20px; }
-                .login-brand-panel { padding: 28px 22px; }
-                .login-value { font-size: 2rem; }
-                .brand-name { font-size: 1.35rem; }
-                .login-form-panel-inner { padding: 24px 18px; }
+                .login-unified-card { margin: 20px 12px; gap: 18px; }
+                .login-brand-panel { padding: 22px 18px; }
+                .login-value { font-size: 1.85rem; }
+                .brand-name { font-size: 1.3rem; }
+                .login-form-panel-inner { padding: 22px 16px; }
             }
         </style>
         """,
