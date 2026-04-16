@@ -1300,7 +1300,7 @@ else:
                 unsafe_allow_html=True,
             )
     with col2:
-        st.markdown("### 🧠 IntelliDoc AI– Smart Document Assistant")
+        pass
 
 # -------------------------------
 # SESSION STATE INITIALIZATION
@@ -4064,6 +4064,15 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                     color: #A497FF;
                     font-weight: 700;
                 }
+                .login-title {
+                    font-size: clamp(1.5rem, 2.5vw, 2.1rem);
+                    color: #F4F7FF;
+                    margin: 16px 0 18px;
+                    letter-spacing: -0.03em;
+                    font-weight: 700;
+                    line-height: 1.1;
+                    max-width: 100%;
+                }
                 .login-heading {
                     display: none;
                 }
@@ -4179,6 +4188,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             <div class="login-left-panel">
                 <div class="login-left-content">
                     <div style="margin:0 8px 10px;color:rgba(222,239,255,0.68);font-size:0.72rem;letter-spacing:0.22em;text-transform:uppercase;">Workspace</div>
+                    <div class="login-title">🧠 IntelliDoc AI– Smart Document Assistant</div>
                     <div class="login-logo">
                         __LOGO_IMG__
                         <div class="login-logo-text">
