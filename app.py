@@ -3541,496 +3541,24 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
     st.markdown(
         """
         <style>
-            body {
-                background: #0B0F1A !important;
-                color: #E6EAF2 !important;
-            }
-            .login-unified-card {
-                position: relative;
-                max-width: 1220px;
-                margin: 32px auto;
-                padding: 28px;
-                border-radius: 36px;
-                overflow: hidden;
-                background: linear-gradient(180deg, #090b12 0%, #0f1624 100%);
-                border: 1px solid rgba(255, 255, 255, 0.06);
-                box-shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
-            }
-            .login-unified-card::before {
-                content: "";
-                position: absolute;
-                inset: 0;
-                background: radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.04), transparent 28%);
-                pointer-events: none;
-            }
-            .login-unified-card::after {
-                content: "";
-                position: absolute;
-                inset: 1px;
-                border-radius: 35px;
-                border: 1px solid rgba(255, 255, 255, 0.04);
-                pointer-events: none;
-            }
-            .login-form-panel {
-                position: relative;
-                z-index: 1;
-                height: 100%;
-                padding: 32px 28px 24px 24px;
-                background: rgba(7, 13, 24, 0.95);
-                border: 1px solid rgba(255, 255, 255, 0.08);
-                border-radius: 30px;
-                box-shadow: 0 28px 90px rgba(0, 0, 0, 0.35);
-                backdrop-filter: blur(16px);
-            }
-            .login-dock-host {
-                position: relative;
-                z-index: 1;
-            }
-            .login-left-panel {
-                position: relative;
-                overflow: hidden;
-                border-radius: 32px;
-                padding: 40px 36px;
-                background: #08101d;
-                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.32);
-                border: 1px solid rgba(255, 255, 255, 0.05);
-            }
-            .login-left-panel::before {
-                content: '';
-                position: absolute;
-                inset: 0;
-                background: radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.04), transparent 22%);
-                pointer-events: none;
-            }
-            .login-left-content {
-                position: relative;
-                z-index: 1;
-                max-width: 460px;
-            }
-            .login-logo {
-                display: flex;
-                align-items: center;
-                gap: 14px;
-                margin-bottom: 28px;
-            }
-            .login-logo img {
-                width: 52px;
-                height: 52px;
-                border-radius: 16px;
-                object-fit: cover;
-                box-shadow: 0 22px 48px rgba(0, 0, 0, 0.32);
-                border: 1px solid rgba(255,255,255,0.12);
-            }
-            .login-logo-text {
-                display: grid;
-                gap: 4px;
-            }
-            .login-logo-text .brand-tag {
-                font-size: 0.82rem;
-                letter-spacing: 0.24em;
-                text-transform: uppercase;
-                color: #A497FF;
-                font-weight: 700;
-            }
-            .login-heading {
-                font-size: clamp(2.4rem, 3vw, 3.4rem);
-                line-height: 1.03;
-                margin-bottom: 18px;
-                color: #F7F9FF;
-                letter-spacing: -0.04em;
-            }
-            .login-tagline {
-                color: #B8C4DD;
-                font-size: 1rem;
-                line-height: 1.75;
-                max-width: 420px;
-                margin-bottom: 32px;
-            }
-            .login-keywords {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 12px;
-            }
-            .login-keyword {
-                padding: 10px 14px;
-                border-radius: 999px;
-                border: 1px solid rgba(124, 92, 255, 0.24);
-                background: rgba(124, 92, 255, 0.08);
-                color: #D9E1FF;
-                font-size: 0.92rem;
-            }
-            .glass-card {
-                position: relative;
-                padding: 40px 34px;
-                border-radius: 30px;
-                background: rgba(255, 255, 255, 0.06);
-                backdrop-filter: blur(24px);
-                box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28);
-                border: 1px solid rgba(255, 255, 255, 0.12);
-            }
-            .glass-card h2 {
-                margin: 0;
-                color: #F4F7FF;
-                font-size: 2.05rem;
-                letter-spacing: -0.03em;
-            }
-            .glass-card p {
-                margin: 14px 0 26px;
-                color: #A5B1D6;
-                font-size: 1rem;
-                line-height: 1.75;
-            }
-            .glass-input-label {
-                display: flex;
-                align-items: center;
-                gap: 10px;
-                color: #A9B5D2;
-                font-size: 0.95rem;
-                margin-bottom: 8px;
-            }
-            .glass-card .stTextInput > label {
-                display: none !important;
+            html, body, [data-testid="stAppViewContainer"] {
+                min-height: 100vh !important;
                 margin: 0 !important;
                 padding: 0 !important;
-                height: 0 !important;
-                width: 0 !important;
-                overflow: hidden !important;
+                background: #070B16 !important;
             }
-            .glass-card .stTextInput {
-                margin-top: 0 !important;
-                padding-top: 0 !important;
-            }
-            .glass-card .stTextInput > label + div {
-                margin-top: 0 !important;
-            }
-            .glass-card .stTextInput,
-            .login-form-panel .stTextInput {
-                background: transparent !important;
-                margin-top: 0 !important;
-                padding-top: 0 !important;
-            }
-            .glass-card .stTextInput > label + div,
-            .login-form-panel .stTextInput > label + div {
-                background: rgba(255, 255, 255, 0.05) !important;
-                border: 1px solid rgba(255, 255, 255, 0.12) !important;
-                border-radius: 18px !important;
-                padding: 0 !important;
-                box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04) !important;
-            }
-            .glass-card .stTextInput input,
-            .login-form-panel .stTextInput input,
-            input[id$="login_username"],
-            input[id$="login_password"] {
-                background: rgba(255, 255, 255, 0.05) !important;
-                border: 1px solid rgba(255, 255, 255, 0.12) !important;
-                color: #F4F7FF !important;
-                border-radius: 18px !important;
-                padding: 18px 18px !important;
-                min-height: 52px !important;
-                box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05) !important;
-                transition: all 0.2s ease !important;
-            }
-            .glass-card .stTextInput input:focus,
-            .login-form-panel .stTextInput input:focus,
-            input[id$="login_username"]:focus,
-            input[id$="login_password"]:focus {
-                border-color: rgba(124, 92, 255, 0.9) !important;
-                box-shadow: 0 0 0 6px rgba(124, 92, 255, 0.18) !important;
-                outline: none !important;
-            }
-            .glass-card .stTextInput input::placeholder,
-            .login-form-panel .stTextInput input::placeholder,
-            input[id$="login_username"]::placeholder,
-            input[id$="login_password"]::placeholder {
-                color: rgba(244, 247, 255, 0.52) !important;
-            }
-            .login-access-shell {
-                position: relative;
-                margin-bottom: 30px;
-                padding: 24px 22px;
-                border-radius: 24px;
-                background: rgba(14, 21, 38, 0.75);
-                backdrop-filter: blur(24px);
-                border: 1px solid rgba(124, 92, 255, 0.18);
-                box-shadow: 0 28px 80px rgba(10, 16, 34, 0.55);
-            }
-            .login-access-shell::before {
-                content: '';
-                position: absolute;
-                inset: -1px;
-                border-radius: inherit;
-                background: linear-gradient(135deg, rgba(0, 194, 255, 0.28), rgba(124, 92, 255, 0.32));
-                filter: blur(18px);
-                opacity: 0.75;
-                z-index: -1;
-            }
-            .login-access-title {
-                margin: 0 0 10px;
-                color: #F4F7FF;
-                font-size: clamp(1.85rem, 2.5vw, 2.15rem);
-                letter-spacing: -0.04em;
-                font-weight: 700;
-            }
-            .login-access-subtitle {
-                margin: 0;
-                color: #B8C4DD;
-                font-size: 0.96rem;
-                line-height: 1.7;
-            }
-            .glass-input-label {
-                display: flex;
-                align-items: center;
-                gap: 10px;
-                color: #B8C4DD;
-                font-size: 0.95rem;
-                margin-bottom: 10px;
-                letter-spacing: 0.01em;
-            }
-            .glass-input-label + div .stTextInput input,
-            .login-form-panel .stTextInput input {
-                background: rgba(255, 255, 255, 0.05) !important;
-                border: 1px solid rgba(124, 92, 255, 0.22) !important;
-                color: #F4F7FF !important;
-                border-radius: 18px !important;
-                padding: 18px 20px !important;
-                min-height: 56px !important;
-                box-shadow: 0 8px 26px rgba(12, 18, 34, 0.32), inset 0 2px 8px rgba(255,255,255,0.06) !important;
-                transition: all 0.28s ease !important;
-                backdrop-filter: blur(8px) !important;
-            }
-            .glass-input-label + div .stTextInput input:focus,
-            .login-form-panel .stTextInput input:focus {
-                border-color: rgba(124, 92, 255, 0.84) !important;
-                box-shadow: 0 16px 48px rgba(124, 92, 255, 0.22), inset 0 2px 8px rgba(255,255,255,0.08) !important;
-                background: rgba(255, 255, 255, 0.12) !important;
-                outline: none !important;
-            }
-            .glass-input-label + div .stTextInput input::placeholder,
-            .login-form-panel .stTextInput input::placeholder {
-                color: rgba(244, 247, 255, 0.52) !important;
-            }
-            .feature-cards-container {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 14px;
-                margin-top: 28px;
-            }
-            .feature-card {
-                position: relative;
-                padding: 18px 16px;
-                border-radius: 18px;
-                background: rgba(124, 92, 255, 0.08);
-                border: 1px solid rgba(124, 92, 255, 0.22);
-                box-shadow: 0 12px 32px rgba(124, 92, 255, 0.06);
-                cursor: pointer;
-                transition: all 0.28s ease;
-                text-align: center;
-                backdrop-filter: blur(10px);
-            }
-            .feature-card:hover {
-                background: rgba(124, 92, 255, 0.15);
-                border-color: rgba(124, 92, 255, 0.42);
-                box-shadow: 0 18px 48px rgba(124, 92, 255, 0.14);
-                transform: translateY(-2px);
-            }
-            .feature-card-icon {
-                font-size: 2rem;
-                margin-bottom: 8px;
-            }
-            .feature-card-title {
-                color: #E6EAF2;
-                font-size: 0.95rem;
-                font-weight: 600;
-                margin: 0;
-                letter-spacing: 0.2px;
-            }
-            .feature-cards-label {
-                color: #B8C4DD;
-                font-size: 0.9rem;
-                margin-bottom: 12px;
-                letter-spacing: 0.3px;
-                text-transform: uppercase;
-            }
-            .login-keyword {
-                padding: 10px 14px;
-                border-radius: 999px;
-                border: 1px solid rgba(124, 92, 255, 0.24);
-                background: rgba(124, 92, 255, 0.08);
-                color: #D9E1FF;
-                font-size: 0.92rem;
-                cursor: pointer;
-                transition: all 0.28s ease;
-            }
-            .login-keyword:hover {
-                background: rgba(124, 92, 255, 0.16);
-                border-color: rgba(124, 92, 255, 0.42);
-                box-shadow: 0 6px 20px rgba(124, 92, 255, 0.12);
-                transform: translateY(-1px);
-            }
-            .feature-description {
-                display: none;
-                margin-top: 20px;
-                padding: 20px;
-                border-radius: 18px;
-                background: rgba(124, 92, 255, 0.08);
-                border: 1px solid rgba(124, 92, 255, 0.22);
-                color: #D9C8E8;
-                font-size: 0.9rem;
-                line-height: 1.7;
-            }
-            .feature-description.active {
-                display: block;
-            }
-            .feature-description ul {
-                margin: 10px 0;
-                padding-left: 20px;
-            }
-            .feature-description li {
-                margin-bottom: 8px;
-            }
-            #feature-popup-card {
-                position: relative;
-                margin-top: 24px;
-                padding: 22px 24px;
-                background: linear-gradient(135deg, #E5E3DD, #F9F6EE);
-                border: 1px solid rgba(145, 140, 132, 0.24);
-                border-radius: 20px;
-                box-shadow: 0 18px 40px rgba(26, 28, 34, 0.08);
-                opacity: 0;
-                transform: translateX(-110%);
-                visibility: hidden;
-                transition: transform 0.7s ease, opacity 0.7s ease, visibility 0.7s ease;
-                display: flex;
-                align-items: center;
-                justify-content: flex-start;
-                overflow: hidden;
-            }
-            #feature-popup-card.show {
-                opacity: 1;
-                transform: translateX(0);
-                visibility: visible;
-            }
-            #feature-popup-content {
-                color: #2F3136;
-                font-size: 1rem;
-                font-weight: 600;
-                line-height: 1.5;
-                white-space: normal;
-                max-width: 100%;
-            }
-            #feature-popup-content span {
-                display: inline-block;
-                animation: slideText 12s linear infinite;
-            }
-            @keyframes slideText {
-                from {
-                    transform: translateX(100%);
-                }
-                to {
-                    transform: translateX(-100%);
-                }
-            }
-            @keyframes slideInUp {
-                from {
-                    opacity: 0;
-                    transform: translateY(10px);
-                }
-                to {
-                    opacity: 1;
-                    transform: translateY(0);
-                }
-            }
-            .glass-button-spacer + div .stButton > button {
-                width: 100% !important;
-                border-radius: 18px !important;
-                padding: 16px 0 !important;
-                font-size: 1rem !important;
-                font-weight: 700 !important;
-                color: #F4F7FF !important;
-                background: linear-gradient(135deg, #1a2640 0%, #25334f 100%) !important;
-                border: 1px solid rgba(124, 92, 255, 0.26) !important;
-                box-shadow: 0 18px 45px rgba(0, 0, 0, 0.24) !important;
-                transition: transform 0.22s ease, box-shadow 0.22s ease, background 0.22s ease !important;
-            }
-            .glass-button-spacer + div .stButton > button:hover {
-                transform: translateY(-1px) !important;
-                background: linear-gradient(135deg, #273353 0%, #324060 100%) !important;
-                box-shadow: 0 22px 55px rgba(0, 0, 0, 0.28) !important;
-            }
-            .glass-button-spacer + div .stButton > button:focus {
-                outline: none !important;
-                box-shadow: 0 0 0 4px rgba(124, 92, 255, 0.14) !important;
-            }
-            .login-access-note {
-                color: #96A6D4;
-                font-size: 0.92rem;
-                margin-top: 18px;
-                line-height: 1.65;
-            }
-            .login-subtle {
-                color: #8D9CC9;
-                font-size: 0.93rem;
-                margin-top: 18px;
-                line-height: 1.7;
-            }
-            .login-help {
-                margin-top: 22px;
-                font-size: 0.95rem;
-                color: #BAC8E8;
-            }
-            .login-help a {
-                color: #7C5CFF;
-                text-decoration: none;
-                font-weight: 600;
-            }
-            .login-help a:hover {
-                text-decoration: underline;
-            }
-            .login-expander > button {
-                width: 100% !important;
-                background: rgba(255,255,255,0.06) !important;
-                color: #E6EAF2 !important;
-                border: 1px solid rgba(255,255,255,0.12) !important;
-            }
-            @media (max-width: 980px) {
-                .login-unified-card {padding: 20px; border-radius: 28px;}
-                .login-form-panel {padding: 18px 8px 8px;}
-                .login-left-panel, .glass-card {border-radius: 24px;}
-                .login-left-panel {padding: 32px 24px;}
-                .glass-card {padding: 32px 24px;}
-                .login-heading {font-size: 2.2rem;}
-                .login-tagline {font-size: 0.95rem;}
-            }
-            @media (max-width: 767px) {
-                .login-unified-card {padding: 14px; margin: 16px auto 22px;}
-                .login-form-panel {padding: 12px 4px 4px;}
-                .login-left-panel {padding: 24px 16px;}
-                .glass-card {padding: 24px 16px;}
-                .login-heading {font-size: 1.8rem; margin-bottom: 12px;}
-                .login-tagline {font-size: 0.9rem; margin-bottom: 24px;}
-                .login-keywords {gap: 8px;}
-                .login-keyword {padding: 8px 12px; font-size: 0.85rem;}
-            }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.markdown(
-        """
-        <style>
             .login-unified-card {
                 position: relative;
-                max-width: 1040px;
-                margin: 20px auto;
+                max-width: 980px;
+                margin: 12px auto 16px;
                 display: grid;
-                grid-template-columns: 1.15fr 0.85fr;
-                gap: 20px;
+                grid-template-columns: 1.1fr 0.9fr;
+                gap: 18px;
                 padding: 0;
-                border-radius: 28px;
-                background: rgba(8, 12, 24, 0.96);
+                border-radius: 26px;
+                background: rgba(8, 12, 24, 0.97);
                 border: 1px solid rgba(255, 255, 255, 0.08);
-                box-shadow: 0 36px 96px rgba(0, 0, 0, 0.34);
+                box-shadow: 0 28px 72px rgba(0, 0, 0, 0.34);
                 overflow: hidden;
             }
             .login-unified-card::before {
@@ -4049,11 +3577,11 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 min-height: auto;
             }
             .login-brand-panel {
-                padding: 34px 30px;
+                padding: 28px 24px;
                 display: flex;
                 flex-direction: column;
                 justify-content: center;
-                gap: 18px;
+                gap: 16px;
                 background: linear-gradient(180deg, rgba(8, 16, 34, 0.96), rgba(6, 10, 20, 0.94));
             }
             .brand-crest {
@@ -4092,17 +3620,17 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             }
             .login-value {
                 margin: 0;
-                font-size: clamp(2rem, 3vw, 2.8rem);
-                line-height: 1.04;
+                font-size: clamp(1.8rem, 2.6vw, 2.4rem);
+                line-height: 1.08;
                 color: #F4F7FF;
-                max-width: 480px;
+                max-width: 420px;
             }
             .login-description {
                 margin: 0;
                 color: #B9C6E0;
-                font-size: 0.98rem;
-                line-height: 1.7;
-                max-width: 420px;
+                font-size: 0.94rem;
+                line-height: 1.65;
+                max-width: 400px;
             }
             .login-feature-list {
                 display: grid;
@@ -4151,17 +3679,17 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 max-width: 420px;
             }
             .login-form-panel {
-                padding: 32px 30px;
+                padding: 24px 20px;
                 display: flex;
                 align-items: center;
             }
             .login-form-panel-inner {
                 width: 100%;
-                padding: 28px 24px;
-                border-radius: 24px;
-                background: rgba(255, 255, 255, 0.05);
+                padding: 22px 20px;
+                border-radius: 22px;
+                background: rgba(255, 255, 255, 0.06);
                 border: 1px solid rgba(255, 255, 255, 0.14);
-                box-shadow: 0 24px 68px rgba(0, 0, 0, 0.22);
+                box-shadow: 0 20px 54px rgba(0, 0, 0, 0.22);
                 backdrop-filter: blur(18px);
             }
             .form-title {
