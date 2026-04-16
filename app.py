@@ -3529,393 +3529,457 @@ CREATOR_PASSWORD = "Rider@100"
 if not st.session_state.is_authenticated and "preview_token" not in query_params:
     st.markdown("""
     <style>
-        /* Hide default wide layout feel for login page */
-        .block-container {
-            max-width: 100% !important;
-            padding-top: 1.2rem !important;
-            padding-bottom: 1rem !important;
-        }
-
-        /* Page background */
-        .stApp {
-            background:
-                radial-gradient(circle at 15% 20%, rgba(124, 92, 255, 0.22), transparent 25%),
-                radial-gradient(circle at 85% 18%, rgba(0, 194, 255, 0.18), transparent 22%),
-                radial-gradient(circle at 70% 80%, rgba(255, 0, 128, 0.10), transparent 24%),
-                linear-gradient(135deg, #08111f 0%, #0b1020 35%, #111827 100%) !important;
-        }
-
-        /* Reduce default streamlit white wrappers feeling */
-        [data-testid="stVerticalBlock"] > div:has(.premium-login-shell) {
-            width: 100%;
-        }
-
-        .premium-login-shell {
-            position: relative;
-            min-height: 82vh;
+        html, body { margin: 0; padding: 0; }
+        .block-container { max-width: 100% !important; padding: 0 !important; margin: 0 !important; }
+        
+        .ai-control-room {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0B0F1A 0%, #0f1624 50%, #0a0e1a 100%);
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 24px 12px 8px 12px;
-        }
-
-        .premium-login-grid {
-            width: min(1280px, 96vw);
-            display: grid;
-            grid-template-columns: 1.15fr 0.85fr;
-            gap: 28px;
-            align-items: stretch;
-        }
-
-        .premium-brand-panel {
             position: relative;
             overflow: hidden;
-            border-radius: 28px;
-            padding: 42px 38px;
-            min-height: 640px;
+        }
+
+        /* Animated gradient background mesh */
+        .ai-control-room::before {
+            content: "";
+            position: absolute;
+            inset: 0;
             background:
-                linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.025)),
-                rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.10);
-            box-shadow:
-                0 18px 80px rgba(0, 0, 0, 0.35),
-                inset 0 1px 0 rgba(255,255,255,0.06);
-            backdrop-filter: blur(16px);
+                radial-gradient(circle at 15% 30%, rgba(124, 92, 255, 0.25), transparent 30%),
+                radial-gradient(circle at 85% 20%, rgba(0, 194, 255, 0.20), transparent 28%),
+                radial-gradient(circle at 50% 100%, rgba(255, 0, 128, 0.08), transparent 35%);
+            animation: meshShift 15s ease-in-out infinite;
+            z-index: 1;
+            pointer-events: none;
         }
 
-        .premium-brand-panel::before {
-            content: "";
-            position: absolute;
-            inset: auto -80px -80px auto;
-            width: 260px;
-            height: 260px;
-            border-radius: 50%;
-            background: radial-gradient(circle, rgba(124, 92, 255, 0.35), transparent 65%);
-            filter: blur(8px);
+        @keyframes meshShift {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 0.9; }
         }
 
-        .premium-brand-panel::after {
-            content: "";
-            position: absolute;
-            inset: -70px auto auto -70px;
-            width: 220px;
-            height: 220px;
-            border-radius: 50%;
-            background: radial-gradient(circle, rgba(0, 194, 255, 0.20), transparent 65%);
-            filter: blur(8px);
-        }
-
-        .brand-topline {
-            display: inline-flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 0.82rem;
-            letter-spacing: 0.14em;
-            text-transform: uppercase;
-            color: rgba(230, 234, 242, 0.72);
-            margin-bottom: 26px;
-            font-weight: 700;
-        }
-
-        .brand-title {
-            font-size: clamp(2rem, 3vw, 3.4rem);
-            line-height: 1.05;
-            font-weight: 800;
-            color: #f7fbff;
-            margin: 0 0 14px 0;
-            letter-spacing: -0.03em;
-        }
-
-        .brand-subtitle {
-            max-width: 620px;
-            font-size: 1.04rem;
-            line-height: 1.75;
-            color: rgba(230, 234, 242, 0.78);
-            margin-bottom: 26px;
-        }
-
-        .brand-badges {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
-            margin: 28px 0 34px 0;
-        }
-
-        .brand-badge {
-            padding: 10px 14px;
-            border-radius: 999px;
-            background: rgba(255,255,255,0.06);
-            border: 1px solid rgba(255,255,255,0.08);
-            color: #eef6ff;
-            font-size: 0.9rem;
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
-        }
-
-        .brand-feature-grid {
+        .ai-control-grid {
+            width: min(1360px, 94vw);
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns: 1.4fr 1fr;
+            gap: 32px;
+            align-items: center;
+            position: relative;
+            z-index: 2;
+            animation: fadeIn 0.8s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* LEFT PANEL - Experience & Branding */
+        .ai-experience-panel {
+            position: relative;
+            padding: 48px;
+            height: 100%;
+        }
+
+        .ai-logo-section {
+            display: flex;
+            align-items: center;
             gap: 16px;
-            margin-top: 30px;
+            margin-bottom: 32px;
+            animation: slideInLeft 0.6s ease-out;
         }
 
-        .brand-feature-card {
+        @keyframes slideInLeft {
+            from { opacity: 0; transform: translateX(-30px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .ai-logo-badge {
+            width: 72px;
+            height: 72px;
             border-radius: 20px;
-            padding: 18px 18px 16px 18px;
-            background: rgba(255,255,255,0.045);
-            border: 1px solid rgba(255,255,255,0.08);
-            color: #f3f7fb;
-        }
-
-        .brand-feature-card h4 {
-            margin: 0 0 8px 0;
-            font-size: 1rem;
-            font-weight: 700;
-        }
-
-        .brand-feature-card p {
-            margin: 0;
-            color: rgba(230, 234, 242, 0.72);
-            font-size: 0.92rem;
-            line-height: 1.6;
-        }
-
-        .premium-login-card {
-            position: relative;
-            overflow: hidden;
-            border-radius: 28px;
-            padding: 28px 26px 22px 26px;
-            min-height: 640px;
-            background:
-                linear-gradient(180deg, rgba(255,255,255,0.11), rgba(255,255,255,0.05));
-            border: 1px solid rgba(255,255,255,0.12);
-            box-shadow:
-                0 18px 80px rgba(0, 0, 0, 0.38),
-                inset 0 1px 0 rgba(255,255,255,0.08);
-            backdrop-filter: blur(20px);
-        }
-
-        .premium-login-card::before {
-            content: "";
-            position: absolute;
-            top: -50px;
-            right: -50px;
-            width: 160px;
-            height: 160px;
-            border-radius: 50%;
-            background: radial-gradient(circle, rgba(0,194,255,0.22), transparent 68%);
-        }
-
-        .login-card-header {
-            text-align: center;
-            margin-bottom: 18px;
-        }
-
-        .login-logo {
-            width: 68px;
-            height: 68px;
-            margin: 0 auto 14px auto;
-            border-radius: 20px;
+            background: linear-gradient(135deg, rgba(124, 92, 255, 0.22), rgba(0, 194, 255, 0.16));
+            border: 1px solid rgba(255, 255, 255, 0.12);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.7rem;
-            background: linear-gradient(135deg, rgba(124,92,255,0.20), rgba(0,194,255,0.16));
-            border: 1px solid rgba(255,255,255,0.10);
-            box-shadow: 0 8px 28px rgba(0,0,0,0.24);
+            font-size: 2rem;
+            box-shadow: 0 16px 40px rgba(124, 92, 255, 0.12);
         }
 
-        .login-card-title {
-            font-size: 1.7rem;
-            font-weight: 800;
-            color: #f8fbff;
+        .ai-brand-info h2 {
             margin: 0;
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: #F7FBFF;
             letter-spacing: -0.02em;
         }
 
-        .login-card-subtitle {
-            margin-top: 8px;
-            color: rgba(230, 234, 242, 0.74);
-            font-size: 0.96rem;
-        }
-
-        .premium-note {
-            margin-top: 6px;
-            margin-bottom: 8px;
-            color: rgba(230, 234, 242, 0.72);
-            font-size: 0.88rem;
-            text-align: center;
-        }
-
-        .premium-help-caption {
-            margin-top: 14px;
-            margin-bottom: 8px;
-            color: rgba(230, 234, 242, 0.80);
+        .ai-brand-info p {
+            margin: 4px 0 0 0;
             font-size: 0.92rem;
-            font-weight: 600;
+            color: rgba(230, 234, 242, 0.72);
+            font-weight: 500;
         }
 
-        .premium-footer-line {
+        .ai-tagline {
+            font-size: clamp(2.2rem, 4vw, 3.2rem);
+            font-weight: 800;
+            line-height: 1.15;
+            color: #F4F7FF;
+            margin-bottom: 24px;
+            max-width: 560px;
+            letter-spacing: -0.03em;
+            animation: slideInLeft 0.7s ease-out 0.1s both;
+        }
+
+        .ai-description {
+            max-width: 520px;
+            font-size: 1.02rem;
+            line-height: 1.7;
+            color: rgba(185, 198, 224, 0.88);
+            margin-bottom: 36px;
+            animation: slideInLeft 0.7s ease-out 0.2s both;
+        }
+
+        /* Floating Keywords Animation */
+        .ai-keywords {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin-bottom: 48px;
+            animation: slideInLeft 0.7s ease-out 0.3s both;
+        }
+
+        .ai-keyword {
+            padding: 12px 18px;
+            border-radius: 999px;
+            background: rgba(124, 92, 255, 0.08);
+            border: 1px solid rgba(124, 92, 255, 0.28);
+            color: #D9E1FF;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: default;
+            transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+            animation: floatKW linear infinite;
+        }
+
+        .ai-keyword:nth-child(1) { animation-duration: 6s; animation-delay: 0s; }
+        .ai-keyword:nth-child(2) { animation-duration: 7s; animation-delay: -2s; }
+        .ai-keyword:nth-child(3) { animation-duration: 8s; animation-delay: -4s; }
+        .ai-keyword:nth-child(4) { animation-duration: 6.5s; animation-delay: -3s; }
+
+        @keyframes floatKW {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-8px); }
+        }
+
+        .ai-keyword:hover {
+            background: rgba(124, 92, 255, 0.18);
+            border-color: rgba(124, 92, 255, 0.45);
+            box-shadow: 0 8px 24px rgba(124, 92, 255, 0.12);
+            transform: translateY(-2px);
+        }
+
+        .ai-features {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .ai-feature-item {
+            padding: 18px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            transition: all 0.3s ease;
+            animation: slideInLeft 0.7s ease-out both;
+        }
+
+        .ai-feature-item:nth-child(1) { animation-delay: 0.4s; }
+        .ai-feature-item:nth-child(2) { animation-delay: 0.5s; }
+        .ai-feature-item:nth-child(3) { animation-delay: 0.6s; }
+        .ai-feature-item:nth-child(4) { animation-delay: 0.7s; }
+
+        .ai-feature-item:hover {
+            background: rgba(255, 255, 255, 0.07);
+            border-color: rgba(255, 255, 255, 0.14);
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.2);
+        }
+
+        .ai-feature-item strong {
+            display: block;
+            font-size: 0.98rem;
+            color: #F4F7FF;
+            margin-bottom: 6px;
+        }
+
+        .ai-feature-item span {
+            font-size: 0.88rem;
+            color: rgba(185, 198, 224, 0.8);
+            line-height: 1.5;
+        }
+
+        /* RIGHT PANEL - Login Card */
+        .ai-login-panel {
+            position: relative;
+            animation: slideInRight 0.8s ease-out;
+        }
+
+        @keyframes slideInRight {
+            from { opacity: 0; transform: translateX(40px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .ai-glass-card {
+            position: relative;
+            overflow: hidden;
+            border-radius: 32px;
+            padding: 44px;
+            background: 
+                linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.06)),
+                rgba(15, 22, 36, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            box-shadow: 
+                0 28px 100px rgba(0, 0, 0, 0.35),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(24px);
+            min-width: 380px;
+        }
+
+        .ai-glass-card::before {
+            content: "";
+            position: absolute;
+            top: -80px;
+            right: -80px;
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle, rgba(0, 194, 255, 0.28), transparent 70%);
+            border-radius: 50%;
+            filter: blur(12px);
+            pointer-events: none;
+        }
+
+        .ai-login-header {
             text-align: center;
-            margin-top: 18px;
-            color: rgba(230, 234, 242, 0.56);
-            font-size: 0.82rem;
+            margin-bottom: 32px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .ai-login-title {
+            font-size: 2rem;
+            font-weight: 800;
+            color: #F9FBFF;
+            margin: 0 0 10px 0;
+            letter-spacing: -0.02em;
+        }
+
+        .ai-login-subtitle {
+            font-size: 0.98rem;
+            color: rgba(183, 197, 225, 0.88);
+            margin: 0;
             line-height: 1.6;
         }
 
-        /* Streamlit input styling */
-        .premium-login-card .stTextInput label,
-        .premium-login-card .stCheckbox label,
-        .premium-login-card .stMarkdown,
-        .premium-login-card p,
-        .premium-login-card div {
-            color: #eef6ff !important;
+        .ai-form-group {
+            margin-bottom: 20px;
+            position: relative;
+            z-index: 1;
         }
 
-        .premium-login-card [data-testid="stTextInput"] input {
-            background: rgba(255,255,255,0.07) !important;
-            color: #f8fbff !important;
-            border: 1px solid rgba(255,255,255,0.10) !important;
-            border-radius: 16px !important;
-            min-height: 54px !important;
-            padding-left: 14px !important;
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.04) !important;
-        }
-
-        .premium-login-card [data-testid="stTextInput"] input:focus {
-            border: 1px solid rgba(0, 194, 255, 0.55) !important;
-            box-shadow: 0 0 0 1px rgba(0, 194, 255, 0.22), 0 0 22px rgba(124, 92, 255, 0.16) !important;
-        }
-
-        .premium-login-card .stCheckbox {
-            margin-top: 2px;
+        .ai-form-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.94rem;
+            font-weight: 600;
+            color: #BCC8E4;
             margin-bottom: 10px;
         }
 
-        .premium-login-card .stCheckbox label {
-            font-size: 0.94rem !important;
-            color: rgba(237, 244, 255, 0.84) !important;
+        .stTextInput > label { display: none !important; }
+        .stTextInput > div > div { background: transparent !important; }
+
+        .stTextInput input {
+            background: rgba(255, 255, 255, 0.08) !important;
+            border: 1px solid rgba(255, 255, 255, 0.14) !important;
+            color: #F6F9FF !important;
+            border-radius: 18px !important;
+            padding: 16px 18px !important;
+            min-height: 56px !important;
+            font-size: 0.98rem !important;
+            box-shadow: 
+                inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+                0 8px 20px rgba(0, 0, 0, 0.12) !important;
+            transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1) !important;
         }
 
-        .premium-login-card .stButton > button {
+        .stTextInput input::placeholder {
+            color: rgba(244, 247, 255, 0.5) !important;
+        }
+
+        .stTextInput input:focus {
+            border: 1px solid rgba(124, 92, 255, 0.95) !important;
+            box-shadow: 
+                0 0 0 6px rgba(124, 92, 255, 0.18),
+                0 16px 40px rgba(124, 92, 255, 0.22),
+                inset 0 0 0 1px rgba(124, 92, 255, 0.08) !important;
+            background: rgba(255, 255, 255, 0.12) !important;
+            outline: none !important;
+        }
+
+        .ai-hint-text {
+            font-size: 0.84rem;
+            color: rgba(185, 198, 224, 0.72);
+            margin-top: 8px;
+            line-height: 1.5;
+        }
+
+        .ai-button-wrapper {
+            margin-top: 24px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .stButton > button {
             width: 100% !important;
-            min-height: 52px !important;
-            border-radius: 16px !important;
+            min-height: 54px !important;
+            border-radius: 18px !important;
             border: 0 !important;
-            background: linear-gradient(90deg, #00c2ff 0%, #7c5cff 100%) !important;
+            background: linear-gradient(135deg, #00C2FF 0%, #7C5CFF 100%) !important;
             color: white !important;
             font-weight: 700 !important;
-            font-size: 1rem !important;
-            box-shadow: 0 12px 28px rgba(64, 120, 255, 0.28) !important;
-            transition: 0.25s ease !important;
+            font-size: 1.02rem !important;
+            letter-spacing: 0.3px;
+            box-shadow: 
+                0 16px 48px rgba(75, 114, 255, 0.28),
+                inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+            transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1) !important;
+            position: relative;
+            overflow: hidden;
         }
 
-        .premium-login-card .stButton > button:hover {
-            transform: translateY(-1px) !important;
-            box-shadow: 0 16px 34px rgba(64, 120, 255, 0.34) !important;
-            filter: brightness(1.04);
+        .stButton > button::before {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
         }
 
-        .premium-login-card details {
-            background: rgba(255,255,255,0.04);
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 16px;
-            padding: 6px 10px;
+        .stButton > button:hover {
+            transform: translateY(-2px) !important;
+            box-shadow: 
+                0 24px 60px rgba(75, 114, 255, 0.35),
+                inset 0 1px 0 rgba(255, 255, 255, 0.16) !important;
+            background: linear-gradient(135deg, #00D4FF 0%, #8C7AFF 100%) !important;
         }
 
-        .premium-login-card summary {
-            color: #eef6ff;
+        .stButton > button:active {
+            transform: translateY(0) !important;
+            box-shadow: 
+                0 12px 36px rgba(75, 114, 255, 0.24),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+        }
+
+        .ai-help-link {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 0.92rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        .ai-help-link a {
+            color: rgba(124, 92, 255, 0.88);
+            text-decoration: none;
             font-weight: 600;
+            transition: all 0.3s ease;
         }
 
-        @media (max-width: 980px) {
-            .premium-login-grid {
-                grid-template-columns: 1fr;
+        .ai-help-link a:hover {
+            color: #7C5CFF;
+            text-decoration: underline;
+        }
+
+        /* Responsive design */
+        @media (max-width: 1140px) {
+            .ai-control-grid { grid-template-columns: 1fr; gap: 24px; }
+            .ai-glass-card { min-width: 100%; }
+            .ai-experience-panel { padding: 36px; }
+        }
+
+        @media (max-width: 740px) {
+            .ai-glass-card { 
+                padding: 32px 24px;
+                border-radius: 24px;
             }
-            .premium-brand-panel,
-            .premium-login-card {
-                min-height: auto;
-            }
-            .brand-feature-grid {
-                grid-template-columns: 1fr;
-            }
+            .ai-experience-panel { padding: 24px; }
+            .ai-tagline { font-size: 1.8rem; margin-bottom: 16px; }
+            .ai-login-title { font-size: 1.6rem; }
+            .ai-keywords { margin-bottom: 32px; }
+            .ai-features { display: none; }
         }
     </style>
+    <div class="ai-control-room">
+        <div class="ai-control-grid">
+            <div class="ai-experience-panel">
+                <div class="ai-logo-section">
+                    <div class="ai-logo-badge">🛡️</div>
+                    <div class="ai-brand-info">
+                        <h2>Mercedes-Benz</h2>
+                        <p>IntelliDoc AI Control Room</p>
+                    </div>
+                </div>
+                <h1 class="ai-tagline">Where Documents Become Intelligence.</h1>
+                <p class="ai-description">
+                    A premium, enterprise-grade AI document control room for analysis, comparison, 
+                    dashboards, and intelligent automation. Built for precision and elegance.
+                </p>
+                <div class="ai-keywords">
+                    <div class="ai-keyword">💬 Analyze</div>
+                    <div class="ai-keyword">📊 Compare</div>
+                    <div class="ai-keyword">⚡ Automate</div>
+                    <div class="ai-keyword">🧠 Intelligence</div>
+                </div>
+                <div class="ai-features">
+                    <div class="ai-feature-item"><strong>AI Chat</strong><span>Context-aware answers from documents</span></div>
+                    <div class="ai-feature-item"><strong>Smart Dashboard</strong><span>Visual summaries & insights</span></div>
+                    <div class="ai-feature-item"><strong>Comparison Engine</strong><span>Precise document diff analysis</span></div>
+                    <div class="ai-feature-item"><strong>CAPL Assist</strong><span>Script analysis & optimization</span></div>
+                </div>
+            </div>
+
+            <div class="ai-login-panel">
+                <div class="ai-glass-card">
+                    <div class="ai-login-header">
+                        <h2 class="ai-login-title">Welcome</h2>
+                        <p class="ai-login-subtitle">Sign in to access IntelliDoc AI</p>
+                    </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("""
-    <div class="premium-login-shell">
-      <div class="premium-login-grid">
-        <div class="premium-brand-panel">
-          <div class="brand-topline">Mercedes-Benz • AI Workspace</div>
-          <h1 class="brand-title">Where documents become intelligence.</h1>
-          <div class="brand-subtitle">
-            IntelliDoc AI is designed as a premium control room for document analysis,
-            comparison, dashboard exploration, and CAPL-assisted workflows.
-            Fast, focused, and built to feel enterprise-grade from the first screen.
-          </div>
+    st.markdown('<div class="ai-form-group"><div class="ai-form-label">👤 Username</div>', unsafe_allow_html=True)
+    login_username = st.text_input("", key="ai_login_username", placeholder="Enter your username", label_visibility="collapsed")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-          <div class="brand-badges">
-            <div class="brand-badge">Analyze</div>
-            <div class="brand-badge">Compare</div>
-            <div class="brand-badge">Visualize</div>
-            <div class="brand-badge">Automate</div>
-          </div>
+    st.markdown('<div class="ai-form-group"><div class="ai-form-label">🔒 Password <span style="font-size:0.82rem;color:rgba(124,92,255,0.75);">(optional for users)</span></div>', unsafe_allow_html=True)
+    login_password = st.text_input("", type="password", key="ai_login_password", placeholder="Enter your password", label_visibility="collapsed")
+    st.markdown('<p class="ai-hint-text">Standard users can leave this empty</p></div>', unsafe_allow_html=True)
 
-          <div class="brand-feature-grid">
-            <div class="brand-feature-card">
-              <h4>Smart Analysis</h4>
-              <p>Explore uploaded content with clean workflows for document understanding and structured review.</p>
-            </div>
-            <div class="brand-feature-card">
-              <h4>Comparison Engine</h4>
-              <p>Inspect file differences with clarity, export results, and move faster with decision-ready views.</p>
-            </div>
-            <div class="brand-feature-card">
-              <h4>Dashboard Insights</h4>
-              <p>Use structured reports and spreadsheets to surface trends, metrics, and visual summaries.</p>
-            </div>
-            <div class="brand-feature-card">
-              <h4>CAPL Assistance</h4>
-              <p>Work with CAPL files, analyze issues, and streamline script refinement in one place.</p>
-            </div>
-          </div>
-        </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("""
-        <div class="premium-login-card">
-          <div class="login-card-header">
-            <div class="login-logo">🧠</div>
-            <h2 class="login-card-title">IntelliDoc AI</h2>
-            <div class="login-card-subtitle">Secure access to your smart document workspace</div>
-          </div>
-    """, unsafe_allow_html=True)
-
-    login_username = st.text_input("Username", key="premium_login_username", placeholder="Enter your username")
-    login_password = st.text_input("Password", type="password", key="premium_login_password", placeholder="Enter your password")
-    st.markdown("<div class='premium-note'>Users can leave the password field empty.</div>", unsafe_allow_html=True)
-
-    has_read_readme = st.checkbox("I have read the README and want to continue", key="premium_readme_checkbox")
-
-    access_clicked = st.button("Continue →", key="premium_login_access_btn", use_container_width=True)
-
-    st.markdown("<div class='premium-help-caption'>Need help before signing in?</div>", unsafe_allow_html=True)
-   # render_readme_help_panel(expanded=False)
-
-    st.markdown("""
-          <div class="premium-footer-line">
-            Elegant access for analysis, comparison, dashboards, and CAPL workflows.
-          </div>
-        </div>
-      </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown('<div class="ai-button-wrapper">', unsafe_allow_html=True)
+    access_clicked = st.button("Continue → Access", key="ai_login_btn", use_container_width=True)
+    st.markdown('</div><div class="ai-help-link">Need help? <a href="#">View Documentation</a></div></div></div></div>', unsafe_allow_html=True)
 
     if access_clicked:
-        if not has_read_readme:
-            st.warning("Please read the README and confirm the checkbox before accessing the app.")
-            st.stop()
-
         cleaned_username = (login_username or "").strip()
         cleaned_password = (login_password or "").strip()
 
@@ -3945,18 +4009,15 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 active_users = []
 
             active_users = [u for u in active_users if u.get("username") != cleaned_username]
-            active_users.append({
-                "username": cleaned_username,
-                "timestamp": now.isoformat()
-            })
+            active_users.append({"username": cleaned_username, "timestamp": now.isoformat()})
 
             with open(active_file, "w") as f:
                 json.dump(active_users, f)
 
-            st.success("Creator login successful.")
+            st.success("✅ Creator access granted")
             st.rerun()
 
-        elif cleaned_username and cleaned_password == "":
+        elif cleaned_username and len(cleaned_username) > 3 and cleaned_password == "":
             st.session_state.is_authenticated = True
             st.session_state.logged_in_username = cleaned_username
             st.session_state.user_role = "user"
@@ -3982,19 +4043,16 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 active_users = []
 
             active_users = [u for u in active_users if u.get("username") != cleaned_username]
-            active_users.append({
-                "username": cleaned_username,
-                "timestamp": now.isoformat()
-            })
+            active_users.append({"username": cleaned_username, "timestamp": now.isoformat()})
 
             with open(active_file, "w") as f:
                 json.dump(active_users, f)
 
-            st.success(f"Welcome, {cleaned_username}!")
+            st.success(f"✅ Welcome, {cleaned_username}!")
             st.rerun()
 
         else:
-            st.error("Invalid credentials. Creator must use the correct password. Users should leave password empty.")
+            st.error("❌ Invalid credentials. Creator needs password. Users need username >3 chars with empty password.")
 
     st.stop()
 
