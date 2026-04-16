@@ -3545,16 +3545,51 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 background: #0B0F1A !important;
                 color: #E6EAF2 !important;
             }
-            .login-split {
-                display: grid;
-                grid-template-columns: 1.35fr 1fr;
-                gap: 32px;
-                align-items: center;
-                min-height: 78vh;
-                padding: 32px 0;
-                max-width: 1240px;
-                margin: 0 auto;
-                width: min(100%, 1240px);
+            .login-unified-card {
+                position: relative;
+                max-width: 1220px;
+                margin: 32px auto;
+                padding: 28px;
+                border-radius: 36px;
+                overflow: hidden;
+                background:
+                    radial-gradient(circle at 18% 18%, rgba(124, 92, 255, 0.22), transparent 22%),
+                    radial-gradient(circle at 82% 14%, rgba(0, 194, 255, 0.16), transparent 24%),
+                    linear-gradient(160deg, rgba(17, 25, 44, 0.94) 0%, rgba(10, 15, 28, 0.98) 100%);
+                border: 1px solid rgba(163, 195, 255, 0.14);
+                box-shadow: 0 40px 110px rgba(0, 0, 0, 0.34);
+                animation: loginCardFloat 9s ease-in-out infinite;
+            }
+            .login-unified-card::before {
+                content: "";
+                position: absolute;
+                inset: 0;
+                background:
+                    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 38%),
+                    radial-gradient(circle at 50% 100%, rgba(255, 255, 255, 0.06), transparent 34%);
+                pointer-events: none;
+            }
+            .login-unified-card::after {
+                content: "";
+                position: absolute;
+                inset: 1px;
+                border-radius: 35px;
+                border: 1px solid rgba(255, 255, 255, 0.06);
+                pointer-events: none;
+            }
+            @keyframes loginCardFloat {
+                0%, 100% { transform: translateY(0); }
+                50% { transform: translateY(-8px); }
+            }
+            .login-form-panel {
+                position: relative;
+                z-index: 1;
+                height: 100%;
+                padding: 28px 20px 18px 8px;
+            }
+            .login-dock-host {
+                position: relative;
+                z-index: 1;
             }
             .login-left-panel {
                 position: relative;
@@ -3940,7 +3975,8 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 border: 1px solid rgba(255,255,255,0.12) !important;
             }
             @media (max-width: 980px) {
-                .login-split {grid-template-columns: 1fr;}
+                .login-unified-card {padding: 20px; border-radius: 28px;}
+                .login-form-panel {padding: 18px 8px 8px;}
                 .login-left-panel, .glass-card {border-radius: 24px;}
                 .login-left-panel {padding: 32px 24px;}
                 .glass-card {padding: 32px 24px;}
@@ -3948,7 +3984,8 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 .login-tagline {font-size: 0.95rem;}
             }
             @media (max-width: 767px) {
-                .login-split {padding: 16px 0;}
+                .login-unified-card {padding: 14px; margin: 16px auto 22px;}
+                .login-form-panel {padding: 12px 4px 4px;}
                 .login-left-panel {padding: 24px 16px;}
                 .glass-card {padding: 24px 16px;}
                 .login-heading {font-size: 1.8rem; margin-bottom: 12px;}
@@ -3961,8 +3998,10 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         unsafe_allow_html=True,
     )
 
-    left_col, right_col = st.columns([3, 2], gap="large")
+    st.markdown('<div class="login-unified-card">', unsafe_allow_html=True)
+    left_col, right_col = st.columns([1.05, 1.25], gap="large")
     with left_col:
+        st.markdown('<div class="login-dock-host">', unsafe_allow_html=True)
         logo_img = f'<img src="data:image/gif;base64,{logo_data}" alt="Mercedes-Benz logo">' if logo_data else ''
         html_feature_panel = """
             <style>
@@ -3976,34 +4015,35 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 .login-left-panel {
                     position: relative;
                     overflow: hidden;
-                    border-radius: 32px;
-                    padding: 34px 30px;
-                    background: radial-gradient(circle at top left, rgba(124, 92, 255, 0.22), transparent 28%),
-                                radial-gradient(circle at top right, rgba(0, 194, 255, 0.16), transparent 26%),
-                                linear-gradient(180deg, rgba(19, 29, 56, 0.96) 0%, rgba(11, 15, 26, 0.95) 100%);
-                    box-shadow: 0 32px 80px rgba(0, 0, 0, 0.30);
-                    border: 1px solid rgba(124, 92, 255, 0.14);
+                    border-radius: 28px;
+                    padding: 12px 8px;
+                    background: transparent;
+                    box-shadow: none;
+                    border: none;
                     min-height: 580px;
                 }
                 .login-left-panel::before {
                     content: '';
                     position: absolute;
-                    inset: 0;
-                    background: radial-gradient(circle at 20% 20%, rgba(124, 92, 255, 0.24), transparent 16%),
-                                radial-gradient(circle at 80% 15%, rgba(0, 194, 255, 0.14), transparent 20%),
-                                radial-gradient(circle at 30% 80%, rgba(255, 255, 255, 0.06), transparent 24%);
+                    width: 180px;
+                    height: 180px;
+                    left: var(--mx, 50%);
+                    top: var(--my, 28%);
+                    transform: translate(-50%, -50%);
+                    border-radius: 50%;
+                    background: radial-gradient(circle, rgba(121, 224, 255, 0.30), rgba(121, 224, 255, 0.08) 42%, transparent 72%);
+                    filter: blur(10px);
                     pointer-events: none;
+                    transition: left 0.12s ease, top 0.12s ease;
                 }
                 .login-left-content {
                     position: relative;
                     z-index: 1;
-                    max-width: 460px;
+                    max-width: 240px;
+                    margin: 0 auto;
                 }
                 .login-logo {
-                    display: flex;
-                    align-items: center;
-                    gap: 14px;
-                    margin-bottom: 28px;
+                    display: none;
                 }
                 .login-logo img {
                     width: 52px;
@@ -4025,39 +4065,38 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                     font-weight: 700;
                 }
                 .login-heading {
-                    font-size: clamp(2.4rem, 3vw, 3.4rem);
-                    line-height: 1.03;
-                    margin-bottom: 18px;
-                    color: #F7F9FF;
-                    letter-spacing: -0.04em;
+                    display: none;
                 }
                 .login-tagline {
-                    color: #B8C4DD;
-                    font-size: 1rem;
-                    line-height: 1.75;
-                    max-width: 420px;
-                    margin-bottom: 32px;
+                    display: none;
                 }
                 .login-keywords {
                     display: flex;
-                    flex-wrap: wrap;
-                    gap: 12px;
+                    flex-direction: column;
+                    gap: 14px;
                 }
                 .login-keyword {
-                    padding: 10px 14px;
-                    border-radius: 999px;
-                    border: 1px solid rgba(124, 92, 255, 0.24);
-                    background: rgba(124, 92, 255, 0.08);
-                    color: #D9E1FF;
-                    font-size: 0.92rem;
+                    position: relative;
+                    display: flex;
+                    align-items: center;
+                    gap: 14px;
+                    padding: 16px 18px;
+                    border-radius: 22px;
+                    border: 1px solid rgba(181, 230, 255, 0.10);
+                    background: linear-gradient(160deg, rgba(255,255,255,0.14), rgba(255,255,255,0.05));
+                    color: #E8F4FF;
+                    font-size: 0.98rem;
+                    font-weight: 600;
                     cursor: pointer;
-                    transition: all 0.28s ease;
+                    overflow: hidden;
+                    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+                    transition: transform 0.24s ease, border-color 0.24s ease, box-shadow 0.24s ease, background 0.24s ease;
                 }
                 .login-keyword:hover {
-                    background: rgba(124, 92, 255, 0.16);
-                    border-color: rgba(124, 92, 255, 0.42);
-                    box-shadow: 0 6px 20px rgba(124, 92, 255, 0.12);
-                    transform: translateY(-1px);
+                    background: linear-gradient(160deg, rgba(255,255,255,0.20), rgba(255,255,255,0.08));
+                    border-color: rgba(124, 220, 255, 0.34);
+                    box-shadow: 0 16px 34px rgba(0, 40, 74, 0.18);
+                    transform: translateY(-2px) scale(1.01);
                 }
                 .feature-description {
                     display: none;
@@ -4122,9 +4161,24 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                         transform: translateX(-100%);
                     }
                 }
+                .dock-ripple {
+                    position: absolute;
+                    border-radius: 999px;
+                    background: rgba(190, 240, 255, 0.36);
+                    transform: translate(-50%, -50%) scale(0);
+                    animation: ripple 0.7s ease-out forwards;
+                    pointer-events: none;
+                }
+                @keyframes ripple {
+                    to {
+                        opacity: 0;
+                        transform: translate(-50%, -50%) scale(4.5);
+                    }
+                }
             </style>
             <div class="login-left-panel">
                 <div class="login-left-content">
+                    <div style="margin:0 8px 10px;color:rgba(222,239,255,0.68);font-size:0.72rem;letter-spacing:0.22em;text-transform:uppercase;">Workspace</div>
                     <div class="login-logo">
                         __LOGO_IMG__
                         <div class="login-logo-text">
@@ -4187,6 +4241,14 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             
             <script>
             (function() {
+                const dock = document.querySelector('.login-left-panel');
+                if (dock) {
+                    dock.addEventListener('mousemove', function(event) {
+                        const rect = dock.getBoundingClientRect();
+                        dock.style.setProperty('--mx', (event.clientX - rect.left) + 'px');
+                        dock.style.setProperty('--my', (event.clientY - rect.top) + 'px');
+                    });
+                }
                 function showFeature(feature) {
                     const selected = document.getElementById(feature + '-description');
                     if (!selected) return;
@@ -4208,6 +4270,16 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                     keyword.addEventListener('click', function(e) {
                         e.preventDefault();
                         e.stopPropagation();
+                        const rect = this.getBoundingClientRect();
+                        const ripple = document.createElement('span');
+                        ripple.className = 'dock-ripple';
+                        ripple.style.left = (e.clientX - rect.left) + 'px';
+                        ripple.style.top = (e.clientY - rect.top) + 'px';
+                        ripple.style.width = ripple.style.height = Math.max(rect.width, rect.height) + 'px';
+                        this.appendChild(ripple);
+                        ripple.addEventListener('animationend', function() {
+                            ripple.remove();
+                        });
                         const feature = this.getAttribute('data-feature');
                         showFeature(feature);
                     });
@@ -4217,9 +4289,11 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             """
         html_feature_panel = html_feature_panel.replace("__LOGO_IMG__", logo_img)
         components.html(html_feature_panel, height=660, scrolling=False)
+        st.markdown('</div>', unsafe_allow_html=True)
 
     continue_clicked = False
     with right_col:
+        st.markdown('<div class="login-form-panel">', unsafe_allow_html=True)
         st.markdown('<div class="glass-input-label">👤 Username</div>', unsafe_allow_html=True)
         login_username = st.text_input(
             "",
@@ -4246,6 +4320,9 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             """,
             unsafe_allow_html=True,
         )
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('</div>', unsafe_allow_html=True)
 
     if continue_clicked:
         cleaned_username = (st.session_state.get("login_username", "") or "").strip()
