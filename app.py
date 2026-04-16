@@ -3984,7 +3984,6 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         unsafe_allow_html=True,
     )
 
-    st.markdown('<div class="login-unified-card">', unsafe_allow_html=True)
     left_col, right_col = st.columns([1.05, 1.25], gap="large")
     with left_col:
         st.markdown('<div class="login-dock-host">', unsafe_allow_html=True)
@@ -4002,23 +4001,23 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                     position: relative;
                     overflow: hidden;
                     border-radius: 28px;
-                    padding: 12px 8px;
-                    background: transparent;
-                    box-shadow: none;
-                    border: none;
+                    padding: 24px 22px;
+                    background: #08101e;
+                    box-shadow: 0 26px 80px rgba(0, 0, 0, 0.36);
+                    border: 1px solid rgba(255, 255, 255, 0.08);
                     min-height: 580px;
                 }
                 .login-left-panel::before {
                     content: '';
                     position: absolute;
-                    width: 180px;
-                    height: 180px;
+                    width: 210px;
+                    height: 210px;
                     left: var(--mx, 50%);
                     top: var(--my, 28%);
                     transform: translate(-50%, -50%);
                     border-radius: 50%;
-                    background: radial-gradient(circle, rgba(121, 224, 255, 0.30), rgba(121, 224, 255, 0.08) 42%, transparent 72%);
-                    filter: blur(10px);
+                    background: radial-gradient(circle, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03) 48%, transparent 70%);
+                    filter: blur(18px);
                     pointer-events: none;
                     transition: left 0.12s ease, top 0.12s ease;
                 }
@@ -4077,20 +4076,20 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                     gap: 14px;
                     padding: 16px 18px;
                     border-radius: 22px;
-                    border: 1px solid rgba(181, 230, 255, 0.10);
-                    background: linear-gradient(160deg, rgba(255,255,255,0.14), rgba(255,255,255,0.05));
+                    border: 1px solid rgba(255, 255, 255, 0.10);
+                    background: rgba(255, 255, 255, 0.05);
                     color: #E8F4FF;
                     font-size: 0.98rem;
                     font-weight: 600;
                     cursor: pointer;
                     overflow: hidden;
-                    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+                    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
                     transition: transform 0.24s ease, border-color 0.24s ease, box-shadow 0.24s ease, background 0.24s ease;
                 }
                 .login-keyword:hover {
-                    background: linear-gradient(160deg, rgba(255,255,255,0.20), rgba(255,255,255,0.08));
-                    border-color: rgba(124, 220, 255, 0.34);
-                    box-shadow: 0 16px 34px rgba(0, 40, 74, 0.18);
+                    background: rgba(255, 255, 255, 0.11);
+                    border-color: rgba(124, 220, 255, 0.32);
+                    box-shadow: 0 18px 36px rgba(0, 0, 0, 0.18);
                     transform: translateY(-2px) scale(1.01);
                 }
                 .feature-description {
@@ -4098,9 +4097,9 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                     margin-top: 20px;
                     padding: 20px;
                     border-radius: 18px;
-                    background: rgba(124, 92, 255, 0.08);
-                    border: 1px solid rgba(124, 92, 255, 0.22);
-                    color: #D9C8E8;
+                    background: rgba(255, 255, 255, 0.06);
+                    border: 1px solid rgba(255, 255, 255, 0.08);
+                    color: #D9E4FF;
                     font-size: 0.9rem;
                     line-height: 1.7;
                 }
@@ -4118,26 +4117,26 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                     position: relative;
                     margin-top: 24px;
                     padding: 22px 24px;
-                    background: linear-gradient(135deg, #E5E3DD, #F9F6EE);
-                    border: 1px solid rgba(145, 140, 132, 0.24);
+                    background: rgba(12, 24, 40, 0.95);
+                    border: 1px solid rgba(124, 92, 255, 0.24);
                     border-radius: 20px;
-                    box-shadow: 0 18px 40px rgba(26, 28, 34, 0.08);
+                    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35);
                     opacity: 0;
                     transform: translateX(-110%);
-                    visibility: hidden;
-                    transition: transform 0.7s ease, opacity 0.7s ease, visibility 0.7s ease;
+                    transition: transform 0.7s ease, opacity 0.7s ease;
                     display: flex;
                     align-items: center;
                     justify-content: flex-start;
                     overflow: hidden;
+                    pointer-events: none;
                 }
                 #feature-popup-card.show {
                     opacity: 1;
                     transform: translateX(0);
-                    visibility: visible;
+                    pointer-events: auto;
                 }
                 #feature-popup-content {
-                    color: #2F3136;
+                    color: #E8F4FF;
                     font-size: 1rem;
                     font-weight: 600;
                     line-height: 1.5;
@@ -4245,6 +4244,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                         dock.style.setProperty('--my', (event.clientY - rect.top) + 'px');
                     });
                 }
+                let hideFeatureTimer = null;
                 function showFeature(feature) {
                     const selected = document.getElementById(feature + '-description');
                     if (!selected) return;
@@ -4259,6 +4259,12 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                         popup.classList.remove('show');
                         void popup.offsetWidth;
                         popup.classList.add('show');
+                        if (hideFeatureTimer) {
+                            clearTimeout(hideFeatureTimer);
+                        }
+                        hideFeatureTimer = setTimeout(() => {
+                            popup.classList.remove('show');
+                        }, 2500);
                     }
                 }
                 const keywords = document.querySelectorAll('.login-keyword');
