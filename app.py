@@ -3562,10 +3562,10 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         }
 
         .ai-control-grid {
-            width: min(1360px, 94vw);
+            width: min(1400px, 95vw);
             display: grid;
-            grid-template-columns: 1.4fr 1fr;
-            gap: 32px;
+            grid-template-columns: 1.3fr 1fr;
+            gap: 40px;
             align-items: center;
             position: relative;
             z-index: 2;
@@ -3582,6 +3582,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             position: relative;
             padding: 48px;
             height: 100%;
+            min-width: 0;
         }
 
         .ai-logo-section {
@@ -3608,6 +3609,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             justify-content: center;
             font-size: 2rem;
             box-shadow: 0 16px 40px rgba(124, 92, 255, 0.12);
+            flex-shrink: 0;
         }
 
         .ai-brand-info h2 {
@@ -3665,6 +3667,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             cursor: default;
             transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
             animation: floatKW linear infinite;
+            white-space: nowrap;
         }
 
         .ai-keyword:nth-child(1) { animation-duration: 6s; animation-delay: 0s; }
@@ -3727,6 +3730,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         .ai-login-panel {
             position: relative;
             animation: slideInRight 0.8s ease-out;
+            min-width: 0;
         }
 
         @keyframes slideInRight {
@@ -3747,7 +3751,8 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 0 28px 100px rgba(0, 0, 0, 0.35),
                 inset 0 1px 0 rgba(255, 255, 255, 0.08);
             backdrop-filter: blur(24px);
-            min-width: 380px;
+            width: 100%;
+            max-width: 420px;
         }
 
         .ai-glass-card::before {
@@ -3911,24 +3916,70 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             text-decoration: underline;
         }
 
-        /* Responsive design */
-        @media (max-width: 1140px) {
-            .ai-control-grid { grid-template-columns: 1fr; gap: 24px; }
-            .ai-glass-card { min-width: 100%; }
-            .ai-experience-panel { padding: 36px; }
+        /* Responsive design - keep split view on larger screens */
+        @media (max-width: 1400px) {
+            .ai-control-grid {
+                width: min(1300px, 92vw);
+                gap: 32px;
+            }
+            .ai-experience-panel {
+                padding: 40px;
+            }
+            .ai-glass-card {
+                max-width: 400px;
+            }
         }
 
-        @media (max-width: 740px) {
+        @media (max-width: 1200px) {
+            .ai-control-grid {
+                width: min(1100px, 90vw);
+                gap: 28px;
+            }
+            .ai-experience-panel {
+                padding: 32px;
+            }
+            .ai-tagline {
+                font-size: clamp(2rem, 3.5vw, 2.8rem);
+                margin-bottom: 20px;
+            }
+        }
+
+        /* Only collapse to single column on very narrow screens */
+        @media (max-width: 900px) {
+            .ai-control-grid {
+                grid-template-columns: 1fr;
+                gap: 24px;
+            }
+            .ai-experience-panel {
+                padding: 24px;
+            }
+            .ai-tagline {
+                font-size: 1.8rem;
+                margin-bottom: 16px;
+            }
+            .ai-glass-card {
+                max-width: 100%;
+            }
+            .ai-features {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 640px) {
             .ai-glass-card { 
                 padding: 32px 24px;
                 border-radius: 24px;
             }
-            .ai-experience-panel { padding: 24px; }
-            .ai-tagline { font-size: 1.8rem; margin-bottom: 16px; }
-            .ai-login-title { font-size: 1.6rem; }
-            .ai-keywords { margin-bottom: 32px; }
+            .ai-experience-panel { padding: 16px; }
+            .ai-tagline { font-size: 1.6rem; }
+            .ai-login-title { font-size: 1.4rem; }
+            .ai-keywords { margin-bottom: 24px; }
             .ai-features { display: none; }
+            .ai-control-room {
+                padding: 16px;
+            }
         }
+
     </style>
     <div class="ai-control-room">
         <div class="ai-control-grid">
