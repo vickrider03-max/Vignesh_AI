@@ -3550,7 +3550,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             .login-unified-card {
                 position: relative;
                 max-width: 980px;
-                margin: 12px auto 16px;
+                margin: 8px auto 12px;
                 display: grid;
                 grid-template-columns: 1.1fr 0.9fr;
                 gap: 18px;
