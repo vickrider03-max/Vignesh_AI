@@ -3905,13 +3905,13 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                         <div class="brand-logo">{logo_img}</div>
                         <div>
                             <div class="brand-mini">Mercedes-Benz Intelligence</div>
-                            <div class="brand-main">IntelliDoc AI Workspace</div>
+                            <div class="brand-main">🧠 IntelliDoc AI – Smart Document Assistant</div>
                         </div>
                     </div>
 
                     <div class="hero-block">
                         <div class="hero-chip">● Secure • Modern • Premium</div>
-                        <h1 class="hero-title">One elegant gateway to your document AI control room.</h1>
+                        <h1 class="hero-title">🧠 IntelliDoc AI – Smart Document Assistant</h1>
                         <p class="hero-text">
                             Access chat, dashboards, comparisons, and CAPL analysis through a refined enterprise login
                             experience designed to feel premium, trustworthy, and production-ready.
@@ -3952,21 +3952,35 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         )
 
     with right_col:
-        st.markdown('<div class="login-right"><div class="form-shell login-form-card">', unsafe_allow_html=True)
-        st.markdown('<div class="form-eyebrow">Sign in</div>', unsafe_allow_html=True)
-        st.markdown('<h2 class="form-title">Welcome back</h2>', unsafe_allow_html=True)
+    st.markdown('<div class="login-right"><div class="form-shell login-form-card">', unsafe_allow_html=True)
+
+    if logo_data:
         st.markdown(
-            '<div class="form-subtitle">Continue to IntelliDoc AI with a cleaner, more premium login experience.</div>',
+            f"""
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+                <img src="data:image/gif;base64,{logo_data}" style="width:42px;height:42px;">
+                <div style="color:#F7FAFF;font-weight:700;font-size:1.1rem;">
+                    🧠 IntelliDoc AI – Smart Document Assistant
+                </div>
+            </div>
+            """,
             unsafe_allow_html=True
         )
 
-        st.markdown('<div class="login-field-label">👤 Username</div>', unsafe_allow_html=True)
-        login_username = st.text_input(
-            "",
-            key="login_username",
-            placeholder="Enter your username",
-            label_visibility="collapsed",
-        )
+    st.markdown('<div class="form-eyebrow">Sign in</div>', unsafe_allow_html=True)
+    st.markdown('<h2 class="form-title">Welcome back</h2>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="form-subtitle">Continue to IntelliDoc AI with a cleaner, more premium login experience.</div>',
+        unsafe_allow_html=True
+    )
+
+    st.markdown('<div class="login-field-label">👤 Username</div>', unsafe_allow_html=True)
+    login_username = st.text_input(
+        "",
+        key="login_username",
+        placeholder="Enter your username",
+        label_visibility="collapsed",
+    )
 
         st.markdown(
             '<div class="login-field-label">🔒 Password <span style="font-size:0.84rem;color:#8EA2FF;">(creator only)</span></div>',
