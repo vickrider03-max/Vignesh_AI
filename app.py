@@ -3582,17 +3582,70 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             color: rgba(185, 198, 224, 0.88);
             margin-bottom: 36px;
         }
+        .brand-strip {
+            display: flex !important;
+            align-items: center !important;
+            gap: 12px !important;
+            margin-bottom: 28px !important;
+        }
+        .brand-logo {
+            width: 44px !important;
+            height: 44px !important;
+            border-radius: 50% !important;
+            background: rgba(255, 255, 255, 0.12) !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            color: #F8FAFC !important;
+            font-size: 1rem !important;
+            font-weight: 700 !important;
+        }
+        .brand-label {
+            font-size: 0.82rem !important;
+            color: rgba(255, 255, 255, 0.72) !important;
+            letter-spacing: 0.18em !important;
+            text-transform: uppercase !important;
+        }
+        .ai-branding {
+            font-size: clamp(2rem, 3.5vw, 2.8rem);
+            font-weight: 800;
+            margin-bottom: 18px;
+            color: #F7FBFF;
+        }
+        .trust-row {
+            color: rgba(185, 198, 224, 0.72) !important;
+            font-size: 0.95rem !important;
+            max-width: 520px !important;
+            margin-bottom: 32px !important;
+            line-height: 1.6 !important;
+        }
+        .ai-login-heading {
+            font-size: 2.2rem !important;
+            font-weight: 800 !important;
+            color: #F8FAFC !important;
+            margin-bottom: 8px !important;
+        }
+        .ai-login-subheading {
+            font-size: 1rem !important;
+            color: rgba(185, 198, 224, 0.9) !important;
+            margin-bottom: 28px !important;
+        }
+        .ai-login-note {
+            color: rgba(185, 198, 224, 0.68) !important;
+            font-size: 0.95rem !important;
+            margin-top: 16px !important;
+        }
         
         /* Login card styling */
         .ai-login-form {
-            background: linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.06)), rgba(15, 22, 36, 0.85);
-            border: 1px solid rgba(255, 255, 255, 0.14);
-            border-radius: 32px;
-            padding: 44px;
-            box-shadow: 0 28px 100px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-            backdrop-filter: blur(24px);
-            width: 100%;
-            max-width: 420px;
+            background: rgba(15, 22, 36, 0.92) !important;
+            border: 1px solid rgba(255, 255, 255, 0.16) !important;
+            border-radius: 32px !important;
+            padding: 44px !important;
+            box-shadow: 0 30px 90px rgba(0, 0, 0, 0.35) !important;
+            backdrop-filter: blur(24px) !important;
+            width: 100% !important;
+            max-width: 420px !important;
         }
         
         .stTextInput input {
@@ -3629,35 +3682,32 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
     left_col, right_col = st.columns([1.3, 1])
     
     with left_col:
-        st.markdown("🛡️", unsafe_allow_html=True)
-        st.markdown("### Mercedes-Benz")
-        st.markdown("IntelliDoc AI Control Room")
-        st.markdown('<h1 class="ai-tagline">Where Documents Become Intelligence.</h1>', unsafe_allow_html=True)
-        st.markdown('<p class="ai-description">A premium, enterprise-grade AI document control room for analysis, comparison, dashboards, and intelligent automation. Built for precision and elegance.</p>', unsafe_allow_html=True)
-        
-        st.markdown("**💬 Analyze** • **📊 Compare** • **⚡ Automate** • **🧠 Intelligence**")
+        st.markdown('<div class="brand-strip"><div class="brand-logo">MB</div><div class="brand-label">Powered by Mercedes-Benz</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="ai-branding">IntelliDoc AI Control Room</div>', unsafe_allow_html=True)
+        st.markdown('<h1 class="ai-tagline">Where Documents Become Intelligence</h1>', unsafe_allow_html=True)
+        st.markdown('<p class="ai-description">An enterprise AI control room for secure document insight, comparison, dashboards, and automation.</p>', unsafe_allow_html=True)
+        st.markdown('<div class="trust-row">Secure enterprise access • SSO-ready • Trusted by modern teams</div>', unsafe_allow_html=True)
         
         col1, col2 = st.columns(2)
         with col1:
-            st.info("**AI Chat**  \nContext-aware answers from documents")
-            st.info("**Comparison Engine**  \nPrecise document diff analysis")
+            st.info("**Analyze**  \nContext-aware answers from documents")
+            st.info("**Compare**  \nPrecise document diff analysis")
         with col2:
-            st.info("**Smart Dashboard**  \nVisual summaries & insights")
-            st.info("**CAPL Assist**  \nScript analysis & optimization")
+            st.info("**Dashboard**  \nVisual summaries & insights")
+            st.info("**Automate**  \nScript analysis & optimization")
     
     with right_col:
         st.markdown('<div class="ai-login-form">', unsafe_allow_html=True)
-        st.markdown("### Welcome")
-        st.markdown("Sign in to access IntelliDoc AI")
+        st.markdown('<div class="ai-login-heading">Welcome back</div>', unsafe_allow_html=True)
+        st.markdown('<div class="ai-login-subheading">Sign in to IntelliDoc AI</div>', unsafe_allow_html=True)
         
-        login_username = st.text_input("👤 Username", placeholder="Enter your username")
-        login_password = st.text_input("🔒 Password", type="password", placeholder="Enter your password (optional for users)")
+        login_username = st.text_input("👤 Username", placeholder="Username")
+        login_password = st.text_input("🔒 Password", type="password", placeholder="Password")
         
         st.caption("Standard users can leave password empty")
         
-        access_clicked = st.button("Continue → Access", use_container_width=True)
-        
-        st.markdown("Need help? [View Documentation](#)")
+        access_clicked = st.button("Sign In", use_container_width=True)
+        st.markdown('<div class="ai-login-note">Secure enterprise access • Trusted platform</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
     if access_clicked:
