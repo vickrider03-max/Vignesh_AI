@@ -3599,6 +3599,11 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             color: #F8FAFC !important;
             font-size: 1rem !important;
             font-weight: 700 !important;
+            animation: rotate-logo 8s linear infinite !important;
+        }
+        @keyframes rotate-logo {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
         }
         .brand-label {
             font-size: 0.82rem !important;
@@ -3682,7 +3687,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
     left_col, right_col = st.columns([1.3, 1])
     
     with left_col:
-        st.markdown('<div class="brand-strip"><div class="brand-logo">MB</div><div class="brand-label">Powered by Mercedes-Benz</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="brand-strip"><div class="brand-logo">🚗</div><div class="brand-label">Powered by Mercedes-Benz</div></div>', unsafe_allow_html=True)
         st.markdown('<div class="ai-branding">IntelliDoc AI Control Room</div>', unsafe_allow_html=True)
         st.markdown('<h1 class="ai-tagline">Where Documents Become Intelligence</h1>', unsafe_allow_html=True)
         st.markdown('<p class="ai-description">An enterprise AI control room for secure document insight, comparison, dashboards, and automation.</p>', unsafe_allow_html=True)
