@@ -3530,63 +3530,69 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
     # Custom CSS for the login page
     st.markdown("""
     <style>
-        html, body { margin: 0; padding: 0; }
-        .block-container { max-width: 100vw !important; padding: 0 !important; margin: 0 !important; width: 100vw !important; height: 100vh !important; }
-        .main { width: 100% !important; padding: 0 !important; }
-        
+        html, body { margin: 0; padding: 0; height: 100%; }
+        .block-container {
+            max-width: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+        }
+        .main {
+            width: 100% !important;
+            padding: 0 !important;
+            height: 100vh !important;
+        }
+
         /* Full viewport container */
         [data-testid="stAppViewContainer"] {
             background: linear-gradient(135deg, #0B0F1A 0%, #0f1624 50%, #0a0e1a 100%) !important;
             height: 100vh !important;
+            display: flex !important;
+            align-items: stretch !important;
         }
-        
-        /* Split layout using columns */
-        [data-testid="column"] {
+
+        /* Flexbox layout */
+        .login-container {
+            display: flex !important;
+            width: 100% !important;
             height: 100vh !important;
+            align-items: stretch !important;
+        }
+
+        /* Left section - takes remaining space */
+        .left-section {
+            flex: 1 !important;
+            padding: 60px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: center !important;
+            color: #F7FBFF !important;
+        }
+
+        /* Right section - fixed width, centered */
+        .right-section {
+            width: 420px !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
+            padding: 20px !important;
+            flex-shrink: 0 !important;
         }
-        
-        /* LEFT COLUMN - Branding */
-        [data-testid="column"]:first-child {
-            padding: 48px !important;
-            color: #F7FBFF;
-        }
-        
-        /* RIGHT COLUMN - Login */
-        [data-testid="column"]:nth-child(2) {
-            padding: 44px !important;
-        }
-        
+
         /* Hide default Streamlit widgets wrapper */
         .stForm { background: transparent !important; border: none !important; }
-        
+
+        /* Typography */
         h1, h2 { color: #F7FBFF !important; }
         p { color: rgba(185, 198, 224, 0.88) !important; }
-        
-        .ai-tagline {
-            font-size: clamp(2.2rem, 4vw, 3.2rem);
-            font-weight: 800;
-            line-height: 1.15;
-            color: #F4F7FF;
-            margin-bottom: 24px;
-            max-width: 560px;
-            letter-spacing: -0.03em;
-        }
-        
-        .ai-description {
-            max-width: 520px;
-            font-size: 1.02rem;
-            line-height: 1.7;
-            color: rgba(185, 198, 224, 0.88);
-            margin-bottom: 36px;
-        }
+
+        /* Branding elements */
         .brand-strip {
             display: flex !important;
             align-items: center !important;
             gap: 12px !important;
-            margin-bottom: 28px !important;
+            margin-bottom: 32px !important;
         }
         .brand-logo {
             width: 44px !important;
@@ -3611,109 +3617,174 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             letter-spacing: 0.18em !important;
             text-transform: uppercase !important;
         }
+
         .ai-branding {
-            font-size: clamp(2rem, 3.5vw, 2.8rem);
-            font-weight: 800;
-            margin-bottom: 18px;
-            color: #F7FBFF;
+            font-size: clamp(2rem, 3.5vw, 2.8rem) !important;
+            font-weight: 800 !important;
+            margin-bottom: 18px !important;
+            color: #F7FBFF !important;
         }
+
+        .ai-tagline {
+            font-size: clamp(2.2rem, 4vw, 3.2rem) !important;
+            font-weight: 800 !important;
+            line-height: 1.15 !important;
+            color: #F4F7FF !important;
+            margin-bottom: 24px !important;
+            letter-spacing: -0.03em !important;
+        }
+
+        .ai-description {
+            font-size: 1.02rem !important;
+            line-height: 1.7 !important;
+            color: rgba(185, 198, 224, 0.88) !important;
+            margin-bottom: 36px !important;
+        }
+
         .trust-row {
             color: rgba(185, 198, 224, 0.72) !important;
             font-size: 0.95rem !important;
-            max-width: 520px !important;
             margin-bottom: 32px !important;
             line-height: 1.6 !important;
         }
-        .ai-login-heading {
-            font-size: 2.2rem !important;
-            font-weight: 800 !important;
+
+        /* Feature cards */
+        .stInfo {
+            background: rgba(255, 255, 255, 0.05) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            border-radius: 12px !important;
+            color: #F7FBFF !important;
+        }
+
+        /* Login card */
+        .login-card {
+            background: rgba(15, 22, 36, 0.95) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+            border-radius: 16px !important;
+            padding: 32px !important;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3) !important;
+            backdrop-filter: blur(20px) !important;
+            width: 100% !important;
+            max-width: 380px !important;
+        }
+
+        .login-heading {
+            font-size: 1.8rem !important;
+            font-weight: 700 !important;
             color: #F8FAFC !important;
             margin-bottom: 8px !important;
+            text-align: center !important;
         }
-        .ai-login-subheading {
-            font-size: 1rem !important;
-            color: rgba(185, 198, 224, 0.9) !important;
-            margin-bottom: 28px !important;
-        }
-        .ai-login-note {
-            color: rgba(185, 198, 224, 0.68) !important;
+
+        .login-subheading {
             font-size: 0.95rem !important;
-            margin-top: 16px !important;
+            color: rgba(185, 198, 224, 0.85) !important;
+            margin-bottom: 24px !important;
+            text-align: center !important;
         }
-        
-        /* Login card styling */
-        .ai-login-form {
-            background: rgba(15, 22, 36, 0.92) !important;
-            border: 1px solid rgba(255, 255, 255, 0.16) !important;
-            border-radius: 32px !important;
-            padding: 44px !important;
-            box-shadow: 0 30px 90px rgba(0, 0, 0, 0.35) !important;
-            backdrop-filter: blur(24px) !important;
-            width: 100% !important;
-            max-width: 420px !important;
-        }
-        
+
+        /* Form elements */
         .stTextInput input {
             background: rgba(255, 255, 255, 0.08) !important;
-            border: 1px solid rgba(255, 255, 255, 0.14) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
             color: #F6F9FF !important;
-            border-radius: 18px !important;
-            padding: 16px 18px !important;
-            min-height: 56px !important;
+            border-radius: 8px !important;
+            padding: 12px 16px !important;
+            width: 100% !important;
+            margin-bottom: 16px !important;
         }
-        
+
         .stTextInput input:focus {
-            border: 1px solid rgba(124, 92, 255, 0.95) !important;
-            box-shadow: 0 0 0 6px rgba(124, 92, 255, 0.18), 0 16px 40px rgba(124, 92, 255, 0.22) !important;
+            border: 1px solid rgba(124, 92, 255, 0.8) !important;
+            box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.15) !important;
             background: rgba(255, 255, 255, 0.12) !important;
         }
-        
+
         .stButton button {
             background: linear-gradient(135deg, #00C2FF 0%, #7C5CFF 100%) !important;
             color: white !important;
             border: 0 !important;
-            border-radius: 18px !important;
-            font-weight: 700 !important;
+            border-radius: 8px !important;
+            font-weight: 600 !important;
+            width: 100% !important;
+            padding: 12px 16px !important;
+            margin-top: 8px !important;
         }
-        
+
         .stButton button:hover {
             background: linear-gradient(135deg, #00D4FF 0%, #8C7AFF 100%) !important;
-            transform: translateY(-2px) !important;
+            transform: translateY(-1px) !important;
+        }
+
+        .login-note {
+            color: rgba(185, 198, 224, 0.6) !important;
+            font-size: 0.85rem !important;
+            text-align: center !important;
+            margin-top: 16px !important;
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .login-container {
+                flex-direction: column !important;
+            }
+            .left-section {
+                padding: 40px 20px !important;
+                order: 2 !important;
+            }
+            .right-section {
+                width: 100% !important;
+                padding: 20px !important;
+                order: 1 !important;
+            }
+            .ai-tagline {
+                font-size: 2rem !important;
+            }
+            .login-card {
+                max-width: none !important;
+                padding: 24px !important;
+            }
         }
     </style>
     """, unsafe_allow_html=True)
-    
-    # Create split layout
-    left_col, right_col = st.columns([1.3, 1])
-    
-    with left_col:
-        st.markdown('<div class="brand-strip"><div class="brand-logo">🚗</div><div class="brand-label">Powered by Mercedes-Benz</div></div>', unsafe_allow_html=True)
-        st.markdown('<div class="ai-branding">IntelliDoc AI Control Room</div>', unsafe_allow_html=True)
-        st.markdown('<h1 class="ai-tagline">Where Documents Become Intelligence</h1>', unsafe_allow_html=True)
-        st.markdown('<p class="ai-description">An enterprise AI control room for secure document insight, comparison, dashboards, and automation.</p>', unsafe_allow_html=True)
-        st.markdown('<div class="trust-row">Secure enterprise access • SSO-ready • Trusted by modern teams</div>', unsafe_allow_html=True)
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.info("**Analyze**  \nContext-aware answers from documents")
-            st.info("**Compare**  \nPrecise document diff analysis")
-        with col2:
-            st.info("**Dashboard**  \nVisual summaries & insights")
-            st.info("**Automate**  \nScript analysis & optimization")
-    
-    with right_col:
-        st.markdown('<div class="ai-login-form">', unsafe_allow_html=True)
-        st.markdown('<div class="ai-login-heading">Welcome back</div>', unsafe_allow_html=True)
-        st.markdown('<div class="ai-login-subheading">Sign in to IntelliDoc AI</div>', unsafe_allow_html=True)
-        
-        login_username = st.text_input("👤 Username", placeholder="Username")
-        login_password = st.text_input("🔒 Password", type="password", placeholder="Password")
-        
-        st.caption("Standard users can leave password empty")
-        
-        access_clicked = st.button("Sign In", use_container_width=True)
-        st.markdown('<div class="ai-login-note">Secure enterprise access • Trusted platform</div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+
+    # Create the new flexbox layout
+    st.markdown('<div class="login-container">', unsafe_allow_html=True)
+
+    # Left section
+    st.markdown('<div class="left-section">', unsafe_allow_html=True)
+    st.markdown('<div class="brand-strip"><div class="brand-logo">🚗</div><div class="brand-label">Powered by Mercedes-Benz</div></div>', unsafe_allow_html=True)
+    st.markdown('<div class="ai-branding">IntelliDoc AI Control Room</div>', unsafe_allow_html=True)
+    st.markdown('<h1 class="ai-tagline">Where Documents Become Intelligence</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="ai-description">An enterprise AI control room for secure document insight, comparison, dashboards, and automation.</p>', unsafe_allow_html=True)
+    st.markdown('<div class="trust-row">Secure enterprise access • SSO-ready • Trusted by modern teams</div>', unsafe_allow_html=True)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.info("**Analyze**  \nContext-aware answers from documents")
+        st.info("**Compare**  \nPrecise document diff analysis")
+    with col2:
+        st.info("**Dashboard**  \nVisual summaries & insights")
+        st.info("**Automate**  \nScript analysis & optimization")
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Right section
+    st.markdown('<div class="right-section">', unsafe_allow_html=True)
+    st.markdown('<div class="login-card">', unsafe_allow_html=True)
+    st.markdown('<div class="login-heading">Welcome back</div>', unsafe_allow_html=True)
+    st.markdown('<div class="login-subheading">Sign in to IntelliDoc AI</div>', unsafe_allow_html=True)
+
+    login_username = st.text_input("👤 Username", placeholder="Username", key="username")
+    login_password = st.text_input("🔒 Password", type="password", placeholder="Password", key="password")
+
+    st.caption("Standard users can leave password empty")
+
+    access_clicked = st.button("Sign In", use_container_width=True, key="signin")
+    st.markdown('<div class="login-note">Secure enterprise access • Trusted platform</div>', unsafe_allow_html=True)
+    st.markdown('</div></div>', unsafe_allow_html=True)
+
+    st.markdown('</div>', unsafe_allow_html=True)
 
     if access_clicked:
         cleaned_username = (login_username or "").strip()
