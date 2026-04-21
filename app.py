@@ -3600,8 +3600,8 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             animation: rotate-logo 8s linear infinite !important;
         }
         @keyframes rotate-logo {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(180deg); }
+            from { transform: rotateY(0deg); }
+            to { transform: rotateY(360deg); }
         }
         .brand-label {
             font-size: 0.82rem !important;
@@ -3784,8 +3784,8 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             animation: rotate-logo 8s linear infinite !important;
         }
         @keyframes rotate-logo {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
+            from { transform: rotateY(0deg); }
+            to { transform: rotateY(360deg); }
         }
         .brand-label {
             font-size: 0.82rem !important;
