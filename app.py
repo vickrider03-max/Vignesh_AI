@@ -3574,9 +3574,9 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
 
         /* Form elements */
         .stTextInput input {
-            background: rgba(255, 255, 255, 0.15) !important;
+            background: rgba(255, 255, 255, 0.08) !important;
             border: 1px solid rgba(255, 255, 255, 0.12) !important;
-            color: white !important;
+            color: #F6F9FF !important;
             border-radius: 8px !important;
             padding: 12px 16px !important;
             width: 100% !important;
@@ -3586,12 +3586,12 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         .stTextInput input:focus {
             border: 1px solid rgba(124, 92, 255, 0.8) !important;
             box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.15) !important;
-            background: rgba(255, 255, 255, 0.2) !important;
+            background: rgba(255, 255, 255, 0.12) !important;
         }
 
         .stButton button {
             background: linear-gradient(135deg, #00C2FF 0%, #7C5CFF 100%) !important;
-            color: white !important;
+            color: #F6F9FF !important;
             border: 0 !important;
             border-radius: 8px !important;
             font-weight: 600 !important;
@@ -3642,9 +3642,9 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
     <style>
         /* Form elements */
         .stTextInput input {
-            background: rgba(255, 255, 255, 0.15) !important;
+            background: rgba(255, 255, 255, 0.08) !important;
             border: 1px solid rgba(255, 255, 255, 0.12) !important;
-            color: white !important;
+            color: #F6F9FF !important;
             border-radius: 8px !important;
             padding: 12px 16px !important;
             width: 100% !important;
@@ -3654,12 +3654,12 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         .stTextInput input:focus {
             border: 1px solid rgba(124, 92, 255, 0.8) !important;
             box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.15) !important;
-            background: rgba(255, 255, 255, 0.2) !important;
+            background: rgba(255, 255, 255, 0.12) !important;
         }
 
         .stButton button {
             background: linear-gradient(135deg, #00C2FF 0%, #7C5CFF 100%) !important;
-            color: white !important;
+            color: #F6F9FF !important;
             border: 0 !important;
             border-radius: 8px !important;
             font-weight: 600 !important;
@@ -4593,7 +4593,7 @@ st.markdown("""
     /* Active State - Deep Electric Blue */
     div[role="radiogroup"] > label[data-checked="true"] {
         background-color: #1E88E5 !important;
-        color: white !important;
+        color: #F6F9FF !important;
         box-shadow: 0 4px 15px rgba(30, 136, 229, 0.4);
     }
 
@@ -4609,7 +4609,7 @@ st.markdown("""
 
     /* White Dot for Active Tab */
     div[role="radiogroup"] > label[data-checked="true"]::after {
-        background-color: white !important;
+        background-color: #F6F9FF !important;
         box-shadow: 0 0 8px #ffffff;
     }
 
