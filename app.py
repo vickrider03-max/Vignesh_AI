@@ -4770,7 +4770,7 @@ st.markdown("""
 
     /* Responsive text sizes */
     .login-heading {
-        font-size: clamp(1.8rem, 5vw, 3.4rem);color: white; #text-shadow: 0 2px 4px rgba(0,0,0,0.3);#
+        font-size: clamp(1.8rem, 5vw, 3.4rem);color: green; text-shadow: 0 2px 4px rgba(0,0,0,0.3);
     }
 
     .login-tagline {
