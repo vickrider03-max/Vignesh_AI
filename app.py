@@ -3572,114 +3572,11 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             min-height: 100vh !important;
         }
 
-        /* Hide default Streamlit widgets wrapper */
-        .stForm { background: transparent !important; border: none !important; }
-
-        /* Typography */
-        h1, h2 { color: #F7FBFF !important; }
-        p { color: rgba(185, 198, 224, 0.88) !important; }
-
-        /* Branding elements */
-        .brand-strip {
-            display: flex !important;
-            align-items: center !important;
-            gap: 12px !important;
-            margin-bottom: 32px !important;
-        }
-        .brand-logo {
-            width: 44px !important;
-            height: 44px !important;
-            border-radius: 50% !important;
-            background: rgba(255, 255, 255, 0.12) !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            color: #F8FAFC !important;
-            font-size: 1rem !important;
-            font-weight: 700 !important;
-            animation: rotate-logo 8s linear infinite !important;
-        }
-        @keyframes rotate-logo {
-            from { transform: rotateY(0deg); }
-            to { transform: rotateY(360deg); }
-        }
-        .brand-label {
-            font-size: 0.82rem !important;
-            color: rgba(255, 255, 255, 0.72) !important;
-            letter-spacing: 0.18em !important;
-            text-transform: uppercase !important;
-        }
-
-        .ai-branding {
-            font-size: clamp(2rem, 3.5vw, 2.8rem) !important;
-            font-weight: 800 !important;
-            margin-bottom: 18px !important;
-            color: #F7FBFF !important;
-        }
-
-        .ai-tagline {
-            font-size: clamp(2.2rem, 4vw, 3.2rem) !important;
-            font-weight: 800 !important;
-            line-height: 1.15 !important;
-            color: #F4F7FF !important;
-            margin-bottom: 24px !important;
-            letter-spacing: -0.03em !important;
-        }
-
-        .ai-description {
-            font-size: 1.02rem !important;
-            line-height: 1.7 !important;
-            color: rgba(185, 198, 224, 0.88) !important;
-            margin-bottom: 36px !important;
-        }
-
-        .trust-row {
-            color: rgba(185, 198, 224, 0.72) !important;
-            font-size: 0.95rem !important;
-            margin-bottom: 32px !important;
-            line-height: 1.6 !important;
-        }
-
-        /* Feature cards */
-        .stInfo {
-            background: rgba(255, 255, 255, 0.05) !important;
-            border: 1px solid rgba(255, 255, 255, 0.08) !important;
-            border-radius: 12px !important;
-            color: #F7FBFF !important;
-        }
-
-        /* Login card */
-        .login-card {
-            background: rgba(15, 22, 36, 0.95) !important;
-            border: 1px solid rgba(255, 255, 255, 0.12) !important;
-            border-radius: 16px !important;
-            padding: 32px !important;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3) !important;
-            backdrop-filter: blur(20px) !important;
-            width: 100% !important;
-            max-width: 380px !important;
-        }
-
-        .login-heading {
-            font-size: 1.8rem !important;
-            font-weight: 700 !important;
-            color: #F8FAFC !important;
-            margin-bottom: 8px !important;
-            text-align: center !important;
-        }
-
-        .login-subheading {
-            font-size: 0.95rem !important;
-            color: rgba(185, 198, 224, 0.85) !important;
-            margin-bottom: 24px !important;
-            text-align: center !important;
-        }
-
         /* Form elements */
         .stTextInput input {
-            background: rgba(255, 255, 255, 0.08) !important;
+            background: rgba(255, 255, 255, 0.15) !important;
             border: 1px solid rgba(255, 255, 255, 0.12) !important;
-            color: #F6F9FF !important;
+            color: white !important;
             border-radius: 8px !important;
             padding: 12px 16px !important;
             width: 100% !important;
@@ -3689,7 +3586,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         .stTextInput input:focus {
             border: 1px solid rgba(124, 92, 255, 0.8) !important;
             box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.15) !important;
-            background: rgba(255, 255, 255, 0.12) !important;
+            background: rgba(255, 255, 255, 0.2) !important;
         }
 
         .stButton button {
@@ -3743,127 +3640,11 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
     # Apply custom styling to make it full-width flexbox
     st.markdown("""
     <style>
-        /* Override Streamlit's default column behavior */
-        [data-testid="column"]:first-child {
-            flex: 1 !important;
-            padding: 60px !important;
-            display: flex !important;
-            flex-direction: column !important;
-            justify-content: center !important;
-            color: #F7FBFF !important;
-            min-height: 100vh !important;
-        }
-        [data-testid="column"]:nth-child(2) {
-            width: 420px !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            padding: 20px !important;
-            flex-shrink: 0 !important;
-            min-height: 100vh !important;
-        }
-
-        /* Branding elements */
-        .brand-strip {
-            display: flex !important;
-            align-items: center !important;
-            gap: 12px !important;
-            margin-bottom: 32px !important;
-        }
-        .brand-logo {
-            width: 44px !important;
-            height: 44px !important;
-            border-radius: 50% !important;
-            background: rgba(255, 255, 255, 0.12) !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            color: #F8FAFC !important;
-            font-size: 1rem !important;
-            font-weight: 700 !important;
-            animation: rotate-logo 8s linear infinite !important;
-        }
-        @keyframes rotate-logo {
-            from { transform: rotateY(0deg); }
-            to { transform: rotateY(360deg); }
-        }
-        .brand-label {
-            font-size: 0.82rem !important;
-            color: rgba(255, 255, 255, 0.72) !important;
-            letter-spacing: 0.18em !important;
-            text-transform: uppercase !important;
-        }
-
-        .ai-branding {
-            font-size: clamp(2rem, 3.5vw, 2.8rem) !important;
-            font-weight: 800 !important;
-            margin-bottom: 18px !important;
-            color: #F7FBFF !important;
-        }
-
-        .ai-tagline {
-            font-size: clamp(2.2rem, 4vw, 3.2rem) !important;
-            font-weight: 800 !important;
-            line-height: 1.15 !important;
-            color: #F4F7FF !important;
-            margin-bottom: 24px !important;
-            letter-spacing: -0.03em !important;
-        }
-
-        .ai-description {
-            font-size: 1.02rem !important;
-            line-height: 1.7 !important;
-            color: rgba(185, 198, 224, 0.88) !important;
-            margin-bottom: 36px !important;
-        }
-
-        .trust-row {
-            color: rgba(185, 198, 224, 0.72) !important;
-            font-size: 0.95rem !important;
-            margin-bottom: 32px !important;
-            line-height: 1.6 !important;
-        }
-
-        /* Feature cards */
-        .stInfo {
-            background: rgba(255, 255, 255, 0.05) !important;
-            border: 1px solid rgba(255, 255, 255, 0.08) !important;
-            border-radius: 12px !important;
-            color: #F7FBFF !important;
-        }
-
-        /* Login card */
-        .login-card {
-            background: rgba(15, 22, 36, 0.95) !important;
-            border: 1px solid rgba(255, 255, 255, 0.12) !important;
-            border-radius: 16px !important;
-            padding: 32px !important;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3) !important;
-            backdrop-filter: blur(20px) !important;
-            width: 100% !important;
-            max-width: 380px !important;
-        }
-
-        .login-heading {
-            font-size: 1.8rem !important;
-            font-weight: 700 !important;
-            color: #F8FAFC !important;
-            margin-bottom: 8px !important;
-            text-align: center !important;
-        }
-
-        .login-subheading {
-            font-size: 0.95rem !important;
-            color: rgba(185, 198, 224, 0.85) !important;
-            margin-bottom: 24px !important;
-            text-align: center !important;
-        }
-
         /* Form elements */
         .stTextInput input {
-            background: rgba(255, 255, 255, 0.08) !important;
+            background: rgba(255, 255, 255, 0.15) !important;
             border: 1px solid rgba(255, 255, 255, 0.12) !important;
-            color: #F6F9FF !important;
+            color: white !important;
             border-radius: 8px !important;
             padding: 12px 16px !important;
             width: 100% !important;
@@ -3873,7 +3654,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         .stTextInput input:focus {
             border: 1px solid rgba(124, 92, 255, 0.8) !important;
             box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.15) !important;
-            background: rgba(255, 255, 255, 0.12) !important;
+            background: rgba(255, 255, 255, 0.2) !important;
         }
 
         .stButton button {
@@ -3938,7 +3719,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             st.info("**Automate**  \nScript analysis & optimization")
 
     with right_col:
-        #st.markdown('<div class="login-card">', unsafe_allow_html=True)
+    
         st.markdown('<div class="login-heading">Welcome back</div>', unsafe_allow_html=True)
         st.markdown('<div class="login-subheading">Sign in to IntelliDoc AI</div>', unsafe_allow_html=True)
 
