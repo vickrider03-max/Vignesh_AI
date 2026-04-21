@@ -3828,11 +3828,11 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
 
         col1, col2 = st.columns(2)
         with col1:
-            st.info("**Analyze**  \nContext-aware answers from documents")
-            st.info("**Compare**  \nPrecise document diff analysis")
+            st.info("**🧠 Chat**  \nAsk questions about uploaded files \nContext-aware responses \nMulti-file semantic understanding")
+            st.info("**🔄 Compare**  \nCompare 2+ files \nWord-level diff \nInline visual comparison \nExport results to Excel")
         with col2:
-            st.info("**Dashboard**  \nVisual summaries & insights")
-            st.info("**Automate**  \nScript analysis & optimization")
+            st.info("**📊 Dashboard**  \nExcel/CSV visualization \nExport insights")
+            st.info("**🚗 CAPL **  \nUpload or create `.can` files \nBuilt-in CAPL editor \nCode analysis & issue detection \nSuggestions & improvements")
 
     with right_col:  # type: ignore  # right_col is defined at line 3699
         st.markdown('<div class="login-panel">', unsafe_allow_html=True)
