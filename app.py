@@ -4770,8 +4770,15 @@ st.markdown("""
 
     /* Responsive text sizes */
     .login-heading {
-        font-size: clamp(1.8rem, 5vw, 3.4rem);color: green; text-shadow: 0 2px 4px rgba(0,0,0,0.3);
-    }
+    font-size: clamp(1.8rem, 5vw, 3.4rem);
+    color: #F8FAFC !important;
+    font-weight: 600;
+
+
+.login-subheading {
+    font-size: clamp(0.9rem, 2.5vw, 1rem);
+    color: rgba(248, 250, 252, 0.75) !important;
+}
 
     .login-tagline {
         font-size: clamp(0.9rem, 2.5vw, 1rem);
