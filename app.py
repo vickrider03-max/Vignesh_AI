@@ -3828,7 +3828,12 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
 
         col1, col2 = st.columns(2)
         with col1:
-            st.info("**🧠 Chat**  \nAsk questions about uploaded files \nContext-aware responses \nMulti-file semantic understanding")
+            st.info("""
+                    **🧠 Chat** 
+                    -Ask questions about uploaded files 
+                    -Context-aware responses
+                    -Multi-file semantic understanding
+                    """)
             st.info("**🔄 Compare**  \nCompare 2+ files \nWord-level diff \nInline visual comparison \nExport results to Excel")
         with col2:
             st.info("**📊 Dashboard**  \nExcel/CSV visualization \nExport insights")
