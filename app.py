@@ -4770,15 +4770,18 @@ st.markdown("""
 
     /* Responsive text sizes */
     .login-heading {
-    font-size: clamp(1.8rem, 5vw, 3.4rem);
-    color: #F8FAFC !important;
-    font-weight: 600;
+        font-size: clamp(1.8rem, 5vw, 3.4rem) !important;
+        color: #F8FAFC !important;
+        font-weight: 700 !important;
+        margin-bottom: 12px !important;
+    }
 
-
-.login-subheading {
-    font-size: clamp(0.9rem, 2.5vw, 1rem);
-    color: rgba(248, 250, 252, 0.75) !important;
-}
+    .login-subheading {
+        font-size: clamp(0.9rem, 2.5vw, 1.1rem) !important;
+        color: rgba(248, 250, 252, 0.85) !important;
+        font-weight: 500 !important;
+        margin-bottom: 24px !important;
+    }
 
     .login-tagline {
         font-size: clamp(0.9rem, 2.5vw, 1rem);
