@@ -3533,21 +3533,21 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         html, body { margin: 0; padding: 0; height: 100%; }
         .block-container {
             max-width: none !important;
-            padding: 0 !important;
+            padding: clamp(20px, 3vw, 36px) !important;
             margin: 0 !important;
             width: 100vw !important;
-            height: 100vh !important;
+            min-height: 100vh !important;
         }
         .main {
             width: 100% !important;
             padding: 0 !important;
-            height: 100vh !important;
+            min-height: 100vh !important;
         }
 
         /* Full viewport container */
         [data-testid="stAppViewContainer"] {
             background: linear-gradient(135deg, #0B0F1A 0%, #0f1624 50%, #0a0e1a 100%) !important;
-            height: 100vh !important;
+            min-height: 100vh !important;
             display: flex !important;
             align-items: stretch !important;
         }
@@ -3555,21 +3555,21 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         /* Override Streamlit's default column behavior */
         [data-testid="column"]:first-child {
             flex: 1 !important;
-            padding: 80px 120px !important;
+            padding: clamp(36px, 4vw, 64px) clamp(32px, 5vw, 84px) !important;
             display: flex !important;
             flex-direction: column !important;
             justify-content: center !important;
             color: #F7FBFF !important;
-            min-height: 100vh !important;
+            min-height: calc(100vh - 2 * clamp(20px, 3vw, 36px)) !important;
         }
         [data-testid="column"]:nth-child(2) {
-            width: 420px !important;
+            width: min(460px, 100%) !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
-            padding: 20px !important;
+            padding: clamp(20px, 2.6vw, 32px) !important;
             flex-shrink: 0 !important;
-            min-height: 100vh !important;
+            min-height: calc(100vh - 2 * clamp(20px, 3vw, 36px)) !important;
         }
 
         /* Branding elements */
@@ -3578,6 +3578,15 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             align-items: center !important;
             gap: 12px !important;
             margin-bottom: 32px !important;
+        }
+        .login-panel {
+            width: min(440px, 100%);
+            padding: 36px 32px 30px;
+            border-radius: 24px;
+            background: linear-gradient(180deg, rgba(17, 24, 39, 0.88) 0%, rgba(10, 14, 26, 0.94) 100%);
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            box-shadow: 0 28px 60px rgba(0, 0, 0, 0.28);
+            backdrop-filter: blur(16px);
         }
         .brand-logo {
             width: 36px !important;
@@ -3635,37 +3644,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             border-radius: 12px !important;
             color: #F7FBFF !important;
         }
-        /* Form elements */
-        .stTextInput input {
-            background: rgba(20, 30, 60, 0.8) !important;
-            border: 1.5px solid rgba(124, 92, 255, 0.4) !important;
-            color: #FFFFFF !important;
-            border-radius: 8px !important;
-            padding: 12px 16px !important;
-            width: 100% !important;
-            margin-bottom: 16px !important;
-            font-size: 1rem !important;
-            font-weight: 500 !important;
-            -webkit-text-fill-color: #FFFFFF !important;
-            caret-color: #00C2FF !important;
-            text-shadow: 0 0 1px rgba(255, 255, 255, 0.5) !important;
-        }
-
-        .stTextInput input::placeholder {
-            color: rgba(255, 255, 255, 0.5) !important;
-            opacity: 1 !important;
-            -webkit-text-fill-color: rgba(255, 255, 255, 0.5) !important;
-        }
-
-        .stTextInput input:focus {
-            border: 1.5px solid rgba(124, 92, 255, 0.8) !important;
-            box-shadow: 0 0 8px rgba(124, 92, 255, 0.3), 0 0 0 3px rgba(124, 92, 255, 0.15) !important;
-            background: rgba(20, 30, 60, 0.9) !important;
-            color: #FFFFFF !important;
-            -webkit-text-fill-color: #FFFFFF !important;
-        }
-
-        .stButton button {
+        .login-panel .stButton button {
             background: linear-gradient(135deg, #00C2FF 0%, #7C5CFF 100%) !important;
             color: #F6F9FF !important;
             border: 0 !important;
@@ -3676,7 +3655,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             margin-top: 8px !important;
         }
 
-        .stButton button:hover {
+        .login-panel .stButton button:hover {
             background: linear-gradient(135deg, #00D4FF 0%, #8C7AFF 100%) !important;
             transform: translateY(-1px) !important;
         }
@@ -3691,20 +3670,22 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         /* Responsive design */
         @media (max-width: 768px) {
             [data-testid="column"]:first-child {
-                padding: 40px 20px !important;
+                padding: 24px 12px 16px !important;
                 order: 2 !important;
+                min-height: auto !important;
             }
             [data-testid="column"]:nth-child(2) {
                 width: 100% !important;
-                padding: 20px !important;
+                padding: 12px !important;
                 order: 1 !important;
+                min-height: auto !important;
             }
             .ai-tagline {
                 font-size: 2rem !important;
             }
-            .login-card {
-                max-width: none !important;
-                padding: 24px !important;
+            .login-panel {
+                width: 100% !important;
+                padding: 24px 20px !important;
             }
         }
     </style>
@@ -3717,6 +3698,9 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
     st.markdown("""
     <style>
         /* Login heading and subheading */
+        .login-panel .login-heading {
+            margin-top: 0 !important;
+        }
         .login-heading {
             font-size: clamp(1.8rem, 5vw, 3.4rem) !important;
             color: #F8FAFC !important;
@@ -3733,68 +3717,51 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         }
 
         /* Form elements */
-        .stTextInput input {
-            background: rgba(20, 30, 60, 0.8) !important;
-            border: 1.5px solid rgba(124, 92, 255, 0.4) !important;
-            color: #FFFFFF !important;
-            border-radius: 8px !important;
-            padding: 12px 16px !important;
-            width: 100% !important;
-            margin-bottom: 16px !important;
-            font-size: 1rem !important;
-            font-weight: 500 !important;
-            -webkit-text-fill-color: #FFFFFF !important;
-            caret-color: #00C2FF !important;
-            text-shadow: 0 0 1px rgba(255, 255, 255, 0.5) !important;
+        .login-panel [data-testid="stTextInput"] {
+            margin-bottom: 8px !important;
         }
-
-        .stTextInput input::placeholder {
-            color: rgba(255, 255, 255, 0.5) !important;
-            opacity: 1 !important;
-            -webkit-text-fill-color: rgba(255, 255, 255, 0.5) !important;
+        .login-panel [data-testid="stTextInput"] label,
+        .login-panel [data-testid="stTextInput"] label p {
+            color: rgba(226, 232, 240, 0.78) !important;
         }
-
-        input[type="text"],
-        input[type="password"] {
-            background-color: rgba(20, 30, 60, 0.85) !important;
-            color: #00D4FF !important;
+        .login-panel [data-baseweb="base-input"],
+        .login-panel [data-baseweb="input"],
+        .login-panel [data-testid="stTextInput"] > div > div {
+            background: rgba(33, 45, 77, 0.92) !important;
+            border: 1.5px solid rgba(124, 92, 255, 0.42) !important;
+            border-radius: 12px !important;
+            box-shadow: none !important;
+        }
+        .login-panel [data-baseweb="base-input"]:focus-within,
+        .login-panel [data-baseweb="input"]:focus-within,
+        .login-panel [data-testid="stTextInput"] > div > div:focus-within {
+            border-color: rgba(0, 212, 255, 0.82) !important;
+            box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.14), 0 0 18px rgba(0, 212, 255, 0.2) !important;
+        }
+        .login-panel input[type="text"],
+        .login-panel input[type="password"] {
+            background: transparent !important;
+            color: #e6f6ff !important;
             caret-color: #00D4FF !important;
-            -webkit-text-fill-color: #00D4FF !important;
-            border: 1.5px solid rgba(124, 92, 255, 0.4) !important;
+            -webkit-text-fill-color: #e6f6ff !important;
+            border: none !important;
+            box-shadow: none !important;
             font-weight: 600 !important;
-            letter-spacing: 0.3px !important;
+            letter-spacing: 0.2px !important;
             padding: 14px 18px !important;
         }
-
-        input[type="text"]::placeholder,
-        input[type="password"]::placeholder {
-            color: rgba(124, 92, 255, 0.6) !important;
+        .login-panel input[type="text"]::placeholder,
+        .login-panel input[type="password"]::placeholder {
+            color: rgba(186, 160, 255, 0.76) !important;
             opacity: 1 !important;
-            -webkit-text-fill-color: rgba(124, 92, 255, 0.6) !important;
+            -webkit-text-fill-color: rgba(186, 160, 255, 0.76) !important;
         }
-
-        .stTextInput input:focus {
-            border: 1.5px solid rgba(0, 212, 255, 0.8) !important;
-            box-shadow: 0 0 12px rgba(0, 212, 255, 0.4), 0 0 0 3px rgba(0, 212, 255, 0.15) !important;
-            background: rgba(20, 35, 80, 0.95) !important;
-            color: #00FFFF !important;
-            -webkit-text-fill-color: #00FFFF !important;
-        }
-
-        .stButton button {
-            background: linear-gradient(135deg, #00C2FF 0%, #7C5CFF 100%) !important;
-            color: #F6F9FF !important;
-            border: 0 !important;
-            border-radius: 8px !important;
-            font-weight: 600 !important;
-            width: 100% !important;
-            padding: 12px 16px !important;
-            margin-top: 8px !important;
-        }
-
-        .stButton button:hover {
-            background: linear-gradient(135deg, #00D4FF 0%, #8C7AFF 100%) !important;
-            transform: translateY(-1px) !important;
+        .login-panel input[type="text"]:focus,
+        .login-panel input[type="password"]:focus {
+            background: transparent !important;
+            color: #f8fcff !important;
+            -webkit-text-fill-color: #f8fcff !important;
+            outline: none !important;
         }
 
         .login-note {
@@ -3807,20 +3774,20 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         /* Responsive design */
         @media (max-width: 768px) {
             [data-testid="column"]:first-child {
-                padding: 40px 20px !important;
+                padding: 24px 12px 16px !important;
                 order: 2 !important;
             }
             [data-testid="column"]:nth-child(2) {
                 width: 100% !important;
-                padding: 20px !important;
+                padding: 12px !important;
                 order: 1 !important;
             }
             .ai-tagline {
                 font-size: 2rem !important;
             }
-            .login-card {
-                max-width: none !important;
-                padding: 24px !important;
+            .login-panel {
+                width: 100% !important;
+                padding: 24px 20px !important;
             }
         }
     </style>
@@ -3843,7 +3810,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             st.info("**Automate**  \nScript analysis & optimization")
 
     with right_col:
-    
+        st.markdown('<div class="login-panel">', unsafe_allow_html=True)
         st.markdown('<div class="login-heading">Welcome back</div>', unsafe_allow_html=True)
         st.markdown('<div class="login-subheading">Sign in to IntelliDoc AI</div>', unsafe_allow_html=True)
 
