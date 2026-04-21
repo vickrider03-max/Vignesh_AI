@@ -3721,8 +3721,12 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             margin-bottom: 8px !important;
         }
         .login-panel [data-testid="stTextInput"] label,
-        .login-panel [data-testid="stTextInput"] label p {
-            color: rgba(226, 232, 240, 0.78) !important;
+        .login-panel [data-testid="stTextInput"] label p,
+        .login-panel [data-testid="stTextInput"] label span,
+        .login-panel [data-testid="stTextInput"] p {
+            color: rgba(226, 232, 240, 0.92) !important;
+            -webkit-text-fill-color: rgba(226, 232, 240, 0.92) !important;
+            opacity: 1 !important;
         }
         .login-panel [data-baseweb="base-input"],
         .login-panel [data-baseweb="input"],
@@ -3770,6 +3774,14 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             text-align: center !important;
             margin-top: 16px !important;
         }
+        .login-panel [data-testid="stCaptionContainer"],
+        .login-panel [data-testid="stCaptionContainer"] p,
+        .login-panel .stCaption,
+        .login-panel .stCaption p {
+            color: rgba(191, 208, 236, 0.82) !important;
+            -webkit-text-fill-color: rgba(191, 208, 236, 0.82) !important;
+            opacity: 1 !important;
+        }
 
         /* Responsive design */
         @media (max-width: 768px) {
@@ -3799,7 +3811,6 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         st.markdown('<div class="ai-branding">IntelliDoc AI Control Room</div>', unsafe_allow_html=True)
         st.markdown('<h1 class="ai-tagline">Where Documents Become Intelligence</h1>', unsafe_allow_html=True)
         st.markdown('<p class="ai-description">An enterprise AI control room for secure document insight, comparison, dashboards, and automation.</p>', unsafe_allow_html=True)
-        st.markdown('<div class="trust-row">Secure enterprise access • SSO-ready • Trusted by modern teams</div>', unsafe_allow_html=True)
 
         col1, col2 = st.columns(2)
         with col1:
@@ -3819,7 +3830,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
 
         st.caption("Standard users can leave password empty")
 
-        access_clicked = st.button("Sign In", use_container_width=True, key="signin")
+        access_clicked = st.button("Access", use_container_width=True, key="signin")
 
         st.markdown('</div>', unsafe_allow_html=True)
 
