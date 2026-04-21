@@ -3830,9 +3830,10 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         with col1:
             st.info("""
                     **🧠 Chat** 
-                    -Ask questions about uploaded files 
-                    -Context-aware responses
-                    -Multi-file semantic understanding
+                    
+                    - Ask questions about uploaded files
+                    - Context-aware responses
+                    - Multi-file semantic understanding
                     """)
             st.info("""
                     **🔄 Compare** 
