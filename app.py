@@ -3834,10 +3834,26 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                     -Context-aware responses
                     -Multi-file semantic understanding
                     """)
-            st.info("**🔄 Compare**  \nCompare 2+ files \nWord-level diff \nInline visual comparison \nExport results to Excel")
+            st.info("""
+                    **🔄 Compare** 
+                    -Compare 2+ files 
+                    -Word-level diff 
+                    -Inline visual comparison 
+                    -Export results to Excel
+                    """)
         with col2:
-            st.info("**📊 Dashboard**  \nExcel/CSV visualization \nExport insights")
-            st.info("**🚗 CAPL **  \nUpload or create `.can` files \nBuilt-in CAPL editor \nCode analysis & issue detection \nSuggestions & improvements")
+            st.info("""
+                    **📊 Dashboard** 
+                    -Excel/CSV visualization 
+                    -Export insights
+                    """)
+            st.info("""
+                    **🚗 CAPL ** 
+                    -Upload or create `.can` files 
+                    -Built-in CAPL editor 
+                    -Code analysis & issue detection 
+                    -Suggestions & improvements
+                    """)
 
     with right_col:  # type: ignore  # right_col is defined at line 3699
         st.markdown('<div class="login-panel">', unsafe_allow_html=True)
