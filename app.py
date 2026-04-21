@@ -3546,7 +3546,10 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
 
         /* Full viewport container */
         [data-testid="stAppViewContainer"] {
-            background: linear-gradient(135deg, #0B0F1A 0%, #0f1624 50%, #0a0e1a 100%) !important;
+            background:
+                radial-gradient(circle at top left, rgba(96, 165, 250, 0.18) 0%, rgba(96, 165, 250, 0) 32%),
+                radial-gradient(circle at bottom right, rgba(125, 211, 252, 0.14) 0%, rgba(125, 211, 252, 0) 30%),
+                linear-gradient(135deg, #182235 0%, #1e293b 45%, #172033 100%) !important;
             min-height: 100vh !important;
             display: flex !important;
             align-items: stretch !important;
