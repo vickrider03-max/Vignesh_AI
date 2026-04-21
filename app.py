@@ -3547,9 +3547,10 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         /* Full viewport container */
         [data-testid="stAppViewContainer"] {
             background:
-                radial-gradient(circle at top left, rgba(147, 197, 253, 0.22) 0%, rgba(147, 197, 253, 0) 34%),
-                radial-gradient(circle at bottom right, rgba(186, 230, 253, 0.18) 0%, rgba(186, 230, 253, 0) 32%),
-                linear-gradient(135deg, #334155 0%, #475569 45%, #3b485d 100%) !important;
+                radial-gradient(circle at top left, rgba(255, 200, 221, 0.3) 0%, rgba(255, 200, 221, 0) 40%),
+                radial-gradient(circle at top right, rgba(200, 225, 255, 0.25) 0%, rgba(200, 225, 255, 0) 45%),
+                radial-gradient(circle at bottom left, rgba(230, 240, 255, 0.2) 0%, rgba(230, 240, 255, 0) 40%),
+                linear-gradient(135deg, #FFF5E6 0%, #FFE6F0 35%, #E6F2FF 100%) !important;
             min-height: 100vh !important;
             display: flex !important;
             align-items: stretch !important;
@@ -3562,7 +3563,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             display: flex !important;
             flex-direction: column !important;
             justify-content: center !important;
-            color: #F7FBFF !important;
+            color: #3a3a5c !important;
             min-height: calc(100vh - 2 * clamp(20px, 3vw, 36px)) !important;
         }
         [data-testid="column"]:nth-child(2) {
@@ -3586,10 +3587,10 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             width: min(440px, 100%);
             padding: 36px 32px 30px;
             border-radius: 24px;
-            background: linear-gradient(180deg, rgba(17, 24, 39, 0.88) 0%, rgba(10, 14, 26, 0.94) 100%);
-            border: 1px solid rgba(148, 163, 184, 0.18);
-            box-shadow: 0 28px 60px rgba(0, 0, 0, 0.28);
-            backdrop-filter: blur(16px);
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.88) 100%);
+            border: 1.5px solid rgba(200, 180, 220, 0.4);
+            box-shadow: 0 20px 50px rgba(150, 100, 180, 0.12), 0 0 30px rgba(100, 150, 255, 0.08);
+            backdrop-filter: blur(12px);
         }
         .brand-logo {
             width: 36px !important;
@@ -3610,7 +3611,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         }
         .brand-label {
             font-size: 0.82rem !important;
-            color: rgba(255, 255, 255, 0.72) !important;
+            color: rgba(60, 60, 100, 0.85) !important;
             letter-spacing: 0.18em !important;
             text-transform: uppercase !important;
         }
@@ -3618,38 +3619,38 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             font-size: clamp(2rem, 3.5vw, 2.8rem) !important;
             font-weight: 800 !important;
             margin-bottom: 28px !important;
-            color: #F7FBFF !important;
+            color: #1a1a3a !important;
         }
         .ai-tagline {
             font-size: clamp(2.2rem, 4vw, 3.2rem) !important;
             font-weight: 800 !important;
             line-height: 1.15 !important;
-            color: #F4F7FF !important;
+            color: #2a2a4a !important;
             margin-bottom: 32px !important;
             letter-spacing: -0.03em !important;
         }
         .ai-description {
             font-size: 1.02rem !important;
             line-height: 1.7 !important;
-            color: rgba(185, 198, 224, 0.88) !important;
+            color: rgba(70, 70, 110, 0.85) !important;
             margin-bottom: 48px !important;
         }
         .trust-row {
-            color: rgba(185, 198, 224, 0.72) !important;
+            color: rgba(80, 80, 130, 0.75) !important;
             font-size: 0.95rem !important;
             margin-bottom: 56px !important;
             line-height: 1.6 !important;
         }
         /* Feature cards */
         .stInfo {
-            background: rgba(255, 255, 255, 0.05) !important;
-            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            background: rgba(220, 200, 240, 0.15) !important;
+            border: 1px solid rgba(200, 150, 240, 0.25) !important;
             border-radius: 12px !important;
-            color: #F7FBFF !important;
+            color: #3a3a5c !important;
         }
         .login-panel .stButton button {
-            background: linear-gradient(135deg, #00C2FF 0%, #7C5CFF 100%) !important;
-            color: #F6F9FF !important;
+            background: linear-gradient(135deg, #d99fff 0%, #b399ff 100%) !important;
+            color: #ffffff !important;
             border: 0 !important;
             border-radius: 8px !important;
             font-weight: 600 !important;
@@ -3659,12 +3660,12 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         }
 
         .login-panel .stButton button:hover {
-            background: linear-gradient(135deg, #00D4FF 0%, #8C7AFF 100%) !important;
+            background: linear-gradient(135deg, #e6b3ff 0%, #c4b3ff 100%) !important;
             transform: translateY(-1px) !important;
         }
 
         .login-note {
-            color: rgba(185, 198, 224, 0.6) !important;
+            color: rgba(100, 100, 140, 0.7) !important;
             font-size: 0.85rem !important;
             text-align: center !important;
             margin-top: 16px !important;
@@ -3706,7 +3707,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         }
         .login-heading {
             font-size: clamp(1.8rem, 4vw, 2.8rem) !important;
-            color: #F8FAFC !important;
+            color: #1a1a2e !important;
             font-weight: 700 !important;
             margin-bottom: 10px !important;
             line-height: 1.1 !important;
@@ -3714,7 +3715,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
 
         .login-subheading {
             font-size: clamp(0.95rem, 2vw, 1.05rem) !important;
-            color: rgba(248, 250, 252, 0.9) !important;
+            color: #5a5a7a !important;
             font-weight: 500 !important;
             margin-bottom: 20px !important;
         }
@@ -3727,30 +3728,30 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         .login-panel [data-testid="stTextInput"] label p,
         .login-panel [data-testid="stTextInput"] label span,
         .login-panel [data-testid="stTextInput"] p {
-            color: rgba(230, 238, 250, 0.96) !important;
-            -webkit-text-fill-color: rgba(230, 238, 250, 0.96) !important;
+            color: #3a3a5c !important;
+            -webkit-text-fill-color: #3a3a5c !important;
             opacity: 1 !important;
         }
         .login-panel [data-baseweb="base-input"],
         .login-panel [data-baseweb="input"],
         .login-panel [data-testid="stTextInput"] > div > div {
-            background: rgba(31, 41, 63, 0.98) !important;
-            border: 1.5px solid rgba(118, 154, 214, 0.38) !important;
+            background: rgba(245, 240, 250, 0.8) !important;
+            border: 1.5px solid rgba(200, 160, 220, 0.5) !important;
             border-radius: 12px !important;
             box-shadow: none !important;
         }
         .login-panel [data-baseweb="base-input"]:focus-within,
         .login-panel [data-baseweb="input"]:focus-within,
         .login-panel [data-testid="stTextInput"] > div > div:focus-within {
-            border-color: rgba(0, 212, 255, 0.82) !important;
-            box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.14), 0 0 18px rgba(0, 212, 255, 0.2) !important;
+            border-color: rgba(150, 100, 200, 0.8) !important;
+            box-shadow: 0 0 0 3px rgba(200, 150, 240, 0.2), 0 0 18px rgba(200, 150, 240, 0.25) !important;
         }
         .login-panel input[type="text"],
         .login-panel input[type="password"] {
             background: transparent !important;
-            color: #f8fbff !important;
-            caret-color: #00D4FF !important;
-            -webkit-text-fill-color: #f8fbff !important;
+            color: #2a2a4a !important;
+            caret-color: #a366ff !important;
+            -webkit-text-fill-color: #2a2a4a !important;
             border: none !important;
             box-shadow: none !important;
             font-weight: 600 !important;
@@ -3760,20 +3761,20 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         }
         .login-panel input[type="text"]::placeholder,
         .login-panel input[type="password"]::placeholder {
-            color: rgba(194, 206, 230, 0.78) !important;
+            color: rgba(120, 120, 150, 0.6) !important;
             opacity: 1 !important;
-            -webkit-text-fill-color: rgba(194, 206, 230, 0.78) !important;
+            -webkit-text-fill-color: rgba(120, 120, 150, 0.6) !important;
         }
         .login-panel input[type="text"]:focus,
         .login-panel input[type="password"]:focus {
             background: transparent !important;
-            color: #f8fcff !important;
-            -webkit-text-fill-color: #f8fcff !important;
+            color: #2a2a4a !important;
+            -webkit-text-fill-color: #2a2a4a !important;
             outline: none !important;
         }
 
         .login-note {
-            color: rgba(185, 198, 224, 0.6) !important;
+            color: rgba(100, 100, 140, 0.7) !important;
             font-size: 0.85rem !important;
             text-align: center !important;
             margin-top: 16px !important;
@@ -3782,8 +3783,8 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         .login-panel [data-testid="stCaptionContainer"] p,
         .login-panel .stCaption,
         .login-panel .stCaption p {
-            color: rgba(203, 216, 238, 0.9) !important;
-            -webkit-text-fill-color: rgba(203, 216, 238, 0.9) !important;
+            color: rgba(100, 100, 150, 0.8) !important;
+            -webkit-text-fill-color: rgba(100, 100, 150, 0.8) !important;
             opacity: 1 !important;
             font-size: 0.84rem !important;
         }
