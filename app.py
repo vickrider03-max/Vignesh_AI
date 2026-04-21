@@ -3581,9 +3581,9 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
 
         /* Branding elements */
         .brand-strip {
-            #display: flex !important;
-            #align-items: center !important;
-            #gap: 12px !important;
+            display: flex !important;
+            align-items: center !important;
+            gap: 12px !important;
             #margin-bottom: 32px !important;
            perspective: 800px;      
         }
