@@ -3702,18 +3702,18 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             margin-top: 0 !important;
         }
         .login-heading {
-            font-size: clamp(1.8rem, 5vw, 3.4rem) !important;
+            font-size: clamp(1.8rem, 4vw, 2.8rem) !important;
             color: #F8FAFC !important;
             font-weight: 700 !important;
-            margin-bottom: 12px !important;
-            line-height: 1.2 !important;
+            margin-bottom: 10px !important;
+            line-height: 1.1 !important;
         }
 
         .login-subheading {
-            font-size: clamp(0.9rem, 2.5vw, 1.1rem) !important;
-            color: rgba(248, 250, 252, 0.85) !important;
+            font-size: clamp(0.95rem, 2vw, 1.05rem) !important;
+            color: rgba(248, 250, 252, 0.9) !important;
             font-weight: 500 !important;
-            margin-bottom: 24px !important;
+            margin-bottom: 20px !important;
         }
 
         /* Form elements */
@@ -3724,15 +3724,15 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         .login-panel [data-testid="stTextInput"] label p,
         .login-panel [data-testid="stTextInput"] label span,
         .login-panel [data-testid="stTextInput"] p {
-            color: rgba(226, 232, 240, 0.92) !important;
-            -webkit-text-fill-color: rgba(226, 232, 240, 0.92) !important;
+            color: rgba(230, 238, 250, 0.96) !important;
+            -webkit-text-fill-color: rgba(230, 238, 250, 0.96) !important;
             opacity: 1 !important;
         }
         .login-panel [data-baseweb="base-input"],
         .login-panel [data-baseweb="input"],
         .login-panel [data-testid="stTextInput"] > div > div {
-            background: rgba(33, 45, 77, 0.92) !important;
-            border: 1.5px solid rgba(124, 92, 255, 0.42) !important;
+            background: rgba(31, 41, 63, 0.98) !important;
+            border: 1.5px solid rgba(118, 154, 214, 0.38) !important;
             border-radius: 12px !important;
             box-shadow: none !important;
         }
@@ -3745,20 +3745,21 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         .login-panel input[type="text"],
         .login-panel input[type="password"] {
             background: transparent !important;
-            color: #e6f6ff !important;
+            color: #f8fbff !important;
             caret-color: #00D4FF !important;
-            -webkit-text-fill-color: #e6f6ff !important;
+            -webkit-text-fill-color: #f8fbff !important;
             border: none !important;
             box-shadow: none !important;
             font-weight: 600 !important;
             letter-spacing: 0.2px !important;
-            padding: 14px 18px !important;
+            font-size: 1rem !important;
+            padding: 12px 16px !important;
         }
         .login-panel input[type="text"]::placeholder,
         .login-panel input[type="password"]::placeholder {
-            color: rgba(186, 160, 255, 0.76) !important;
+            color: rgba(194, 206, 230, 0.78) !important;
             opacity: 1 !important;
-            -webkit-text-fill-color: rgba(186, 160, 255, 0.76) !important;
+            -webkit-text-fill-color: rgba(194, 206, 230, 0.78) !important;
         }
         .login-panel input[type="text"]:focus,
         .login-panel input[type="password"]:focus {
@@ -3778,9 +3779,18 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         .login-panel [data-testid="stCaptionContainer"] p,
         .login-panel .stCaption,
         .login-panel .stCaption p {
-            color: rgba(191, 208, 236, 0.82) !important;
-            -webkit-text-fill-color: rgba(191, 208, 236, 0.82) !important;
+            color: rgba(203, 216, 238, 0.9) !important;
+            -webkit-text-fill-color: rgba(203, 216, 238, 0.9) !important;
             opacity: 1 !important;
+            font-size: 0.84rem !important;
+        }
+        .login-panel .stButton > button,
+        .login-panel div.stButton > button {
+            width: 100% !important;
+            min-height: 42px !important;
+            padding: 0.45rem 0.9rem !important;
+            font-size: 0.98rem !important;
+            border-radius: 10px !important;
         }
 
         /* Responsive design */
@@ -3821,7 +3831,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             st.info("**Automate**  \nScript analysis & optimization")
 
     with right_col:
-    
+        st.markdown('<div class="login-panel">', unsafe_allow_html=True)
         st.markdown('<div class="login-heading">Welcome back</div>', unsafe_allow_html=True)
         st.markdown('<div class="login-subheading">Sign in to IntelliDoc AI</div>', unsafe_allow_html=True)
 
