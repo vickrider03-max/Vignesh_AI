@@ -3603,7 +3603,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             color: #F8FAFC !important;
             font-size: 1rem !important;
             font-weight: 700 !important;
-            animation: rotate-logo 8s linear infinite !important;
+            animation: rotate-logo 25s linear infinite !important;
         }
         @keyframes rotate-logo {
             from { transform: rotateY(0deg); }
@@ -3840,25 +3840,25 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             st.info("""
                     **🔄 Compare**
                     
-                    Compare 2+ files
-                    Word-level diff
-                    Inline visual comparison
-                    Export results to Excel
+                    - Compare 2+ files
+                    - Word-level diff
+                    - Inline visual comparison
+                    - Export results to Excel
                     """)
         with col2:
             st.info("""
                     **📊 Dashboard**
                     
-                    Excel/CSV visualization
-                    Export insights
+                    - Excel/CSV visualization
+                    - Export insights
                     """)
             st.info("""
                     **🚗 CAPL**
                     
-                    Upload or create `.can` files
-                    Built-in CAPL editor
-                    Code analysis & issue detection
-                    Suggestions & improvements
+                    - Upload or create `.can` files
+                    - Built-in CAPL editor
+                    - Code analysis & issue detection
+                    - Suggestions & improvements
                     """)
 
     with right_col:  # type: ignore  # right_col is defined at line 3699
