@@ -162,7 +162,7 @@ def get_needle_minimalist_logo():
 # -------------------------------
 # STREAMLIT PAGE CONFIG
 # -------------------------------
-st.set_page_config(page_title="🧠 IntelliDoc AI Control Room", layout="wide")
+st.set_page_config(page_title="🧠 IntelliDoc AI ", layout="wide")
 
 # Mobile viewport meta tag for proper scaling
 st.markdown(
