@@ -1145,7 +1145,7 @@ if st.session_state.is_authenticated:
                 state_key = _help_state_key(current_helper_tab)
                 st.session_state[state_key] = not st.session_state.get(state_key, False)
         with title_col:
-            st.markdown("### IntelliDoc AI Control Room")
+            st.markdown("### IntelliDoc AI")
             st.markdown(
                 "<div style='font-size:0.9rem; font-style:italic; color:#64748b; margin-top:-0.35rem;'>Smart Document Assistant</div>",
                 unsafe_allow_html=True
