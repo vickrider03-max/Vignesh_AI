@@ -3587,29 +3587,22 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             margin-bottom: 32px !important;
         }
         .brand-logo {
-    width: 44px !important;
-    height: 44px !important;
-    border-radius: 50% !important;
-    background: rgba(255, 255, 255, 0.12) !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    color: #F8FAFC !important;
-    font-size: 1rem !important;
-    font-weight: 700 !important;
-
-    animation: rotate-y 4s linear infinite !important;
-    transform-style: preserve-3d;
-}
-
-@keyframes rotate-y {
-    from {
-        transform: rotateY(0deg);
-    }
-    to {
-        transform: rotateY(360deg);
-    }
-}
+            width: 44px !important;
+            height: 44px !important;
+            border-radius: 50% !important;
+            background: rgba(255, 255, 255, 0.12) !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            color: #F8FAFC !important;
+            font-size: 1rem !important;
+            font-weight: 700 !important;
+            animation: rotate-logo 8s linear infinite !important;
+        }
+        @keyframes rotate-logo {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(180deg); }
+        }
         .brand-label {
             font-size: 0.82rem !important;
             color: rgba(255, 255, 255, 0.72) !important;
