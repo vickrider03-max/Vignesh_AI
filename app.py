@@ -3875,7 +3875,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         logo_html = f'<img src="data:image/gif;base64,{logo_data}" style="width: 100%; height: 100%; object-fit: cover;">' if logo_data else "MB"
         st.markdown(f'<div class="brand-strip"><div class="brand-logo">{logo_html}</div><div class="brand-label">Mercedes-Benz</div></div>', unsafe_allow_html=True)
         st.markdown("""<div class="ai-branding"> 
-        '<span class= "ai-title"> IntelliDoc AI </span> 
+        <span class= "ai-title"> IntelliDoc AI </span> 
         <span class="ai-subtitle">-Smart Document Assistant </span>
         </div>""", unsafe_allow_html=True)
         st.markdown('<h1 class="ai-tagline">Where Documents Become Intelligence</h1>', unsafe_allow_html=True)
