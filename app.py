@@ -3572,6 +3572,69 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             min-height: 100vh !important;
         }
 
+        /* Branding elements */
+        .brand-strip {
+            display: flex !important;
+            align-items: center !important;
+            gap: 12px !important;
+            margin-bottom: 32px !important;
+        }
+        .brand-logo {
+            width: 24px !important;
+            height: 24px !important;
+            border-radius: 50% !important;
+            background: rgba(255, 255, 255, 0.12) !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            color: #F8FAFC !important;
+            font-size: 1rem !important;
+            font-weight: 700 !important;
+            animation: rotate-logo 8s linear infinite !important;
+        }
+        @keyframes rotate-logo {
+            from { transform: rotateY(0deg); }
+            to { transform: rotateY(360deg); }
+        }
+        .brand-label {
+            font-size: 0.82rem !important;
+            color: rgba(255, 255, 255, 0.72) !important;
+            letter-spacing: 0.18em !important;
+            text-transform: uppercase !important;
+        }
+        .ai-branding {
+            font-size: clamp(2rem, 3.5vw, 2.8rem) !important;
+            font-weight: 800 !important;
+            margin-bottom: 18px !important;
+            color: #F7FBFF !important;
+        }
+        .ai-tagline {
+            font-size: clamp(2.2rem, 4vw, 3.2rem) !important;
+            font-weight: 800 !important;
+            line-height: 1.15 !important;
+            color: #F4F7FF !important;
+            margin-bottom: 24px !important;
+            letter-spacing: -0.03em !important;
+        }
+        .ai-description {
+            font-size: 1.02rem !important;
+            line-height: 1.7 !important;
+            color: rgba(185, 198, 224, 0.88) !important;
+            margin-bottom: 36px !important;
+        }
+        .trust-row {
+            color: rgba(185, 198, 224, 0.72) !important;
+            font-size: 0.95rem !important;
+            margin-bottom: 32px !important;
+            line-height: 1.6 !important;
+        }
+        /* Feature cards */
+        .stInfo {
+            background: rgba(255, 255, 255, 0.05) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            border-radius: 12px !important;
+            color: #F7FBFF !important;
+        }
         /* Form elements */
         .stTextInput input {
             background: rgba(255, 255, 255, 0.08) !important;
