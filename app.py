@@ -162,7 +162,7 @@ def get_needle_minimalist_logo():
 # -------------------------------
 # STREAMLIT PAGE CONFIG
 # -------------------------------
-st.set_page_config(page_title="🧠 IntelliDoc AI– Smart Document Assistant", layout="wide")
+st.set_page_config(page_title="🧠 IntelliDoc AI Control Room", layout="wide")
 
 # Mobile viewport meta tag for proper scaling
 st.markdown(
@@ -1145,8 +1145,11 @@ if st.session_state.is_authenticated:
                 state_key = _help_state_key(current_helper_tab)
                 st.session_state[state_key] = not st.session_state.get(state_key, False)
         with title_col:
-            st.markdown("### IntelliDoc AI")
-            st.markdown("*Smart Document Assistant*")
+            st.markdown("### IntelliDoc AI Control Room")
+            st.markdown(
+                "<div style='font-size:0.9rem; font-style:italic; color:#64748b; margin-top:-0.35rem;'>Smart Document Assistant</div>",
+                unsafe_allow_html=True
+            )
 
     with logout_col:
         if st.button("🚶 Logout", key="main_logout_btn"):
@@ -3603,7 +3606,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             color: #F8FAFC !important;
             font-size: 1rem !important;
             font-weight: 700 !important;
-            animation: rotate-logo 25s linear infinite !important;
+            animation: rotate-logo 60s linear infinite !important;
         }
         @keyframes rotate-logo {
             from { transform: rotateY(0deg); }
@@ -3642,13 +3645,39 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             line-height: 1.6 !important;
         }
         /* Feature cards */
-        .stInfo {
-            background: rgba(176, 224, 230, 0.15) !important;
-            border: 1px solid rgba(176, 196, 222, 0.3) !important;
-            border-radius: 12px !important;
-            color: #3B5E7F !important;
-            height: auto !important;
-            min-height: 0 !important;
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(280px, 1fr));
+            gap: 16px;
+            align-items: stretch;
+            margin-top: 8px;
+        }
+        .feature-card {
+            background: rgba(176, 224, 230, 0.15);
+            border: 1px solid rgba(176, 196, 222, 0.3);
+            border-radius: 12px;
+            color: #3B5E7F;
+            padding: 18px 18px 16px;
+            min-height: 150px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            backdrop-filter: blur(4px);
+        }
+        .feature-card h4 {
+            margin: 0 0 14px 0;
+            color: #0d5aa7;
+            font-size: 1.08rem;
+            font-weight: 700;
+        }
+        .feature-card ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .feature-card li {
+            margin: 0 0 8px 0;
+            line-height: 1.45;
+            color: #0d5aa7;
         }
         .login-panel .stButton button {
             background: linear-gradient(135deg, #87CEEB 0%, #6BA3C5 100%) !important;
@@ -3692,6 +3721,9 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             .login-panel {
                 width: 100% !important;
                 padding: 24px 20px !important;
+            }
+            .feature-grid {
+                grid-template-columns: 1fr;
             }
         }
     </style>
@@ -3827,43 +3859,50 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         st.markdown('<div class="ai-branding">IntelliDoc AI Control Room</div>', unsafe_allow_html=True)
         st.markdown('<h1 class="ai-tagline">Where Documents Become Intelligence</h1>', unsafe_allow_html=True)
         st.markdown('<p class="ai-description">An enterprise AI control room for secure document insight, comparison, dashboards, and automation.</p>', unsafe_allow_html=True)
-
-        col1, col2 = st.columns(2)
-        with col1:
-            st.info("""
-                    **🧠 Chat** 
-                    
-                    - Ask questions about uploaded files
-                    - Context-aware responses
-                    - Multi-file semantic understanding
-                    """)
-            st.info("""
-                    **🔄 Compare**
-                    
-                    - Compare 2+ files
-                    - Word-level diff
-                    - Inline visual comparison
-                    - Export results to Excel
-                    """)
-        with col2:
-            st.info("""
-                    **📊 Dashboard**
-                    
-                    - Excel/CSV visualization
-                    - Export insights
-                    """)
-            st.info("""
-                    **🚗 CAPL**
-                    
-                    - Upload or create `.can` files
-                    - Built-in CAPL editor
-                    - Code analysis & issue detection
-                    - Suggestions & improvements
-                    """)
+        st.markdown(
+            """
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4>🧠 Chat</h4>
+                    <ul>
+                        <li>Ask questions about uploaded files</li>
+                        <li>Context-aware responses</li>
+                        <li>Multi-file semantic understanding</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <h4>📊 Dashboard</h4>
+                    <ul>
+                        <li>Excel/CSV visualization</li>
+                        <li>Export insights</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <h4>🔄 Compare</h4>
+                    <ul>
+                        <li>Compare 2+ files</li>
+                        <li>Word-level diff</li>
+                        <li>Inline visual comparison</li>
+                        <li>Export results to Excel</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <h4>🚗 CAPL</h4>
+                    <ul>
+                        <li>Upload or create <code>.can</code> files</li>
+                        <li>Built-in CAPL editor</li>
+                        <li>Code analysis &amp; issue detection</li>
+                        <li>Suggestions &amp; improvements</li>
+                    </ul>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
     with right_col:  # type: ignore  # right_col is defined at line 3699
-        st.markdown('<div class="login-panel">', unsafe_allow_html=True)
-        st.markdown('<div class="login-heading">Welcome back</div>', unsafe_allow_html=True)
+        #st.markdown('<div class="login-panel">', unsafe_allow_html=True)
+        #st.markdown('<div class="login-heading">Welcome back</div>', unsafe_allow_html=True)
         st.markdown('<div class="login-subheading">Sign in to IntelliDoc AI</div>', unsafe_allow_html=True)
 
         login_username = st.text_input("👤 Username", placeholder="Username", key="username")
