@@ -3810,7 +3810,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             st.info("**Automate**  \nScript analysis & optimization")
 
     with right_col:
-        st.markdown('<div class="login-panel">', unsafe_allow_html=True)
+    
         st.markdown('<div class="login-heading">Welcome back</div>', unsafe_allow_html=True)
         st.markdown('<div class="login-subheading">Sign in to IntelliDoc AI</div>', unsafe_allow_html=True)
 
