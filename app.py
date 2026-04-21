@@ -3771,7 +3771,6 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         st.markdown('<div class="ai-branding">IntelliDoc AI Control Room</div>', unsafe_allow_html=True)
         st.markdown('<h1 class="ai-tagline">Where Documents Become Intelligence</h1>', unsafe_allow_html=True)
         st.markdown('<p class="ai-description">An enterprise AI control room for secure document insight, comparison, dashboards, and automation.</p>', unsafe_allow_html=True)
-        st.markdown('<div class="trust-row">Secure enterprise access • SSO-ready • Trusted by modern teams</div>', unsafe_allow_html=True)
 
         col1, col2 = st.columns(2)
         with col1:
@@ -3792,7 +3791,6 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         st.caption("Standard users can leave password empty")
 
         access_clicked = st.button("Sign In", use_container_width=True, key="signin")
-        st.markdown('<div class="login-note">Secure enterprise access • Trusted platform</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
     if access_clicked:
