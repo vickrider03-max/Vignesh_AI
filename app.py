@@ -3555,7 +3555,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         /* Override Streamlit's default column behavior */
         [data-testid="column"]:first-child {
             flex: 1 !important;
-            padding: 60px !important;
+            padding: 80px 120px !important;
             display: flex !important;
             flex-direction: column !important;
             justify-content: center !important;
@@ -3605,7 +3605,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         .ai-branding {
             font-size: clamp(2rem, 3.5vw, 2.8rem) !important;
             font-weight: 800 !important;
-            margin-bottom: 18px !important;
+            margin-bottom: 28px !important;
             color: #F7FBFF !important;
         }
         .ai-tagline {
@@ -3613,19 +3613,19 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             font-weight: 800 !important;
             line-height: 1.15 !important;
             color: #F4F7FF !important;
-            margin-bottom: 24px !important;
+            margin-bottom: 32px !important;
             letter-spacing: -0.03em !important;
         }
         .ai-description {
             font-size: 1.02rem !important;
             line-height: 1.7 !important;
             color: rgba(185, 198, 224, 0.88) !important;
-            margin-bottom: 36px !important;
+            margin-bottom: 48px !important;
         }
         .trust-row {
             color: rgba(185, 198, 224, 0.72) !important;
             font-size: 0.95rem !important;
-            margin-bottom: 32px !important;
+            margin-bottom: 56px !important;
             line-height: 1.6 !important;
         }
         /* Feature cards */
@@ -3637,19 +3637,32 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         }
         /* Form elements */
         .stTextInput input {
-            background: rgba(255, 255, 255, 0.08) !important;
-            border: 1px solid rgba(255, 255, 255, 0.12) !important;
-            color: #F6F9FF !important;
+            background: rgba(20, 30, 60, 0.8) !important;
+            border: 1.5px solid rgba(124, 92, 255, 0.4) !important;
+            color: #FFFFFF !important;
             border-radius: 8px !important;
             padding: 12px 16px !important;
             width: 100% !important;
             margin-bottom: 16px !important;
+            font-size: 1rem !important;
+            font-weight: 500 !important;
+            -webkit-text-fill-color: #FFFFFF !important;
+            caret-color: #00C2FF !important;
+            text-shadow: 0 0 1px rgba(255, 255, 255, 0.5) !important;
+        }
+
+        .stTextInput input::placeholder {
+            color: rgba(255, 255, 255, 0.5) !important;
+            opacity: 1 !important;
+            -webkit-text-fill-color: rgba(255, 255, 255, 0.5) !important;
         }
 
         .stTextInput input:focus {
-            border: 1px solid rgba(124, 92, 255, 0.8) !important;
-            box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.15) !important;
-            background: rgba(255, 255, 255, 0.12) !important;
+            border: 1.5px solid rgba(124, 92, 255, 0.8) !important;
+            box-shadow: 0 0 8px rgba(124, 92, 255, 0.3), 0 0 0 3px rgba(124, 92, 255, 0.15) !important;
+            background: rgba(20, 30, 60, 0.9) !important;
+            color: #FFFFFF !important;
+            -webkit-text-fill-color: #FFFFFF !important;
         }
 
         .stButton button {
@@ -3703,21 +3716,69 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
     # Apply custom styling to make it full-width flexbox
     st.markdown("""
     <style>
+        /* Login heading and subheading */
+        .login-heading {
+            font-size: clamp(1.8rem, 5vw, 3.4rem) !important;
+            color: #F8FAFC !important;
+            font-weight: 700 !important;
+            margin-bottom: 12px !important;
+            line-height: 1.2 !important;
+        }
+
+        .login-subheading {
+            font-size: clamp(0.9rem, 2.5vw, 1.1rem) !important;
+            color: rgba(248, 250, 252, 0.85) !important;
+            font-weight: 500 !important;
+            margin-bottom: 24px !important;
+        }
+
         /* Form elements */
         .stTextInput input {
-            background: rgba(255, 255, 255, 0.08) !important;
-            border: 1px solid rgba(255, 255, 255, 0.12) !important;
-            color: #F6F9FF !important;
+            background: rgba(20, 30, 60, 0.8) !important;
+            border: 1.5px solid rgba(124, 92, 255, 0.4) !important;
+            color: #FFFFFF !important;
             border-radius: 8px !important;
             padding: 12px 16px !important;
             width: 100% !important;
             margin-bottom: 16px !important;
+            font-size: 1rem !important;
+            font-weight: 500 !important;
+            -webkit-text-fill-color: #FFFFFF !important;
+            caret-color: #00C2FF !important;
+            text-shadow: 0 0 1px rgba(255, 255, 255, 0.5) !important;
+        }
+
+        .stTextInput input::placeholder {
+            color: rgba(255, 255, 255, 0.5) !important;
+            opacity: 1 !important;
+            -webkit-text-fill-color: rgba(255, 255, 255, 0.5) !important;
+        }
+
+        input[type="text"],
+        input[type="password"] {
+            background-color: rgba(20, 30, 60, 0.85) !important;
+            color: #00D4FF !important;
+            caret-color: #00D4FF !important;
+            -webkit-text-fill-color: #00D4FF !important;
+            border: 1.5px solid rgba(124, 92, 255, 0.4) !important;
+            font-weight: 600 !important;
+            letter-spacing: 0.3px !important;
+            padding: 14px 18px !important;
+        }
+
+        input[type="text"]::placeholder,
+        input[type="password"]::placeholder {
+            color: rgba(124, 92, 255, 0.6) !important;
+            opacity: 1 !important;
+            -webkit-text-fill-color: rgba(124, 92, 255, 0.6) !important;
         }
 
         .stTextInput input:focus {
-            border: 1px solid rgba(124, 92, 255, 0.8) !important;
-            box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.15) !important;
-            background: rgba(255, 255, 255, 0.12) !important;
+            border: 1.5px solid rgba(0, 212, 255, 0.8) !important;
+            box-shadow: 0 0 12px rgba(0, 212, 255, 0.4), 0 0 0 3px rgba(0, 212, 255, 0.15) !important;
+            background: rgba(20, 35, 80, 0.95) !important;
+            color: #00FFFF !important;
+            -webkit-text-fill-color: #00FFFF !important;
         }
 
         .stButton button {
