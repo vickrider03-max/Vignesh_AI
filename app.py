@@ -1242,7 +1242,7 @@ if st.session_state.is_authenticated:
                     const text = (btn.innerText || '').trim().replace(/[ \t\n\r\f\v]+/g, '');
                     if (title === 'Click to show/hide helper tips' || text === '🧠') {
                         btn.classList.add('header-brain-icon-large');
-                        btn.style.setProperty('font-size', '3.8rem', 'important');
+                        btn.style.setProperty('font-size', '6rem', 'important');
                         btn.style.setProperty('padding', '0.5rem 0.85rem', 'important');
                         btn.style.setProperty('min-width', '4.4rem', 'important');
                         btn.style.setProperty('min-height', '4.4rem', 'important');
