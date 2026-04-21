@@ -3580,8 +3580,8 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             margin-bottom: 32px !important;
         }
         .brand-logo {
-            width: 24px !important;
-            height: 24px !important;
+            width: 36px !important;
+            height: 36px !important;
             border-radius: 50% !important;
             background: rgba(255, 255, 255, 0.12) !important;
             display: flex !important;
