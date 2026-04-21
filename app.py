@@ -2699,7 +2699,7 @@ with st.sidebar:
                 f'''
                 <div style="text-align: center; margin-bottom: 20px;">
                     <img src="data:image/gif;base64,{logo_data}" style="width: 40px; height: 40px;">
-                    <div style="font-size: 10px; color: var(--text-secondary); margin-top: 4px; font-weight: 500;">Mercedes-Benz</div>
+                    <div style="font-size: 15px; color: var(--text-secondary); margin-top: 4px; font-weight: 500;">Mercedes-Benz</div>
                 </div>
                 ''',
                 unsafe_allow_html=True,
