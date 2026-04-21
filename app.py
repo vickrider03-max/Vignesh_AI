@@ -1282,9 +1282,9 @@ if st.session_state.is_authenticated:
     if not st.session_state.get('welcome_shown', False):
         user = st.session_state.get("logged_in_username", "")
         if user:
-            st.toast(f"Welcome back, {user} 🎉", icon="🧠")
+            st.toast(f"Welcome back, {user} 🎉", icon="🙋")
         else:
-            st.toast("Welcome back 🎉", icon="🧠")
+            st.toast("Welcome back 🎉", icon="🙋")
         st.session_state.welcome_shown = True
 
     render_status_strip()
@@ -3619,10 +3619,23 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             text-transform: uppercase !important;
         }
         .ai-branding {
-            font-size: clamp(2rem, 3.5vw, 2.8rem) !important;
-            font-weight: 800 !important;
-            margin-bottom: 28px !important;
-            color: #2C5F7F !important;
+            display : flex;
+            gap : 8px;
+            align-items : baseline;
+            margin-bottom: 28px!important;
+        }
+        
+        .ai-title {
+           font-size: clamp(2rem, 3.5vw, 2.8rem);
+           font-weight: 800;
+           color: #2C5F7F;
+        }
+
+        .ai-subtitle {
+         font-size: 14px;
+         font-style: italic;
+         font-weight: 400;
+         color: rgba(44, 95, 127, 0.6);
         }
         .ai-tagline {
             font-size: clamp(2.2rem, 4vw, 3.2rem) !important;
@@ -3856,14 +3869,17 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
     with left_col:
         logo_html = f'<img src="data:image/gif;base64,{logo_data}" style="width: 100%; height: 100%; object-fit: cover;">' if logo_data else "MB"
         st.markdown(f'<div class="brand-strip"><div class="brand-logo">{logo_html}</div><div class="brand-label">Mercedes-Benz</div></div>', unsafe_allow_html=True)
-        st.markdown('<div class="ai-branding">IntelliDoc AI Control Room</div>', unsafe_allow_html=True)
+        st.markdown("""<div class="ai-branding"> 
+        '<span class= "ai-title"> IntelliDoc AI </span> 
+        <span class="ai-subtitle">Smart Document Assistant </span>
+        </div>""", unsafe_allow_html=True)
         st.markdown('<h1 class="ai-tagline">Where Documents Become Intelligence</h1>', unsafe_allow_html=True)
         st.markdown('<p class="ai-description">An enterprise AI control room for secure document insight, comparison, dashboards, and automation.</p>', unsafe_allow_html=True)
         st.markdown(
             """
             <div class="feature-grid">
                 <div class="feature-card">
-                    <h4>🧠 Chat</h4>
+                    <h4>💬 Chat</h4>
                     <ul>
                         <li>Ask questions about uploaded files</li>
                         <li>Context-aware responses</li>
