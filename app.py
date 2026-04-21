@@ -151,7 +151,7 @@ def get_needle_minimalist_logo():
             format='GIF',
             save_all=True,
             append_images=frames[1:],
-            duration=60,
+            duration=80,
             loop=0,
             disposal=2
         )
@@ -3597,26 +3597,20 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             backdrop-filter: blur(12px);
         }
         .brand-logo {
-            width: 36px !important;
-            height: 36px !important;
+            width: 44px !important;
+            height: 44 px !important;
             border-radius: 50% !important;
             background: rgba(255, 255, 255, 0.12) !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
-            color: #94A3B8 !important;
-            font-size: 1rem !important;
-            font-weight: 700 !important;
-            transform-style: preserve-3d;    
-            animation: rotate-logo 60s linear infinite !important;
-                    
-        }
-        @keyframes rotate-logo {
-            from { transform: rotateY(0deg); }
-            to { transform: rotateY(360deg); }
-        }
-        
-                     
+            overflow: hidden !important;  
+            animation: float 4s ease-in-out infinite;            
+        }  
+        @keyframes float {
+           0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-4px); }
+        }           
         .brand-label {
             font-size: 0.82rem !important;
             color: rgba(91, 127, 166, 0.9) !important;
@@ -3872,7 +3866,9 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
     """, unsafe_allow_html=True)
 
     with left_col:
-        logo_html = f'<img src="data:image/gif;base64,{logo_data}" style="width: 100%; height: 100%; object-fit: cover;">' if logo_data else "MB"
+        logo_html = f'''
+        <img src="data:image/gif;base64,{logo_data}" 
+        style="width: 36px; height: 36px; object-fit: contain;">''' if logo_data else "MB"
         st.markdown(f'<div class="brand-strip"><div class="brand-logo">{logo_html}</div><div class="brand-label">Mercedes-Benz</div></div>', unsafe_allow_html=True)
         st.markdown("""<div class="ai-branding"> 
         <span class= "ai-title"> IntelliDoc AI </span> 
