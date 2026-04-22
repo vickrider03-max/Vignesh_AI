@@ -1239,7 +1239,7 @@ if st.session_state.is_authenticated:
                 const buttons = Array.from(root.querySelectorAll('button'));
                 buttons.forEach(btn => {
                     const title = (btn.getAttribute('title') || '').trim();
-                    const text = (btn.innerText || '').trim().replace(/[ \t\n\r\f\v]+/g, '');
+                    const text = (btn.innerText || '').trim().replace(/\s+/g, '');
                     if (title === 'Click to show/hide helper tips' || text === '🧠') {
                         btn.classList.add('header-brain-icon-large');
                         btn.style.setProperty('font-size', '3.8rem', 'important');
