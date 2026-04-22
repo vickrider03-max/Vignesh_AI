@@ -3757,133 +3757,14 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
     """, unsafe_allow_html=True)
 
     # Create the new flexbox layout using Streamlit columns - Login page layout
-    _,center_col,_ = st.columns([1,2,1])
+   # -----------------------------
+# CENTERED LOGIN LAYOUT (WIDER)
+# -----------------------------
+_, center_col, _ = st.columns([1, 3.5, 1])
 
-    # Apply additional form styling for login elements
-    st.markdown("""
-    <style>
-        /* Login heading and subheading */
-        .login-panel .login-heading {
-            margin-top: 0 !important;
-        }
-        .login-heading {
-            font-size: clamp(1.8rem, 4vw, 2.8rem) !important;
-            color: #2C5F7F !important;
-            font-weight: 700 !important;
-            margin-bottom: 10px !important;
-            line-height: 1.1 !important;
-        }
+with center_col:
 
-        .login-subheading {
-            font-size: clamp(0.95rem, 2vw, 1.05rem) !important;
-            color: #5B7FA6 !important;
-            font-weight: 500 !important;
-            margin-bottom: 20px !important;
-        }
-
-        /* Form elements */
-        .login-panel [data-testid="stTextInput"] {
-            margin-bottom: 8px !important;
-        }
-        .login-panel [data-testid="stTextInput"] label,
-        .login-panel [data-testid="stTextInput"] label p,
-        .login-panel [data-testid="stTextInput"] label span,
-        .login-panel [data-testid="stTextInput"] p {
-            color: #3B5E7F !important;
-            -webkit-text-fill-color: #3B5E7F !important;
-            opacity: 1 !important;
-        }
-        .login-panel [data-baseweb="base-input"],
-        .login-panel [data-baseweb="input"],
-        .login-panel [data-testid="stTextInput"] > div > div {
-            background: rgba(230, 244, 248, 0.85) !important;
-            border: 1.5px solid rgba(176, 224, 230, 0.6) !important;
-            border-radius: 12px !important;
-            box-shadow: none !important;
-        }
-        .login-panel [data-baseweb="base-input"]:focus-within,
-        .login-panel [data-baseweb="input"]:focus-within,
-        .login-panel [data-testid="stTextInput"] > div > div:focus-within {
-            border-color: rgba(135, 206, 235, 0.9) !important;
-            box-shadow: 0 0 0 3px rgba(176, 224, 230, 0.25), 0 0 18px rgba(135, 206, 235, 0.2) !important;
-        }
-        .login-panel input[type="text"],
-        .login-panel input[type="password"] {
-            background: transparent !important;
-            color: #2C5F7F !important;
-            caret-color: #4D94B9 !important;
-            -webkit-text-fill-color: #2C5F7F !important;
-            border: none !important;
-            box-shadow: none !important;
-            font-weight: 600 !important;
-            letter-spacing: 0.2px !important;
-            font-size: 1rem !important;
-            padding: 12px 16px !important;
-        }
-        .login-panel input[type="text"]::placeholder,
-        .login-panel input[type="password"]::placeholder {
-            color: rgba(91, 127, 166, 0.65) !important;
-            opacity: 1 !important;
-            -webkit-text-fill-color: rgba(91, 127, 166, 0.65) !important;
-        }
-        .login-panel input[type="text"]:focus,
-        .login-panel input[type="password"]:focus {
-            background: transparent !important;
-            color: #2C5F7F !important;
-            -webkit-text-fill-color: #2C5F7F !important;
-            outline: none !important;
-        }
-
-        .login-note {
-            color: rgba(91, 127, 166, 0.75) !important;
-            font-size: 0.85rem !important;
-            text-align: center !important;
-            margin-top: 16px !important;
-        }
-        .login-panel [data-testid="stCaptionContainer"],
-        .login-panel [data-testid="stCaptionContainer"] p,
-        .login-panel .stCaption,
-        .login-panel .stCaption p {
-            color: rgba(91, 127, 166, 0.85) !important;
-            -webkit-text-fill-color: rgba(91, 127, 166, 0.85) !important;
-            opacity: 1 !important;
-            font-size: 0.84rem !important;
-        }
-        .login-panel .stButton > button,
-        .login-panel div.stButton > button {
-            width: 100% !important;
-            min-height: 42px !important;
-            padding: 0.45rem 0.9rem !important;
-            font-size: 0.98rem !important;
-            border-radius: 10px !important;
-        }
-
-        /* Responsive design */
-        @media (max-width: 768px) {
-            [data-testid="column"]:first-child {
-                padding: 24px 12px 16px !important;
-                order: 2 !important;
-            }
-            [data-testid="column"]:nth-child(2) {
-                width: 100% !important;
-                padding: 12px !important;
-                order: 1 !important;
-            }
-            .ai-tagline {
-                font-size: 2rem !important;
-            }
-            .login-panel {
-                width: 100% !important;
-                padding: 24px 20px !important;
-            }
-        }
-    </style>
-    """, unsafe_allow_html=True)
-
-    with center_col:
-        st.mark
-
-     # -----------------------------
+    # -----------------------------
     # GLOBAL LOGIN CSS (GLASS UI)
     # -----------------------------
     st.markdown("""
@@ -3897,6 +3778,9 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         box-shadow: 0 8px 32px rgba(0,0,0,0.12);
         border: 1px solid rgba(255,255,255,0.3);
         margin-top: 40px;
+        max-width: 480px;
+        margin-left: auto;
+        margin-right: auto;
     }
 
     .brand-label {
@@ -3936,15 +3820,15 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
     st.markdown('<div class="login-card">', unsafe_allow_html=True)
 
     # -----------------------------
-    # LOGO (Mercedes preserved)
+    # LOGO SECTION (Mercedes)
     # -----------------------------
     if logo_data:
         logo_display = f"""
         <img src="data:image/gif;base64,{logo_data}"
-             style="width: 48px; height: 48px; object-fit: contain;">
+             style="width:52px; height:52px; object-fit:contain;">
         """
     else:
-        logo_display = '<div class="star">★</div>'
+        logo_display = '<div style="font-size:28px;">★</div>'
 
     st.markdown(f"""
         <div class="brand-logo-3d">
@@ -3957,9 +3841,15 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
     # TITLES
     # -----------------------------
     st.markdown("## IntelliDoc AI")
-    st.markdown("<div style='text-align:center; color:#64748b;'>Smart Document Assistant</div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div style='text-align:center; color:#64748b;'>Smart Document Assistant</div>",
+        unsafe_allow_html=True
+    )
 
-    st.markdown("<h2 style='text-align:center; margin-top:15px;'>Where Documents Become Intelligence</h2>", unsafe_allow_html=True)
+    st.markdown(
+        "<h3 style='text-align:center; margin-top:15px;'>Where Documents Become Intelligence</h3>",
+        unsafe_allow_html=True
+    )
 
     st.markdown("""
     <p style='text-align:center; font-size:13px; color:#64748b;'>
@@ -3968,16 +3858,17 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
     """, unsafe_allow_html=True)
 
     # -----------------------------
-    # FEATURES (UNCHANGED)
+    # FEATURES
     # -----------------------------
     st.markdown("""
     <div class="feature-grid">
+
         <div class="feature-card">
             <h4>💬 Chat</h4>
             <ul>
                 <li>Ask questions about uploaded files</li>
                 <li>Context-aware responses</li>
-                <li>Multi-file semantic understanding</li>
+                <li>Multi-file understanding</li>
             </ul>
         </div>
 
@@ -3994,7 +3885,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             <ul>
                 <li>Compare 2+ files</li>
                 <li>Word-level diff</li>
-                <li>Export results to Excel</li>
+                <li>Export results</li>
             </ul>
         </div>
 
@@ -4006,6 +3897,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 <li>Code analysis</li>
             </ul>
         </div>
+
     </div>
     """, unsafe_allow_html=True)
 
@@ -4025,46 +3917,38 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
 
     st.markdown("</div>", unsafe_allow_html=True)
 
+    # close card
     st.markdown("</div>", unsafe_allow_html=True)
 
+
 # -----------------------------
-# LOGIN LOGIC (IMPORTANT - DO NOT REMOVE)
+# LOGIN LOGIC (DO NOT CHANGE)
 # -----------------------------
 if access_clicked:
+
     cleaned_username = (login_username or "").strip()
     cleaned_password = (login_password or "").strip()
 
-    # -----------------------------
-    # CREATOR LOGIN
-    # -----------------------------
     if cleaned_username == CREATOR_USERNAME and cleaned_password == CREATOR_PASSWORD:
 
         st.session_state.is_authenticated = True
         st.session_state.logged_in_username = cleaned_username
         st.session_state.user_role = "creator"
-        st.session_state.user_session_start_time = datetime.now().isoformat()
         st.session_state.start_time = time.time()
 
         st.success("✅ Creator access granted")
         st.rerun()
 
-    # -----------------------------
-    # NORMAL USER LOGIN
-    # -----------------------------
     elif cleaned_username and len(cleaned_username) > 3 and cleaned_password == "":
 
         st.session_state.is_authenticated = True
         st.session_state.logged_in_username = cleaned_username
         st.session_state.user_role = "user"
-        st.session_state.user_session_start_time = datetime.now().isoformat()
         st.session_state.start_time = time.time()
 
         st.success(f"✅ Welcome, {cleaned_username}!")
         st.rerun()
 
-    # -----------------------------
-    # INVALID LOGIN (YOUR ERROR RESTORED)
-    # -----------------------------
     else:
         st.error("❌ Invalid credentials. Creator needs password. Users need username >3 chars with empty password.")
 
