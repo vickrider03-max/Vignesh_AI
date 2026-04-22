@@ -3849,8 +3849,7 @@ with center_col:
 <p style='text-align:center; font-size:13px; color:#64748b;'>
 An enterprise AI control room for secure document insight, comparison, dashboards, and automation.
 </p>
-""", unsafe_allow_html=True)
-st.markdown("""
+
 <div class="feature-grid">
 
     <div class="feature-card">
