@@ -3757,7 +3757,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
     """, unsafe_allow_html=True)
 
     # Create the new flexbox layout using Streamlit columns
-    left_col, right_col = st.columns([3, 1])
+    left_col, right_col = st.columns([3, 1.5])
 
     # Apply additional form styling for login elements
     st.markdown("""
@@ -3893,7 +3893,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                            {logo_display}
                         </div>
                     </div>
-                    <div class = "brand-label">Mercdes_Benz</div>
+                    <div class = "brand-label">Mercedes_Benz</div>
                 </div>
                 """,unsafe_allow_html=True)
             
