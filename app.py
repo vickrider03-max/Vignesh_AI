@@ -311,7 +311,7 @@ st.markdown(
             overflow-x: hidden;
             overflow-y: auto !important;
             height: auto !important;
-            background: var(--background);
+            background: var(--background)!important;
             color: var(--text);
             transition: background 0.3s ease, color 0.3s ease;
         }
