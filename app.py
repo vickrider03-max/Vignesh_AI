@@ -3597,45 +3597,18 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             backdrop-filter: blur(12px);
         }
         .brand-logo-3d {
-               width: 70px !important;
-               height: 70px !important;
-               perspective: 800px;
-               display: flex !important;
-               align-items: center !important;
-                justify-content: center !important;
-
-              /* smoother premium motion */
-              animation: logoFloat 3.5s ease-in-out infinite;
-            }
-
-            /* floating motion */
-        @keyframes logoFloat {
-             0%, 100% { transform: translateY(0px) scale(1); }
-             50% { transform: translateY(-6px) scale(1.03); }
+            width: 60px !important;
+            height: 60 px !important;
+            perspective: 800px;    
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            animation: float 3s ease-in-out infinite;       
         }  
-        
-        .brand-logo-3d img {
-                 width: 70px !important;
-                 height: 70px !important;
-                 object-fit: contain;
-                 transition: all 0.3s ease;
-                 filter: drop-shadow(0 0 8px rgba(0,180,255,0.5))
-                         drop-shadow(0 0 18px rgba(0,180,255,0.3));
-
-                 animation: logoGlow 2.8s ease-in-out infinite;
-        }
-
-        @keyframes logoGlow {
-                  0% {
-                     filter: drop-shadow(0 0 6px rgba(0,180,255,0.3));
-                   }
-                  50% {
-                     filter: drop-shadow(0 0 18px rgba(0,180,255,0.8));
-                   }
-                  100% {
-                      filter: drop-shadow(0 0 6px rgba(0,180,255,0.3));
-                   }
-        }       
+        @keyframes float {
+           0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-4px); }
+        }  
         .logo-inner{
                 width : 100%;
                 height: 100%;
@@ -3784,159 +3757,283 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
     """, unsafe_allow_html=True)
 
     # Create the new flexbox layout using Streamlit columns - Login page layout
-  # Create layout
-left_col, right_col = st.columns([3, 1.3])
+    left_col, right_col = st.columns([3, 1.3])
 
-st.markdown("""
-<style>
-
-.login-subheading {
-    font-size: 1rem;
-    color: #5B7FA6;
-    margin-bottom: 15px;
-}
-
-.login-card {
-    background: rgba(255,255,255,0.25);
-    backdrop-filter: blur(18px);
-    border-radius: 16px;
-    padding: 30px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.12);
-    border: 1px solid rgba(255,255,255,0.3);
-    /* floating animation */
-    animation: floatCard 6s ease-in-out infinite;
-    transition: transform 0.4s ease;
-}
-.login-card:hover {
-    transform: translateY(-6px) scale(1.01);
-}
-@keyframes floatCard {
-    0%   { transform: translateY(0px); }
-    50%  { transform: translateY(-8px); }
-    100% { transform: translateY(0px); }
-}
-
-.stButton > button {
-    width: 100% !important;
-    border-radius: 10px !important;
-    padding: 10px !important;
-    font-weight: 600 !important;
-}
-
-</style>
-""", unsafe_allow_html=True)
-
-# ---------------- LEFT SIDE ----------------
-with left_col:
-
-    if logo_data:
-        logo_display = f"""
-        <img src="data:image/gif;base64,{logo_data}"
-             style="width:50px;height:50px;object-fit:contain;">
-        """
-    else:
-        logo_display = '<div class="star">★</div>'
-
-    st.markdown(f"""
-       <div class="brand-strip">
-              <div class="brand-logo-3d">
-                 {logo_display}
-              </div>
-              <div class="brand-label">Mercedes-Benz</div>
-    </div>
-    """, unsafe_allow_html=True)
-
+    # Apply additional form styling for login elements
     st.markdown("""
-        <div class="ai-branding">
-            <div class="ai-title">IntelliDoc AI</div>
-            <div class="ai-subtitle">Smart Document Assistant</div>
-        </div>
+    <style>
+        /* Login heading and subheading */
+        .login-panel .login-heading {
+            margin-top: 0 !important;
+        }
+        .login-heading {
+            font-size: clamp(1.8rem, 4vw, 2.8rem) !important;
+            color: #2C5F7F !important;
+            font-weight: 700 !important;
+            margin-bottom: 10px !important;
+            line-height: 1.1 !important;
+        }
+
+        .login-subheading {
+            font-size: clamp(0.95rem, 2vw, 1.05rem) !important;
+            color: #5B7FA6 !important;
+            font-weight: 500 !important;
+            margin-bottom: 20px !important;
+        }
+
+        /* Form elements */
+        .login-panel [data-testid="stTextInput"] {
+            margin-bottom: 8px !important;
+        }
+        .login-panel [data-testid="stTextInput"] label,
+        .login-panel [data-testid="stTextInput"] label p,
+        .login-panel [data-testid="stTextInput"] label span,
+        .login-panel [data-testid="stTextInput"] p {
+            color: #3B5E7F !important;
+            -webkit-text-fill-color: #3B5E7F !important;
+            opacity: 1 !important;
+        }
+        .login-panel [data-baseweb="base-input"],
+        .login-panel [data-baseweb="input"],
+        .login-panel [data-testid="stTextInput"] > div > div {
+            background: rgba(230, 244, 248, 0.85) !important;
+            border: 1.5px solid rgba(176, 224, 230, 0.6) !important;
+            border-radius: 12px !important;
+            box-shadow: none !important;
+        }
+        .login-panel [data-baseweb="base-input"]:focus-within,
+        .login-panel [data-baseweb="input"]:focus-within,
+        .login-panel [data-testid="stTextInput"] > div > div:focus-within {
+            border-color: rgba(135, 206, 235, 0.9) !important;
+            box-shadow: 0 0 0 3px rgba(176, 224, 230, 0.25), 0 0 18px rgba(135, 206, 235, 0.2) !important;
+        }
+        .login-panel input[type="text"],
+        .login-panel input[type="password"] {
+            background: transparent !important;
+            color: #2C5F7F !important;
+            caret-color: #4D94B9 !important;
+            -webkit-text-fill-color: #2C5F7F !important;
+            border: none !important;
+            box-shadow: none !important;
+            font-weight: 600 !important;
+            letter-spacing: 0.2px !important;
+            font-size: 1rem !important;
+            padding: 12px 16px !important;
+        }
+        .login-panel input[type="text"]::placeholder,
+        .login-panel input[type="password"]::placeholder {
+            color: rgba(91, 127, 166, 0.65) !important;
+            opacity: 1 !important;
+            -webkit-text-fill-color: rgba(91, 127, 166, 0.65) !important;
+        }
+        .login-panel input[type="text"]:focus,
+        .login-panel input[type="password"]:focus {
+            background: transparent !important;
+            color: #2C5F7F !important;
+            -webkit-text-fill-color: #2C5F7F !important;
+            outline: none !important;
+        }
+
+        .login-note {
+            color: rgba(91, 127, 166, 0.75) !important;
+            font-size: 0.85rem !important;
+            text-align: center !important;
+            margin-top: 16px !important;
+        }
+        .login-panel [data-testid="stCaptionContainer"],
+        .login-panel [data-testid="stCaptionContainer"] p,
+        .login-panel .stCaption,
+        .login-panel .stCaption p {
+            color: rgba(91, 127, 166, 0.85) !important;
+            -webkit-text-fill-color: rgba(91, 127, 166, 0.85) !important;
+            opacity: 1 !important;
+            font-size: 0.84rem !important;
+        }
+        .login-panel .stButton > button,
+        .login-panel div.stButton > button {
+            width: 100% !important;
+            min-height: 42px !important;
+            padding: 0.45rem 0.9rem !important;
+            font-size: 0.98rem !important;
+            border-radius: 10px !important;
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            [data-testid="column"]:first-child {
+                padding: 24px 12px 16px !important;
+                order: 2 !important;
+            }
+            [data-testid="column"]:nth-child(2) {
+                width: 100% !important;
+                padding: 12px !important;
+                order: 1 !important;
+            }
+            .ai-tagline {
+                font-size: 2rem !important;
+            }
+            .login-panel {
+                width: 100% !important;
+                padding: 24px 20px !important;
+            }
+        }
+    </style>
     """, unsafe_allow_html=True)
 
-    st.markdown("""
-    <h2 style="text-align:center;">Where Documents Become Intelligence</h2>
-    <p style="text-align:center;color:#64748b;">
-    An enterprise AI control room for secure document insight, comparison, dashboards, and automation.
-    </p>
-    """, unsafe_allow_html=True)
+    with left_col:
+        if logo_data:
+            logo_display = f'''
+            <img src = "data:image/gif;base64,{logo_data}"
+            style = "width: 36px; height: 36px; object-fit;contain;">'''
+        else:
+             logo_display = '<div class = "star">★</div>'
+        st.markdown(f"""
+                    <div class = "brand-strip">
+                        <div class = " brand-logo-3d">
+                           {logo_display}
+                        </div>
+                    </div>
+                    <div class = "brand-label">Mercedes_Benz</div>
+                </div>
+                """,unsafe_allow_html=True)
+            
+        
+        
+        st.markdown("""<div class="ai-branding"> 
+        <span class= "ai-title"> IntelliDoc AI </span> 
+        <span class="ai-subtitle">-Smart Document Assistant </span>
+        </div>""", unsafe_allow_html=True)
+        st.markdown('<h1 class="ai-tagline">Where Documents Become Intelligence</h1>', unsafe_allow_html=True)
+        st.markdown('<p class="ai-description">An enterprise AI control room for secure document insight, comparison, dashboards, and automation.</p>', unsafe_allow_html=True)
+        st.markdown(
+            """
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4>💬 Chat</h4>
+                    <ul>
+                        <li>Ask questions about uploaded files</li>
+                        <li>Context-aware responses</li>
+                        <li>Multi-file semantic understanding</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <h4>📊 Dashboard</h4>
+                    <ul>
+                        <li>Excel/CSV visualization</li>
+                        <li>Export insights</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <h4>🔄 Compare</h4>
+                    <ul>
+                        <li>Compare 2+ files</li>
+                        <li>Word-level diff</li>
+                        <li>Inline visual comparison</li>
+                        <li>Export results to Excel</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <h4>🚗 CAPL</h4>
+                    <ul>
+                        <li>Upload or create <code>.can</code> files</li>
+                        <li>Built-in CAPL editor</li>
+                        <li>Code analysis &amp; issue detection</li>
+                        <li>Suggestions &amp; improvements</li>
+                    </ul>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
-    st.markdown("""
-    <div class="feature-grid">
+    with right_col:  # type: ignore  # right_col is defined at line 3699
+        #st.markdown('<div class="login-panel">', unsafe_allow_html=True)
+        #st.markdown('<div class="login-heading">Welcome back</div>', unsafe_allow_html=True)
+        st.markdown('<div class="login-subheading">Sign in to IntelliDoc AI</div>', unsafe_allow_html=True)
 
-        <div class="feature-card">
-            <h4>💬 Chat</h4>
-            <ul>
-                <li>Ask questions about uploaded files</li>
-                <li>Context-aware responses</li>
-                <li>Multi-file understanding</li>
-            </ul>
-        </div>
+        login_username = st.text_input("👤 Username", placeholder="Username", key="username")
+        login_password = st.text_input("🔒 Password", type="password", placeholder="Password", key="password")
 
-        <div class="feature-card">
-            <h4>📊 Dashboard</h4>
-            <ul>
-                <li>Excel/CSV visualization</li>
-                <li>Export insights</li>
-            </ul>
-        </div>
+        st.caption("Standard users can leave password empty")
 
-        <div class="feature-card">
-            <h4>🔄 Compare</h4>
-            <ul>
-                <li>Compare 2+ files</li>
-                <li>Word-level diff</li>
-                <li>Export results</li>
-            </ul>
-        </div>
+        access_clicked = st.button("Access", use_container_width=False, key="signin")
 
-        <div class="feature-card">
-            <h4>🚗 CAPL</h4>
-            <ul>
-                <li>.can file support</li>
-                <li>CAPL editor</li>
-                <li>Code analysis</li>
-            </ul>
-        </div>
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    </div>
-    """, unsafe_allow_html=True)
+    if access_clicked:
+        cleaned_username = (login_username or "").strip()
+        cleaned_password = (login_password or "").strip()
 
+        if cleaned_username == CREATOR_USERNAME and cleaned_password == CREATOR_PASSWORD:
+            st.session_state.is_authenticated = True
+            st.session_state.logged_in_username = cleaned_username
+            st.session_state.user_role = "creator"
+            st.session_state.user_session_start_time = datetime.now().isoformat()
+            st.session_state.start_time = time.time()
 
-# ---------------- RIGHT SIDE (LOGIN) ----------------
-with right_col:
+            ist_tz = timezone('Asia/Kolkata')
+            ist_time = datetime.now(ist_tz).strftime("%Y-%m-%d %H:%M:%S %Z")
+            st.session_state.login_history.append({
+                "username": cleaned_username,
+                "role": "creator",
+                "action": "login",
+                "timestamp": ist_time,
+                "usage_time": "-"
+            })
 
-    st.markdown('<div class="login-card">', unsafe_allow_html=True)
+            active_file = "active_users.json"
+            now = datetime.now()
+            if os.path.exists(active_file):
+                with open(active_file, "r") as f:
+                    active_users = json.load(f)
+            else:
+                active_users = []
 
-    st.markdown('<div class="login-subheading">Sign in to IntelliDoc AI</div>', unsafe_allow_html=True)
+            active_users = [u for u in active_users if u.get("username") != cleaned_username]
+            active_users.append({"username": cleaned_username, "timestamp": now.isoformat()})
 
-    login_username = st.text_input("👤 Username", placeholder="Username", key="username")
-    login_password = st.text_input("🔒 Password", type="password", placeholder="Password", key="password")
+            with open(active_file, "w") as f:
+                json.dump(active_users, f)
 
-    st.caption("Standard users can leave password empty")
+            st.success("✅ Creator access granted")
+            st.rerun()
 
-    access_clicked = st.button("Access", use_container_width=True, key="signin")
+        elif cleaned_username and len(cleaned_username) > 3 and cleaned_password == "":
+            st.session_state.is_authenticated = True
+            st.session_state.logged_in_username = cleaned_username
+            st.session_state.user_role = "user"
+            st.session_state.user_session_start_time = datetime.now().isoformat()
+            st.session_state.start_time = time.time()
 
-    st.markdown('</div>', unsafe_allow_html=True)
+            ist_tz = timezone('Asia/Kolkata')
+            ist_time = datetime.now(ist_tz).strftime("%Y-%m-%d %H:%M:%S %Z")
+            st.session_state.login_history.append({
+                "username": cleaned_username,
+                "role": "user",
+                "action": "login",
+                "timestamp": ist_time,
+                "usage_time": "-"
+            })
 
+            active_file = "active_users.json"
+            now = datetime.now()
+            if os.path.exists(active_file):
+                with open(active_file, "r") as f:
+                    active_users = json.load(f)
+            else:
+                active_users = []
 
-# ---------------- LOGIN LOGIC ----------------
-if access_clicked:
+            active_users = [u for u in active_users if u.get("username") != cleaned_username]
+            active_users.append({"username": cleaned_username, "timestamp": now.isoformat()})
 
-    cleaned_username = (login_username or "").strip()
-    cleaned_password = (login_password or "").strip()
+            with open(active_file, "w") as f:
+                json.dump(active_users, f)
 
-    if cleaned_username == CREATOR_USERNAME and cleaned_password == CREATOR_PASSWORD:
-        st.session_state.is_authenticated = True
-        st.success("✅ Creator access granted")
-        st.rerun()
+            st.success(f"✅ Welcome, {cleaned_username}!")
+            st.rerun()
 
-    elif cleaned_username and len(cleaned_username) > 3 and cleaned_password == "":
-        st.session_state.is_authenticated = True
-        st.success(f"✅ Welcome, {cleaned_username}!")
-        st.rerun()
-
-    else:
-        st.error("❌ Invalid credentials. Creator needs password. Users need username >3 chars with empty password.")
+        else:
+            st.error("❌ Invalid credentials. Creator needs password. Users need username >3 chars with empty password.")
 
     st.stop()
 
