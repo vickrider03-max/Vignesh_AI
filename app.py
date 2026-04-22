@@ -3892,7 +3892,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                         <div class = " brand-logo-3d">
                            {logo_display}
                         </div>
-                    </div>)
+                    </div>
                     <div class = "brand-label">Mercdes_Benz</div>
                 </div>
                 """,unsafe_allow_html=True)
