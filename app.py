@@ -3757,7 +3757,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
     """, unsafe_allow_html=True)
 
     # Create the new flexbox layout using Streamlit columns
-    left_col, right_col = st.columns([3, 1.5])
+    left_col, right_col = st.columns([3, 1.3])
 
     # Apply additional form styling for login elements
     st.markdown("""
