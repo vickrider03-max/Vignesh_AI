@@ -3757,184 +3757,143 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
     """, unsafe_allow_html=True)
 
     # Create the new flexbox layout using Streamlit columns - Login page layout
-   # -----------------------------
-# CENTERED LOGIN LAYOUT (WIDER)
-# -----------------------------
-_, center_col, _ = st.columns([1, 3.5, 1])
+  # Create layout
+left_col, right_col = st.columns([3, 1.3])
 
-with center_col:
+st.markdown("""
+<style>
 
-    # -----------------------------
-    # GLOBAL LOGIN CSS (GLASS UI)
-    # -----------------------------
-    st.markdown("""
-    <style>
-    .login-card {
-        background: rgba(255, 255, 255, 0.25);
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
-        border-radius: 18px;
-        padding: 35px;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.12);
-        border: 1px solid rgba(255,255,255,0.3);
-        margin-top: 40px;
-        max-width: 480px;
-        margin-left: auto;
-        margin-right: auto;
-    }
+.login-subheading {
+    font-size: 1rem;
+    color: #5B7FA6;
+    margin-bottom: 15px;
+}
 
-    .brand-label {
-        font-size: 14px;
-        letter-spacing: 2px;
-        color: #1f3b57;
-        margin-top: 8px;
-        text-align: center;
-    }
+.login-card {
+    background: rgba(255,255,255,0.25);
+    backdrop-filter: blur(18px);
+    border-radius: 16px;
+    padding: 30px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+    border: 1px solid rgba(255,255,255,0.3);
+}
 
-    .brand-logo-3d {
-        display: flex;
-        justify-content: center;
-        margin-bottom: 10px;
-    }
+.stButton > button {
+    width: 100% !important;
+    border-radius: 10px !important;
+    padding: 10px !important;
+    font-weight: 600 !important;
+}
 
-    .stButton > button {
-        width: 100% !important;
-        background: linear-gradient(90deg, #1e3a8a, #2563eb) !important;
-        color: white !important;
-        border-radius: 10px !important;
-        padding: 10px !important;
-        font-weight: 600 !important;
-        transition: 0.3s ease;
-    }
+</style>
+""", unsafe_allow_html=True)
 
-    .stButton > button:hover {
-        transform: scale(1.03);
-        box-shadow: 0 8px 18px rgba(37,99,235,0.4);
-    }
-    </style>
-    """, unsafe_allow_html=True)
+# ---------------- LEFT SIDE ----------------
+with left_col:
 
-    # -----------------------------
-    # LOGIN CARD START
-    # -----------------------------
-    st.markdown('<div class="login-card">', unsafe_allow_html=True)
-
-    # -----------------------------
-    # LOGO SECTION (Mercedes)
-    # -----------------------------
     if logo_data:
         logo_display = f"""
         <img src="data:image/gif;base64,{logo_data}"
-             style="width:52px; height:52px; object-fit:contain;">
+             style="width:50px;height:50px;object-fit:contain;">
         """
     else:
-        logo_display = '<div style="font-size:28px;">★</div>'
+        logo_display = '<div class="star">★</div>'
 
     st.markdown(f"""
-        <div class="brand-logo-3d">
-            {logo_display}
+        <div class="brand-strip">
+            <div class="brand-logo-3d">
+                {logo_display}
+            </div>
+            <div class="brand-label">Mercedes-Benz</div>
         </div>
-        <div class="brand-label">Mercedes-Benz</div>
     """, unsafe_allow_html=True)
 
-    # -----------------------------
-    # TITLES
-    # -----------------------------
-    st.markdown("## IntelliDoc AI")
-    st.markdown("Smart Document Assistant")
-
-    st.markdown("<h3>Where Documents Become Intelligence</h3>", unsafe_allow_html=True)
+    st.markdown("""
+        <div class="ai-branding">
+            <div class="ai-title">IntelliDoc AI</div>
+            <div class="ai-subtitle">Smart Document Assistant</div>
+        </div>
+    """, unsafe_allow_html=True)
 
     st.markdown("""
-<p style='text-align:center; font-size:13px; color:#64748b;'>
-An enterprise AI control room for secure document insight, comparison, dashboards, and automation.
-</p>
+    <h2 style="text-align:center;">Where Documents Become Intelligence</h2>
+    <p style="text-align:center;color:#64748b;">
+    An enterprise AI control room for secure document insight, comparison, dashboards, and automation.
+    </p>
+    """, unsafe_allow_html=True)
 
-<div class="feature-grid">
+    st.markdown("""
+    <div class="feature-grid">
 
-    <div class="feature-card">
-        <h4>💬 Chat</h4>
-        <ul>
-            <li>Ask questions about uploaded files</li>
-            <li>Context-aware responses</li>
-            <li>Multi-file understanding</li>
-        </ul>
+        <div class="feature-card">
+            <h4>💬 Chat</h4>
+            <ul>
+                <li>Ask questions about uploaded files</li>
+                <li>Context-aware responses</li>
+                <li>Multi-file understanding</li>
+            </ul>
+        </div>
+
+        <div class="feature-card">
+            <h4>📊 Dashboard</h4>
+            <ul>
+                <li>Excel/CSV visualization</li>
+                <li>Export insights</li>
+            </ul>
+        </div>
+
+        <div class="feature-card">
+            <h4>🔄 Compare</h4>
+            <ul>
+                <li>Compare 2+ files</li>
+                <li>Word-level diff</li>
+                <li>Export results</li>
+            </ul>
+        </div>
+
+        <div class="feature-card">
+            <h4>🚗 CAPL</h4>
+            <ul>
+                <li>.can file support</li>
+                <li>CAPL editor</li>
+                <li>Code analysis</li>
+            </ul>
+        </div>
+
     </div>
-
-    <div class="feature-card">
-        <h4>📊 Dashboard</h4>
-        <ul>
-            <li>Excel/CSV visualization</li>
-            <li>Export insights</li>
-        </ul>
-    </div>
-
-    <div class="feature-card">
-        <h4>🔄 Compare</h4>
-        <ul>
-            <li>Compare 2+ files</li>
-            <li>Word-level diff</li>
-            <li>Export results</li>
-        </ul>
-    </div>
-
-    <div class="feature-card">
-        <h4>🚗 CAPL</h4>
-        <ul>
-            <li>.can file support</li>
-            <li>CAPL editor</li>
-            <li>Code analysis</li>
-        </ul>
-    </div>
-
-</div>
-""", unsafe_allow_html=True)
-
-    # -----------------------------
-    # LOGIN INPUTS
-    # -----------------------------
-st.markdown("<div style='margin-top:25px;'>", unsafe_allow_html=True)
-
-st.markdown("### Sign in to IntelliDoc AI")
-
-login_username = st.text_input("👤 Username", placeholder="Username", key="username")
-login_password = st.text_input("🔒 Password", type="password", placeholder="Password", key="password")
-
-st.caption("Standard users can leave password empty")
-
-access_clicked = st.button("Access", use_container_width=True, key="signin")
-
-st.markdown("</div>", unsafe_allow_html=True)
-
-    # close card
-st.markdown("</div>", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
 
-# -----------------------------
-# LOGIN LOGIC (DO NOT CHANGE)
-# -----------------------------
+# ---------------- RIGHT SIDE (LOGIN) ----------------
+with right_col:
+
+    st.markdown('<div class="login-card">', unsafe_allow_html=True)
+
+    st.markdown('<div class="login-subheading">Sign in to IntelliDoc AI</div>', unsafe_allow_html=True)
+
+    login_username = st.text_input("👤 Username", placeholder="Username", key="username")
+    login_password = st.text_input("🔒 Password", type="password", placeholder="Password", key="password")
+
+    st.caption("Standard users can leave password empty")
+
+    access_clicked = st.button("Access", use_container_width=True, key="signin")
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+# ---------------- LOGIN LOGIC ----------------
 if access_clicked:
 
     cleaned_username = (login_username or "").strip()
     cleaned_password = (login_password or "").strip()
 
     if cleaned_username == CREATOR_USERNAME and cleaned_password == CREATOR_PASSWORD:
-
         st.session_state.is_authenticated = True
-        st.session_state.logged_in_username = cleaned_username
-        st.session_state.user_role = "creator"
-        st.session_state.start_time = time.time()
-
         st.success("✅ Creator access granted")
         st.rerun()
 
     elif cleaned_username and len(cleaned_username) > 3 and cleaned_password == "":
-
         st.session_state.is_authenticated = True
-        st.session_state.logged_in_username = cleaned_username
-        st.session_state.user_role = "user"
-        st.session_state.start_time = time.time()
-
         st.success(f"✅ Welcome, {cleaned_username}!")
         st.rerun()
 
