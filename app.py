@@ -3889,7 +3889,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
              logo_display = '<div class = "star">★</div>'
         st.markdown(f"""
                     <div class = "brand-strip">
-                        div class = " brand-logo-3d">
+                        <div class = " brand-logo-3d">
                            {logo_display}
                         </div>
                     </div>)
