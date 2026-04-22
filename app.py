@@ -3838,12 +3838,12 @@ with left_col:
         logo_display = '<div class="star">★</div>'
 
     st.markdown(f"""
-        <div class="brand-strip">
-            <div class="brand-logo-3d">
-                {logo_display}
-            </div>
-            <div class="brand-label">Mercedes-Benz</div>
-        </div>
+       <div class="brand-strip">
+              <div class="brand-logo-3d">
+                 {logo_display}
+              </div>
+              <div class="brand-label">Mercedes-Benz</div>
+    </div>
     """, unsafe_allow_html=True)
 
     st.markdown("""
