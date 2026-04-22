@@ -3841,84 +3841,74 @@ with center_col:
     # TITLES
     # -----------------------------
     st.markdown("## IntelliDoc AI")
-    st.markdown(
-        "<div style='text-align:center; color:#64748b;'>Smart Document Assistant</div>",
-        unsafe_allow_html=True
-    )
+    st.markdown("Smart Document Assistant")
 
-    st.markdown(
-        "<h3 style='text-align:center; margin-top:15px;'>Where Documents Become Intelligence</h3>",
-        unsafe_allow_html=True
-    )
+    st.markdown("<h3>Where Documents Become Intelligence</h3>", unsafe_allow_html=True)
 
     st.markdown("""
-    <p style='text-align:center; font-size:13px; color:#64748b;'>
-    An enterprise AI control room for secure document insight, comparison, dashboards, and automation.
-    </p>
-    """, unsafe_allow_html=True)
+<p style='text-align:center; font-size:13px; color:#64748b;'>
+An enterprise AI control room for secure document insight, comparison, dashboards, and automation.
+</p>
+""", unsafe_allow_html=True)
+st.markdown("""
+<div class="feature-grid">
 
-    # -----------------------------
-    # FEATURES
-    # -----------------------------
-    st.markdown("""
-    <div class="feature-grid">
-
-        <div class="feature-card">
-            <h4>💬 Chat</h4>
-            <ul>
-                <li>Ask questions about uploaded files</li>
-                <li>Context-aware responses</li>
-                <li>Multi-file understanding</li>
-            </ul>
-        </div>
-
-        <div class="feature-card">
-            <h4>📊 Dashboard</h4>
-            <ul>
-                <li>Excel/CSV visualization</li>
-                <li>Export insights</li>
-            </ul>
-        </div>
-
-        <div class="feature-card">
-            <h4>🔄 Compare</h4>
-            <ul>
-                <li>Compare 2+ files</li>
-                <li>Word-level diff</li>
-                <li>Export results</li>
-            </ul>
-        </div>
-
-        <div class="feature-card">
-            <h4>🚗 CAPL</h4>
-            <ul>
-                <li>.can file support</li>
-                <li>CAPL editor</li>
-                <li>Code analysis</li>
-            </ul>
-        </div>
-
+    <div class="feature-card">
+        <h4>💬 Chat</h4>
+        <ul>
+            <li>Ask questions about uploaded files</li>
+            <li>Context-aware responses</li>
+            <li>Multi-file understanding</li>
+        </ul>
     </div>
-    """, unsafe_allow_html=True)
+
+    <div class="feature-card">
+        <h4>📊 Dashboard</h4>
+        <ul>
+            <li>Excel/CSV visualization</li>
+            <li>Export insights</li>
+        </ul>
+    </div>
+
+    <div class="feature-card">
+        <h4>🔄 Compare</h4>
+        <ul>
+            <li>Compare 2+ files</li>
+            <li>Word-level diff</li>
+            <li>Export results</li>
+        </ul>
+    </div>
+
+    <div class="feature-card">
+        <h4>🚗 CAPL</h4>
+        <ul>
+            <li>.can file support</li>
+            <li>CAPL editor</li>
+            <li>Code analysis</li>
+        </ul>
+    </div>
+
+</div>
+""", unsafe_allow_html=True)
 
     # -----------------------------
     # LOGIN INPUTS
     # -----------------------------
-    st.markdown("<div style='margin-top:25px;'>", unsafe_allow_html=True)
+st.markdown("<div style='margin-top:25px;'>", unsafe_allow_html=True)
 
-    st.markdown("### Sign in to IntelliDoc AI")
+st.markdown("### Sign in to IntelliDoc AI")
 
-    login_username = st.text_input("👤 Username", placeholder="Username", key="username")
-    login_password = st.text_input("🔒 Password", type="password", placeholder="Password", key="password")
+login_username = st.text_input("👤 Username", placeholder="Username", key="username")
+login_password = st.text_input("🔒 Password", type="password", placeholder="Password", key="password")
 
-    st.caption("Standard users can leave password empty")
+st.caption("Standard users can leave password empty")
 
-    access_clicked = st.button("Access", use_container_width=True, key="signin")
+access_clicked = st.button("Access", use_container_width=True, key="signin")
 
-    st.markdown("</div>", unsafe_allow_html=True)
+st.markdown("</div>", unsafe_allow_html=True)
 
     # close card
-    st.markdown("</div>", unsafe_allow_html=True)
+st.markdown("</div>", unsafe_allow_html=True)
 
 
 # -----------------------------
