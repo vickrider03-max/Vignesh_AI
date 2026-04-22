@@ -3882,7 +3882,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
 
     with left_col:
         if logo_data:
-            logo-display = f'''
+            logo_display = f'''
             <img src = "data:image/gif;base64,{logo_data}"
             style = "width: 36px; height: 36px; object-fit;contain;">'''
         else:
