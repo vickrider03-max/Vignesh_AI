@@ -151,7 +151,7 @@ def get_needle_minimalist_logo():
             format='GIF',
             save_all=True,
             append_images=frames[1:],
-            duration=80,
+            duration=60,
             loop=0,
             disposal=2
         )
@@ -162,7 +162,7 @@ def get_needle_minimalist_logo():
 # -------------------------------
 # STREAMLIT PAGE CONFIG
 # -------------------------------
-st.set_page_config(page_title="🧠 IntelliDoc AI ", layout="wide")
+st.set_page_config(page_title="🧠 IntelliDoc AI– Smart Document Assistant", layout="wide")
 
 # Mobile viewport meta tag for proper scaling
 st.markdown(
@@ -1146,10 +1146,7 @@ if st.session_state.is_authenticated:
                 st.session_state[state_key] = not st.session_state.get(state_key, False)
         with title_col:
             st.markdown("### IntelliDoc AI")
-            st.markdown(
-                "<div style='font-size:0.9rem; font-style:italic; color:#64748b; margin-top:-0.35rem;'>Smart Document Assistant</div>",
-                unsafe_allow_html=True
-            )
+            st.markdown("*Smart Document Assistant*")
 
     with logout_col:
         if st.button("🚶 Logout", key="main_logout_btn"):
@@ -1282,13 +1279,28 @@ if st.session_state.is_authenticated:
     if not st.session_state.get('welcome_shown', False):
         user = st.session_state.get("logged_in_username", "")
         if user:
-            st.toast(f"Welcome back, {user} 🎉", icon="🙋")
+            st.toast(f"Welcome back, {user} 🎉", icon="🧠")
         else:
-            st.toast("Welcome back 🎉", icon="🙋")
+            st.toast("Welcome back 🎉", icon="🧠")
         st.session_state.welcome_shown = True
 
     render_status_strip()
-
+else:
+    # Login page header
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        if logo_data:
+            st.markdown(
+                f'''
+                <div style="text-align: left;">
+                    <img src="data:image/gif;base64,{logo_data}" style="width: 50px; height: 50px;">
+                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px; font-weight: 500;">Mercedes-Benz</div>
+                </div>
+                ''',
+                unsafe_allow_html=True,
+            )
+    with col2:
+        st.markdown("### 🧠 IntelliDoc AI– Smart Document Assistant")
 
 # -------------------------------
 # SESSION STATE INITIALIZATION
@@ -2702,7 +2714,7 @@ with st.sidebar:
                 f'''
                 <div style="text-align: center; margin-bottom: 20px;">
                     <img src="data:image/gif;base64,{logo_data}" style="width: 40px; height: 40px;">
-                    <div style="font-size: 15px; color: var(--text-secondary); margin-top: 4px; font-weight: 500;">Mercedes-Benz</div>
+                    <div style="font-size: 10px; color: var(--text-secondary); margin-top: 4px; font-weight: 500;">Mercedes-Benz</div>
                 </div>
                 ''',
                 unsafe_allow_html=True,
@@ -3525,444 +3537,719 @@ CREATOR_PASSWORD = "Rider@100"
 # Login gate:
 # This runs before the main app tabs are shown. It keeps the creator/user access
 # flow in one place so authentication checks do not have to be repeated per tab.
-# ================================
-# PREMIUM LOGIN EXPERIENCE
-# Replace your current login gate block with this
-# ================================
 if not st.session_state.is_authenticated and "preview_token" not in query_params:
-    # Custom CSS for the login page
-    st.markdown("""
-    <style>
-        html, body { margin: 0; padding: 0; height: 100%; }
-        .block-container {
-            max-width: none !important;
-            padding: clamp(20px, 3vw, 36px) !important;
-            margin: 0 !important;
-            width: 100vw !important;
-            min-height: 100vh !important;
-        }
-        .main {
-            width: 100% !important;
-            padding: 0 !important;
-            min-height: 100vh !important;
-        }
-
-        /* Full viewport container */
-        [data-testid="stAppViewContainer"] {
-            background:
-                radial-gradient(circle at top left, rgba(176, 224, 230, 0.35) 0%, rgba(176, 224, 230, 0) 40%),
-                radial-gradient(circle at top right, rgba(230, 245, 250, 0.3) 0%, rgba(230, 245, 250, 0) 45%),
-                radial-gradient(circle at bottom left, rgba(176, 196, 222, 0.25) 0%, rgba(176, 196, 222, 0) 40%),
-                linear-gradient(135deg, #F5F9FB 0%, #E8F4F8 35%, #EDF8FC 100%) !important;
-            min-height: 100vh !important;
-            display: flex !important;
-            align-items: stretch !important;
-        }
-
-        /* Override Streamlit's default column behavior */
-        [data-testid="column"]:first-child {
-            flex: 1 !important;
-            padding: clamp(36px, 4vw, 64px) clamp(32px, 5vw, 84px) !important;
-            display: flex !important;
-            flex-direction: column !important;
-            justify-content: center !important;
-            color: #3B5E7F !important;
-            min-height: calc(100vh - 2 * clamp(20px, 3vw, 36px)) !important;
-        }
-        [data-testid="column"]:nth-child(2) {
-            width: min(460px, 100%) !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            padding: clamp(20px, 2.6vw, 32px) !important;
-            flex-shrink: 0 !important;
-            min-height: calc(100vh - 2 * clamp(20px, 3vw, 36px)) !important;
-        }
-
-        /* Branding elements */
-        .brand-strip {
-            display: flex !important;
-            align-items: center !important;
-            gap: 12px !important;
-            #margin-bottom: 32px !important;
-           perspective: 800px;      
-        }
-        .login-panel {
-            width: min(440px, 100%);
-            padding: 36px 32px 30px;
-            border-radius: 24px;
-            background: linear-gradient(180deg, rgba(255, 253, 250, 0.95) 0%, rgba(245, 250, 252, 0.92) 100%);
-            border: 1.5px solid rgba(176, 224, 230, 0.45);
-            box-shadow: 0 20px 50px rgba(135, 206, 235, 0.1), 0 0 30px rgba(176, 196, 222, 0.08);
-            backdrop-filter: blur(12px);
-        }
-        .brand-logo-3d {
-            width: 60px !important;
-            height: 60 px !important;
-            perspective: 800px;    
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            animation: float 3s ease-in-out infinite;       
-        }  
-        @keyframes float {
-           0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-4px); }
-        }  
-        .logo-inner{
-                width : 100%;
-                height: 100%;
-                border-radius:50%;
-                background: radial-gradient(circle at 30% 30%, #dcdcdc, #a0a0a0);
+    st.markdown(
+        """
+        <style>
+            body {
+                background: #0B0F1A !important;
+                color: #E6EAF2 !important;
+            }
+            .login-split {
+                display: grid;
+                grid-template-columns: 1.35fr 1fr;
+                gap: 32px;
+                align-items: center;
+                min-height: 78vh;
+                padding: 32px 0;
+                max-width: 1240px;
+                margin: 0 auto;
+                width: min(100%, 1240px);
+            }
+            .login-left-panel {
+                position: relative;
+                overflow: hidden;
+                border-radius: 32px;
+                padding: 40px 36px;
+                background: radial-gradient(circle at top left, rgba(124, 92, 255, 0.22), transparent 28%),
+                            radial-gradient(circle at top right, rgba(0, 194, 255, 0.16), transparent 26%),
+                            linear-gradient(180deg, rgba(19, 29, 56, 0.96) 0%, rgba(11, 15, 26, 0.95) 100%);
+                box-shadow: 0 36px 100px rgba(0, 0, 0, 0.35);
+                border: 1px solid rgba(124, 92, 255, 0.14);
+            }
+            .login-left-panel::before {
+                content: '';
+                position: absolute;
+                inset: 0;
+                background: radial-gradient(circle at 20% 20%, rgba(124, 92, 255, 0.24), transparent 16%),
+                            radial-gradient(circle at 80% 15%, rgba(0, 194, 255, 0.14), transparent 20%),
+                            radial-gradient(circle at 30% 80%, rgba(255, 255, 255, 0.06), transparent 24%);
+                pointer-events: none;
+            }
+            .login-left-content {
+                position: relative;
+                z-index: 1;
+                max-width: 460px;
+            }
+            .login-logo {
                 display: flex;
                 align-items: center;
-                justify-content: center;
-                transform-style: preserve-3d;
-                transition: transform 0.2s ease;
-                box-shadow: 0 8px 20px rgba(0,0,0,0.15);
-            }   
-        .star{
-              font-size: 28px;
-              color: white;
-              transform: translateZ(10px); 
-            }                      
-        .brand-label {
-            font-size: 0.82rem !important;
-            color: rgba(91, 127, 166, 0.9) !important;
-            letter-spacing: 0.18em !important;
-            text-transform: uppercase !important;
-        }
-        .ai-branding {
-            display : flex;
-            gap : 8px;
-            align-items : baseline;
-            margin-bottom: 28px!important;
-        }
-        
-        .ai-title {
-           font-size: clamp(2rem, 3.5vw, 2.8rem);
-           font-weight: 800;
-           color: #2C5F7F;
-        }
-
-        .ai-subtitle {
-         font-size: 14px;
-         font-style: italic;
-         font-weight: 400;
-         color: rgba(44, 95, 127, 0.6);
-        }
-        .ai-tagline {
-            font-size: clamp(2.2rem, 4vw, 3.2rem) !important;
-            font-weight: 800 !important;
-            line-height: 1.15 !important;
-            color: #3B5E7F !important;
-            margin-bottom: 32px !important;
-            letter-spacing: -0.03em !important;
-        }
-        .ai-description {
-            font-size: 1.02rem !important;
-            line-height: 1.7 !important;
-            color: rgba(91, 127, 166, 0.9) !important;
-            margin-bottom: 48px !important;
-        }
-        .trust-row {
-            color: rgba(91, 127, 166, 0.8) !important;
-            font-size: 0.95rem !important;
-            margin-bottom: 56px !important;
-            line-height: 1.6 !important;
-        }
-        /* Feature cards */
-        .feature-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(280px, 1fr));
-            gap: 16px;
-            align-items: stretch;
-            margin-top: 8px;
-        }
-        .feature-card {
-            background: rgba(176, 224, 230, 0.15);
-            border: 1px solid rgba(176, 196, 222, 0.3);
-            border-radius: 12px;
-            color: #3B5E7F;
-            padding: 18px 18px 16px;
-            min-height: 150px;
-            display: flex;
-            flex-direction: column;
-            justify-content: flex-start;
-            backdrop-filter: blur(4px);
-        }
-        .feature-card h4 {
-            margin: 0 0 14px 0;
-            color: #0d5aa7;
-            font-size: 1.08rem;
-            font-weight: 700;
-        }
-        .feature-card ul {
-            margin: 0;
-            padding-left: 20px;
-        }
-        .feature-card li {
-            margin: 0 0 8px 0;
-            line-height: 1.45;
-            color: #0d5aa7;
-        }
-        .login-panel .stButton button {
-            background: linear-gradient(135deg, #87CEEB 0%, #6BA3C5 100%) !important;
-            color: #ffffff !important;
-            border: 0 !important;
-            border-radius: 8px !important;
-            font-weight: 600 !important;
-            width: 100% !important;
-            padding: 12px 16px !important;
-            margin-top: 8px !important;
-        }
-
-        .login-panel .stButton button:hover {
-            background: linear-gradient(135deg, #ADD8E6 0%, #87CEEB 100%) !important;
-            transform: translateY(-1px) !important;
-        }
-
-        .login-note {
-            color: rgba(100, 100, 140, 0.7) !important;
-            font-size: 0.85rem !important;
-            text-align: center !important;
-            margin-top: 16px !important;
-        }
-
-        /* Responsive design */
-        @media (max-width: 768px) {
-            [data-testid="column"]:first-child {
-                padding: 24px 12px 16px !important;
-                order: 2 !important;
-                min-height: auto !important;
+                gap: 14px;
+                margin-bottom: 28px;
             }
-            [data-testid="column"]:nth-child(2) {
+            .login-logo img {
+                width: 52px;
+                height: 52px;
+                border-radius: 16px;
+                object-fit: cover;
+                box-shadow: 0 22px 48px rgba(0, 0, 0, 0.32);
+                border: 1px solid rgba(255,255,255,0.12);
+            }
+            .login-logo-text {
+                display: grid;
+                gap: 4px;
+            }
+            .login-logo-text .brand-tag {
+                font-size: 0.82rem;
+                letter-spacing: 0.24em;
+                text-transform: uppercase;
+                color: #A497FF;
+                font-weight: 700;
+            }
+            .login-heading {
+                font-size: clamp(2.4rem, 3vw, 3.4rem);
+                line-height: 1.03;
+                margin-bottom: 18px;
+                color: #F7F9FF;
+                letter-spacing: -0.04em;
+            }
+            .login-tagline {
+                color: #B8C4DD;
+                font-size: 1rem;
+                line-height: 1.75;
+                max-width: 420px;
+                margin-bottom: 32px;
+            }
+            .login-keywords {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 12px;
+            }
+            .login-keyword {
+                padding: 10px 14px;
+                border-radius: 999px;
+                border: 1px solid rgba(124, 92, 255, 0.24);
+                background: rgba(124, 92, 255, 0.08);
+                color: #D9E1FF;
+                font-size: 0.92rem;
+            }
+            .glass-card {
+                position: relative;
+                padding: 40px 34px;
+                border-radius: 30px;
+                background: rgba(255, 255, 255, 0.06);
+                backdrop-filter: blur(24px);
+                box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28);
+                border: 1px solid rgba(255, 255, 255, 0.12);
+            }
+            .glass-card h2 {
+                margin: 0;
+                color: #F4F7FF;
+                font-size: 2.05rem;
+                letter-spacing: -0.03em;
+            }
+            .glass-card p {
+                margin: 14px 0 26px;
+                color: #A5B1D6;
+                font-size: 1rem;
+                line-height: 1.75;
+            }
+            .glass-input-label {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                color: #A9B5D2;
+                font-size: 0.95rem;
+                margin-bottom: 8px;
+            }
+            .glass-card .stTextInput > label {
+                display: none !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                height: 0 !important;
+                width: 0 !important;
+                overflow: hidden !important;
+            }
+            .glass-card .stTextInput {
+                margin-top: 0 !important;
+                padding-top: 0 !important;
+            }
+            .glass-card .stTextInput > label + div {
+                margin-top: 0 !important;
+            }
+            .glass-card .stTextInput input {
+                background: rgba(255, 255, 255, 0.08) !important;
+                border: 1px solid rgba(255, 255, 255, 0.14) !important;
+                color: #F4F7FF !important;
+                border-radius: 18px !important;
+                padding: 18px 18px !important;
+                min-height: 52px !important;
+                box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04) !important;
+                transition: all 0.2s ease !important;
+            }
+            .glass-card .stTextInput input:focus {
+                border-color: rgba(124, 92, 255, 0.8) !important;
+                box-shadow: 0 0 0 6px rgba(124, 92, 255, 0.12) !important;
+                outline: none !important;
+            }
+            .glass-card .stTextInput input::placeholder {
+                color: rgba(244, 247, 255, 0.62) !important;
+            }
+            .login-access-shell {
+                position: relative;
+                margin-bottom: 30px;
+                padding: 24px 22px;
+                border-radius: 24px;
+                background: rgba(14, 21, 38, 0.75);
+                backdrop-filter: blur(24px);
+                border: 1px solid rgba(124, 92, 255, 0.18);
+                box-shadow: 0 28px 80px rgba(10, 16, 34, 0.55);
+            }
+            .login-access-shell::before {
+                content: '';
+                position: absolute;
+                inset: -1px;
+                border-radius: inherit;
+                background: linear-gradient(135deg, rgba(0, 194, 255, 0.28), rgba(124, 92, 255, 0.32));
+                filter: blur(18px);
+                opacity: 0.75;
+                z-index: -1;
+            }
+            .login-access-title {
+                margin: 0 0 10px;
+                color: #F4F7FF;
+                font-size: clamp(1.85rem, 2.5vw, 2.15rem);
+                letter-spacing: -0.04em;
+                font-weight: 700;
+            }
+            .login-access-subtitle {
+                margin: 0;
+                color: #B8C4DD;
+                font-size: 0.96rem;
+                line-height: 1.7;
+            }
+            .glass-input-label {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                color: #B8C4DD;
+                font-size: 0.95rem;
+                margin-bottom: 10px;
+                letter-spacing: 0.01em;
+            }
+            .glass-input-label + div .stTextInput input {
+                background: rgba(255, 255, 255, 0.08) !important;
+                border: 1px solid rgba(124, 92, 255, 0.32) !important;
+                color: #F4F7FF !important;
+                border-radius: 18px !important;
+                padding: 18px 20px !important;
+                min-height: 56px !important;
+                box-shadow: 0 8px 32px rgba(124, 92, 255, 0.08), inset 0 2px 8px rgba(255,255,255,0.06) !important;
+                transition: all 0.28s ease !important;
+                backdrop-filter: blur(8px) !important;
+            }
+            .glass-input-label + div .stTextInput input:focus {
+                border-color: rgba(124, 92, 255, 0.76) !important;
+                box-shadow: 0 16px 48px rgba(124, 92, 255, 0.20), inset 0 2px 8px rgba(255,255,255,0.08) !important;
+                background: rgba(255, 255, 255, 0.12) !important;
+                outline: none !important;
+            }
+            .glass-input-label + div .stTextInput input::placeholder {
+                color: rgba(244, 247, 255, 0.48) !important;
+            }
+            .feature-cards-container {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 14px;
+                margin-top: 28px;
+            }
+            .feature-card {
+                position: relative;
+                padding: 18px 16px;
+                border-radius: 18px;
+                background: rgba(124, 92, 255, 0.08);
+                border: 1px solid rgba(124, 92, 255, 0.22);
+                box-shadow: 0 12px 32px rgba(124, 92, 255, 0.06);
+                cursor: pointer;
+                transition: all 0.28s ease;
+                text-align: center;
+                backdrop-filter: blur(10px);
+            }
+            .feature-card:hover {
+                background: rgba(124, 92, 255, 0.15);
+                border-color: rgba(124, 92, 255, 0.42);
+                box-shadow: 0 18px 48px rgba(124, 92, 255, 0.14);
+                transform: translateY(-2px);
+            }
+            .feature-card-icon {
+                font-size: 2rem;
+                margin-bottom: 8px;
+            }
+            .feature-card-title {
+                color: #E6EAF2;
+                font-size: 0.95rem;
+                font-weight: 600;
+                margin: 0;
+                letter-spacing: 0.2px;
+            }
+            .feature-cards-label {
+                color: #B8C4DD;
+                font-size: 0.9rem;
+                margin-bottom: 12px;
+                letter-spacing: 0.3px;
+                text-transform: uppercase;
+            }
+            .login-keyword {
+                padding: 10px 14px;
+                border-radius: 999px;
+                border: 1px solid rgba(124, 92, 255, 0.24);
+                background: rgba(124, 92, 255, 0.08);
+                color: #D9E1FF;
+                font-size: 0.92rem;
+                cursor: pointer;
+                transition: all 0.28s ease;
+            }
+            .login-keyword:hover {
+                background: rgba(124, 92, 255, 0.16);
+                border-color: rgba(124, 92, 255, 0.42);
+                box-shadow: 0 6px 20px rgba(124, 92, 255, 0.12);
+                transform: translateY(-1px);
+            }
+            .feature-description {
+                display: none;
+                margin-top: 20px;
+                padding: 20px;
+                border-radius: 18px;
+                background: rgba(124, 92, 255, 0.08);
+                border: 1px solid rgba(124, 92, 255, 0.22);
+                color: #D9C8E8;
+                font-size: 0.9rem;
+                line-height: 1.7;
+            }
+            .feature-description.active {
+                display: block;
+            }
+            .feature-description ul {
+                margin: 10px 0;
+                padding-left: 20px;
+            }
+            .feature-description li {
+                margin-bottom: 8px;
+            }
+            #feature-popup-card {
+                position: relative;
+                margin-top: 24px;
+                padding: 22px 24px;
+                background: linear-gradient(135deg, #E5E3DD, #F9F6EE);
+                border: 1px solid rgba(145, 140, 132, 0.24);
+                border-radius: 20px;
+                box-shadow: 0 18px 40px rgba(26, 28, 34, 0.08);
+                opacity: 0;
+                transform: translateX(-110%);
+                visibility: hidden;
+                transition: transform 0.7s ease, opacity 0.7s ease, visibility 0.7s ease;
+                display: flex;
+                align-items: center;
+                justify-content: flex-start;
+                overflow: hidden;
+            }
+            #feature-popup-card.show {
+                opacity: 1;
+                transform: translateX(0);
+                visibility: visible;
+            }
+            #feature-popup-content {
+                color: #2F3136;
+                font-size: 1rem;
+                font-weight: 600;
+                line-height: 1.5;
+                white-space: normal;
+                max-width: 100%;
+            }
+            #feature-popup-content span {
+                display: inline-block;
+                animation: slideText 12s linear infinite;
+            }
+            @keyframes slideText {
+                from {
+                    transform: translateX(100%);
+                }
+                to {
+                    transform: translateX(-100%);
+                }
+            }
+            @keyframes slideInUp {
+                from {
+                    opacity: 0;
+                    transform: translateY(10px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            .glass-button-spacer + div .stButton > button {
                 width: 100% !important;
-                padding: 12px !important;
-                order: 1 !important;
-                min-height: auto !important;
+                border-radius: 18px !important;
+                padding: 16px 0 !important;
+                font-size: 1rem !important;
+                font-weight: 700 !important;
+                color: #F4F7FF !important;
+                background: linear-gradient(135deg, #00C2FF 0%, #7C5CFF 100%) !important;
+                border: none !important;
+                box-shadow: 0 20px 60px rgba(124, 92, 255, 0.28) !important;
+                transition: transform 0.2s ease, box-shadow 0.2s ease !important;
             }
-            .ai-tagline {
-                font-size: 2rem !important;
+            .glass-button-spacer + div .stButton > button:hover {
+                transform: translateY(-2px) !important;
+                box-shadow: 0 26px 72px rgba(124, 92, 255, 0.32) !important;
             }
-            .login-panel {
+            .glass-button-spacer + div .stButton > button:focus {
+                outline: none !important;
+                box-shadow: 0 0 0 4px rgba(124, 92, 255, 0.16) !important;
+            }
+            .login-access-note {
+                color: #96A6D4;
+                font-size: 0.92rem;
+                margin-top: 18px;
+                line-height: 1.65;
+            }
+            .login-subtle {
+                color: #8D9CC9;
+                font-size: 0.93rem;
+                margin-top: 18px;
+                line-height: 1.7;
+            }
+            .login-help {
+                margin-top: 22px;
+                font-size: 0.95rem;
+                color: #BAC8E8;
+            }
+            .login-help a {
+                color: #7C5CFF;
+                text-decoration: none;
+                font-weight: 600;
+            }
+            .login-help a:hover {
+                text-decoration: underline;
+            }
+            .login-expander > button {
                 width: 100% !important;
-                padding: 24px 20px !important;
+                background: rgba(255,255,255,0.06) !important;
+                color: #E6EAF2 !important;
+                border: 1px solid rgba(255,255,255,0.12) !important;
             }
-            .feature-grid {
-                grid-template-columns: 1fr;
+            @media (max-width: 980px) {
+                .login-split {grid-template-columns: 1fr;}
+                .login-left-panel, .glass-card {border-radius: 24px;}
+                .login-left-panel {padding: 32px 24px;}
+                .glass-card {padding: 32px 24px;}
+                .login-heading {font-size: 2.2rem;}
+                .login-tagline {font-size: 0.95rem;}
             }
-        }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # Create the new flexbox layout using Streamlit columns
-    left_col, right_col = st.columns([3, 1])
-
-    # Apply additional form styling for login elements
-    st.markdown("""
-    <style>
-        /* Login heading and subheading */
-        .login-panel .login-heading {
-            margin-top: 0 !important;
-        }
-        .login-heading {
-            font-size: clamp(1.8rem, 4vw, 2.8rem) !important;
-            color: #2C5F7F !important;
-            font-weight: 700 !important;
-            margin-bottom: 10px !important;
-            line-height: 1.1 !important;
-        }
-
-        .login-subheading {
-            font-size: clamp(0.95rem, 2vw, 1.05rem) !important;
-            color: #5B7FA6 !important;
-            font-weight: 500 !important;
-            margin-bottom: 20px !important;
-        }
-
-        /* Form elements */
-        .login-panel [data-testid="stTextInput"] {
-            margin-bottom: 8px !important;
-        }
-        .login-panel [data-testid="stTextInput"] label,
-        .login-panel [data-testid="stTextInput"] label p,
-        .login-panel [data-testid="stTextInput"] label span,
-        .login-panel [data-testid="stTextInput"] p {
-            color: #3B5E7F !important;
-            -webkit-text-fill-color: #3B5E7F !important;
-            opacity: 1 !important;
-        }
-        .login-panel [data-baseweb="base-input"],
-        .login-panel [data-baseweb="input"],
-        .login-panel [data-testid="stTextInput"] > div > div {
-            background: rgba(230, 244, 248, 0.85) !important;
-            border: 1.5px solid rgba(176, 224, 230, 0.6) !important;
-            border-radius: 12px !important;
-            box-shadow: none !important;
-        }
-        .login-panel [data-baseweb="base-input"]:focus-within,
-        .login-panel [data-baseweb="input"]:focus-within,
-        .login-panel [data-testid="stTextInput"] > div > div:focus-within {
-            border-color: rgba(135, 206, 235, 0.9) !important;
-            box-shadow: 0 0 0 3px rgba(176, 224, 230, 0.25), 0 0 18px rgba(135, 206, 235, 0.2) !important;
-        }
-        .login-panel input[type="text"],
-        .login-panel input[type="password"] {
-            background: transparent !important;
-            color: #2C5F7F !important;
-            caret-color: #4D94B9 !important;
-            -webkit-text-fill-color: #2C5F7F !important;
-            border: none !important;
-            box-shadow: none !important;
-            font-weight: 600 !important;
-            letter-spacing: 0.2px !important;
-            font-size: 1rem !important;
-            padding: 12px 16px !important;
-        }
-        .login-panel input[type="text"]::placeholder,
-        .login-panel input[type="password"]::placeholder {
-            color: rgba(91, 127, 166, 0.65) !important;
-            opacity: 1 !important;
-            -webkit-text-fill-color: rgba(91, 127, 166, 0.65) !important;
-        }
-        .login-panel input[type="text"]:focus,
-        .login-panel input[type="password"]:focus {
-            background: transparent !important;
-            color: #2C5F7F !important;
-            -webkit-text-fill-color: #2C5F7F !important;
-            outline: none !important;
-        }
-
-        .login-note {
-            color: rgba(91, 127, 166, 0.75) !important;
-            font-size: 0.85rem !important;
-            text-align: center !important;
-            margin-top: 16px !important;
-        }
-        .login-panel [data-testid="stCaptionContainer"],
-        .login-panel [data-testid="stCaptionContainer"] p,
-        .login-panel .stCaption,
-        .login-panel .stCaption p {
-            color: rgba(91, 127, 166, 0.85) !important;
-            -webkit-text-fill-color: rgba(91, 127, 166, 0.85) !important;
-            opacity: 1 !important;
-            font-size: 0.84rem !important;
-        }
-        .login-panel .stButton > button,
-        .login-panel div.stButton > button {
-            width: 100% !important;
-            min-height: 42px !important;
-            padding: 0.45rem 0.9rem !important;
-            font-size: 0.98rem !important;
-            border-radius: 10px !important;
-        }
-
-        /* Responsive design */
-        @media (max-width: 768px) {
-            [data-testid="column"]:first-child {
-                padding: 24px 12px 16px !important;
-                order: 2 !important;
+            @media (max-width: 767px) {
+                .login-split {padding: 16px 0;}
+                .login-left-panel {padding: 24px 16px;}
+                .glass-card {padding: 24px 16px;}
+                .login-heading {font-size: 1.8rem; margin-bottom: 12px;}
+                .login-tagline {font-size: 0.9rem; margin-bottom: 24px;}
+                .login-keywords {gap: 8px;}
+                .login-keyword {padding: 8px 12px; font-size: 0.85rem;}
             }
-            [data-testid="column"]:nth-child(2) {
-                width: 100% !important;
-                padding: 12px !important;
-                order: 1 !important;
-            }
-            .ai-tagline {
-                font-size: 2rem !important;
-            }
-            .login-panel {
-                width: 100% !important;
-                padding: 24px 20px !important;
-            }
-        }
-    </style>
-    """, unsafe_allow_html=True)
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
+    left_col, right_col = st.columns([3, 2], gap="large")
     with left_col:
-        if logo_data:
-            logo_display = f'''
-            <img src = "data:image/gif;base64,{logo_data}"
-            style = "width: 36px; height: 36px; object-fit;contain;">'''
-        else:
-             logo_display = '<div class = "star">★</div>'
-        st.markdown(f"""
-                    <div class = "brand-strip">
-                        <div class = " brand-logo-3d">
-                           {logo_display}
+        logo_img = f'<img src="data:image/gif;base64,{logo_data}" alt="Mercedes-Benz logo">' if logo_data else ''
+        html_feature_panel = """
+            <style>
+                html, body {
+                    margin: 0;
+                    padding: 0;
+                    background: transparent;
+                    color: #E6EAF2;
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                }
+                .login-left-panel {
+                    position: relative;
+                    overflow: hidden;
+                    border-radius: 32px;
+                    padding: 34px 30px;
+                    background: radial-gradient(circle at top left, rgba(124, 92, 255, 0.22), transparent 28%),
+                                radial-gradient(circle at top right, rgba(0, 194, 255, 0.16), transparent 26%),
+                                linear-gradient(180deg, rgba(19, 29, 56, 0.96) 0%, rgba(11, 15, 26, 0.95) 100%);
+                    box-shadow: 0 32px 80px rgba(0, 0, 0, 0.30);
+                    border: 1px solid rgba(124, 92, 255, 0.14);
+                    min-height: 580px;
+                }
+                .login-left-panel::before {
+                    content: '';
+                    position: absolute;
+                    inset: 0;
+                    background: radial-gradient(circle at 20% 20%, rgba(124, 92, 255, 0.24), transparent 16%),
+                                radial-gradient(circle at 80% 15%, rgba(0, 194, 255, 0.14), transparent 20%),
+                                radial-gradient(circle at 30% 80%, rgba(255, 255, 255, 0.06), transparent 24%);
+                    pointer-events: none;
+                }
+                .login-left-content {
+                    position: relative;
+                    z-index: 1;
+                    max-width: 460px;
+                }
+                .login-logo {
+                    display: flex;
+                    align-items: center;
+                    gap: 14px;
+                    margin-bottom: 28px;
+                }
+                .login-logo img {
+                    width: 52px;
+                    height: 52px;
+                    border-radius: 16px;
+                    object-fit: cover;
+                    box-shadow: 0 22px 48px rgba(0, 0, 0, 0.32);
+                    border: 1px solid rgba(255,255,255,0.12);
+                }
+                .login-logo-text {
+                    display: grid;
+                    gap: 4px;
+                }
+                .brand-tag {
+                    font-size: 0.82rem;
+                    letter-spacing: 0.24em;
+                    text-transform: uppercase;
+                    color: #A497FF;
+                    font-weight: 700;
+                }
+                .login-heading {
+                    font-size: clamp(2.4rem, 3vw, 3.4rem);
+                    line-height: 1.03;
+                    margin-bottom: 18px;
+                    color: #F7F9FF;
+                    letter-spacing: -0.04em;
+                }
+                .login-tagline {
+                    color: #B8C4DD;
+                    font-size: 1rem;
+                    line-height: 1.75;
+                    max-width: 420px;
+                    margin-bottom: 32px;
+                }
+                .login-keywords {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 12px;
+                }
+                .login-keyword {
+                    padding: 10px 14px;
+                    border-radius: 999px;
+                    border: 1px solid rgba(124, 92, 255, 0.24);
+                    background: rgba(124, 92, 255, 0.08);
+                    color: #D9E1FF;
+                    font-size: 0.92rem;
+                    cursor: pointer;
+                    transition: all 0.28s ease;
+                }
+                .login-keyword:hover {
+                    background: rgba(124, 92, 255, 0.16);
+                    border-color: rgba(124, 92, 255, 0.42);
+                    box-shadow: 0 6px 20px rgba(124, 92, 255, 0.12);
+                    transform: translateY(-1px);
+                }
+                .feature-description {
+                    display: none;
+                    margin-top: 20px;
+                    padding: 20px;
+                    border-radius: 18px;
+                    background: rgba(124, 92, 255, 0.08);
+                    border: 1px solid rgba(124, 92, 255, 0.22);
+                    color: #D9C8E8;
+                    font-size: 0.9rem;
+                    line-height: 1.7;
+                }
+                .feature-description.active {
+                    display: block;
+                }
+                .feature-description ul {
+                    margin: 10px 0;
+                    padding-left: 20px;
+                }
+                .feature-description li {
+                    margin-bottom: 8px;
+                }
+                #feature-popup-card {
+                    position: relative;
+                    margin-top: 24px;
+                    padding: 22px 24px;
+                    background: linear-gradient(135deg, #E5E3DD, #F9F6EE);
+                    border: 1px solid rgba(145, 140, 132, 0.24);
+                    border-radius: 20px;
+                    box-shadow: 0 18px 40px rgba(26, 28, 34, 0.08);
+                    opacity: 0;
+                    transform: translateX(-110%);
+                    visibility: hidden;
+                    transition: transform 0.7s ease, opacity 0.7s ease, visibility 0.7s ease;
+                    display: flex;
+                    align-items: center;
+                    justify-content: flex-start;
+                    overflow: hidden;
+                }
+                #feature-popup-card.show {
+                    opacity: 1;
+                    transform: translateX(0);
+                    visibility: visible;
+                }
+                #feature-popup-content {
+                    color: #2F3136;
+                    font-size: 1rem;
+                    font-weight: 600;
+                    line-height: 1.5;
+                    white-space: normal;
+                    max-width: 100%;
+                }
+                #feature-popup-content span {
+                    display: inline-block;
+                    animation: slideText 12s linear infinite;
+                }
+                @keyframes slideText {
+                    from {
+                        transform: translateX(100%);
+                    }
+                    to {
+                        transform: translateX(-100%);
+                    }
+                }
+            </style>
+            <div class="login-left-panel">
+                <div class="login-left-content">
+                    <div class="login-logo">
+                        __LOGO_IMG__
+                        <div class="login-logo-text">
+                            <div class="brand-tag">Mercedes-Benz Intelligence</div>
+                            <div style="font-size:1.2rem;color:#DDE4FF;">AI Control Room</div>
                         </div>
                     </div>
-                    <div class = "brand-label">Mercdes_Benz</div>
-                </div>
-                """,unsafe_allow_html=True)
-            
-        
-        
-        st.markdown("""<div class="ai-branding"> 
-        <span class= "ai-title"> IntelliDoc AI </span> 
-        <span class="ai-subtitle">-Smart Document Assistant </span>
-        </div>""", unsafe_allow_html=True)
-        st.markdown('<h1 class="ai-tagline">Where Documents Become Intelligence</h1>', unsafe_allow_html=True)
-        st.markdown('<p class="ai-description">An enterprise AI control room for secure document insight, comparison, dashboards, and automation.</p>', unsafe_allow_html=True)
-        st.markdown(
-            """
-            <div class="feature-grid">
-                <div class="feature-card">
-                    <h4>💬 Chat</h4>
-                    <ul>
-                        <li>Ask questions about uploaded files</li>
-                        <li>Context-aware responses</li>
-                        <li>Multi-file semantic understanding</li>
-                    </ul>
-                </div>
-                <div class="feature-card">
-                    <h4>📊 Dashboard</h4>
-                    <ul>
-                        <li>Excel/CSV visualization</li>
-                        <li>Export insights</li>
-                    </ul>
-                </div>
-                <div class="feature-card">
-                    <h4>🔄 Compare</h4>
-                    <ul>
-                        <li>Compare 2+ files</li>
-                        <li>Word-level diff</li>
-                        <li>Inline visual comparison</li>
-                        <li>Export results to Excel</li>
-                    </ul>
-                </div>
-                <div class="feature-card">
-                    <h4>🚗 CAPL</h4>
-                    <ul>
-                        <li>Upload or create <code>.can</code> files</li>
-                        <li>Built-in CAPL editor</li>
-                        <li>Code analysis &amp; issue detection</li>
-                        <li>Suggestions &amp; improvements</li>
-                    </ul>
+                    <div class="login-heading">Where Documents Become Intelligence</div>
+                    <div class="login-tagline">A premium command center for AI-powered document analysis, comparison, automation, and insights.</div>
+                    <div class="login-keywords" id="login-keywords-container">
+                        <span class="login-keyword" data-feature="chat">💬 Chat</span>
+                        <span class="login-keyword" data-feature="dashboard">📊 Dashboard</span>
+                        <span class="login-keyword" data-feature="compare">🔄 Compare</span>
+                        <span class="login-keyword" data-feature="capl">🚗 CAPL</span>
+                    </div>
+                    <div id="feature-popup-card">
+                        <div id="feature-popup-content">Click a feature to preview it here.</div>
+                    </div>
+                    <div id="feature-descriptions">
+                        <div id="chat-description" class="feature-description">
+                            <strong>🧠 AI Chat (RAG System)</strong>
+                            <ul>
+                                <li>Ask questions about uploaded files</li>
+                                <li>Context-aware responses</li>
+                                <li>Multi-file semantic understanding</li>
+                            </ul>
+                        </div>
+                        <div id="dashboard-description" class="feature-description">
+                            <strong>📊 Dashboard & Analytics</strong>
+                            <ul>
+                                <li>Excel/CSV visualization</li>
+                                <li>Trends & statistics</li>
+                                <li>Interactive charts (Plotly)</li>
+                                <li>Export insights</li>
+                            </ul>
+                        </div>
+                        <div id="compare-description" class="feature-description">
+                            <strong>🔄 File Comparison</strong>
+                            <ul>
+                                <li>Compare 2+ files</li>
+                                <li>Word-level diff</li>
+                                <li>Inline visual comparison</li>
+                                <li>Export results to Excel</li>
+                            </ul>
+                        </div>
+                        <div id="capl-description" class="feature-description">
+                            <strong>🚗 CAPL Script Analyzer</strong>
+                            <ul>
+                                <li>Upload or create .can files</li>
+                                <li>Built-in CAPL editor</li>
+                                <li>Code analysis & issue detection</li>
+                                <li>Suggestions & improvements</li>
+                            </ul>
+                            <strong style="display: block; margin-top: 12px;">🤖 AI CAPL Auto-Fix</strong>
+                            <div style="margin-top: 8px; padding: 8px; background: rgba(0,194,255,0.1); border-radius: 8px;">Analyze → Suggest Fix → Apply Fix → Save</div>
+                        </div>
+                    </div>
                 </div>
             </div>
-            """,
-            unsafe_allow_html=True
+            
+            <script>
+            (function() {
+                function showFeature(feature) {
+                    const selected = document.getElementById(feature + '-description');
+                    if (!selected) return;
+                    const titleElement = selected.querySelector('strong');
+                    const title = titleElement ? titleElement.textContent : '';
+                    const items = Array.from(selected.querySelectorAll('li')).map(li => li.textContent.trim());
+                    let popupText = '<strong>' + title + '</strong><br>' + items.join(' • ');
+                    const popup = document.getElementById('feature-popup-card');
+                    const content = document.getElementById('feature-popup-content');
+                    if (popup && content) {
+                        content.innerHTML = popupText;
+                        popup.classList.remove('show');
+                        void popup.offsetWidth;
+                        popup.classList.add('show');
+                    }
+                }
+                const keywords = document.querySelectorAll('.login-keyword');
+                keywords.forEach(keyword => {
+                    keyword.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const feature = this.getAttribute('data-feature');
+                        showFeature(feature);
+                    });
+                });
+            })();
+            </script>
+            """
+        html_feature_panel = html_feature_panel.replace("__LOGO_IMG__", logo_img)
+        components.html(html_feature_panel, height=660, scrolling=False)
+
+    continue_clicked = False
+    with right_col:
+        st.markdown('<div class="glass-input-label">👤 Username</div>', unsafe_allow_html=True)
+        login_username = st.text_input(
+            "",
+            key="login_username",
+            placeholder="Enter your username",
+            label_visibility="collapsed",
         )
 
-    with right_col:  # type: ignore  # right_col is defined at line 3699
-        #st.markdown('<div class="login-panel">', unsafe_allow_html=True)
-        #st.markdown('<div class="login-heading">Welcome back</div>', unsafe_allow_html=True)
-        st.markdown('<div class="login-subheading">Sign in to IntelliDoc AI</div>', unsafe_allow_html=True)
+        st.markdown('<div class="glass-input-label">🔒 Password <span style="font-size:0.88rem;color:#7C5CFF;">(optional)</span></div>', unsafe_allow_html=True)
+        login_password = st.text_input(
+            "",
+            type="password",
+            key="login_password",
+            placeholder="Enter your password",
+            label_visibility="collapsed",
+        )
 
-        login_username = st.text_input("👤 Username", placeholder="Username", key="username")
-        login_password = st.text_input("🔒 Password", type="password", placeholder="Password", key="password")
+        st.markdown('<div class="glass-button-spacer"></div>', unsafe_allow_html=True)
+        continue_clicked = st.button("Access →", key="login_access_btn")
 
-        st.caption("Standard users can leave password empty")
+        st.markdown(
+            """
+                <div class="login-subtle">Standard users may leave the password empty.</div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-        access_clicked = st.button("Access", use_container_width=True, key="signin")
-
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    if access_clicked:
-        cleaned_username = (login_username or "").strip()
-        cleaned_password = (login_password or "").strip()
+    if continue_clicked:
+        cleaned_username = (st.session_state.get("login_username", "") or "").strip()
+        cleaned_password = (st.session_state.get("login_password", "") or "").strip()
 
         if cleaned_username == CREATOR_USERNAME and cleaned_password == CREATOR_PASSWORD:
             st.session_state.is_authenticated = True
@@ -3970,7 +4257,6 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             st.session_state.user_role = "creator"
             st.session_state.user_session_start_time = datetime.now().isoformat()
             st.session_state.start_time = time.time()
-
             ist_tz = timezone('Asia/Kolkata')
             ist_time = datetime.now(ist_tz).strftime("%Y-%m-%d %H:%M:%S %Z")
             st.session_state.login_history.append({
@@ -3980,7 +4266,6 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 "timestamp": ist_time,
                 "usage_time": "-"
             })
-
             active_file = "active_users.json"
             now = datetime.now()
             if os.path.exists(active_file):
@@ -3988,23 +4273,19 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                     active_users = json.load(f)
             else:
                 active_users = []
-
-            active_users = [u for u in active_users if u.get("username") != cleaned_username]
+            active_users = [u for u in active_users if datetime.fromisoformat(u["timestamp"]) > now - timedelta(hours=1)]
             active_users.append({"username": cleaned_username, "timestamp": now.isoformat()})
-
             with open(active_file, "w") as f:
                 json.dump(active_users, f)
-
-            st.success("✅ Creator access granted")
+            st.success("Creator access granted.")
             st.rerun()
 
-        elif cleaned_username and len(cleaned_username) > 3 and cleaned_password == "":
+        elif len(cleaned_username) > 3 and cleaned_password == "":
             st.session_state.is_authenticated = True
             st.session_state.logged_in_username = cleaned_username
             st.session_state.user_role = "user"
             st.session_state.user_session_start_time = datetime.now().isoformat()
             st.session_state.start_time = time.time()
-
             ist_tz = timezone('Asia/Kolkata')
             ist_time = datetime.now(ist_tz).strftime("%Y-%m-%d %H:%M:%S %Z")
             st.session_state.login_history.append({
@@ -4014,7 +4295,6 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 "timestamp": ist_time,
                 "usage_time": "-"
             })
-
             active_file = "active_users.json"
             now = datetime.now()
             if os.path.exists(active_file):
@@ -4022,23 +4302,24 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                     active_users = json.load(f)
             else:
                 active_users = []
-
-            active_users = [u for u in active_users if u.get("username") != cleaned_username]
+            active_users = [u for u in active_users if datetime.fromisoformat(u["timestamp"]) > now - timedelta(hours=1)]
             active_users.append({"username": cleaned_username, "timestamp": now.isoformat()})
-
             with open(active_file, "w") as f:
                 json.dump(active_users, f)
-
-            st.success(f"✅ Welcome, {cleaned_username}!")
+            st.success("User access granted.")
             st.rerun()
 
         else:
-            st.error("❌ Invalid credentials. Creator needs password. Users need username >3 chars with empty password.")
+            st.error(
+                "For For users: username >3 chars, password empty.")
 
+    # st.info("Creator should use Vignesh; others use any login. Creator sees admin features.")
     st.stop()
 
 
 # Files will be processed on-demand per tab when selected
+
+
 # -------------------------------
 # HELPER CHART FUNCTIONS
 # -------------------------------
@@ -4819,7 +5100,7 @@ st.markdown("""
     /* Active State - Deep Electric Blue */
     div[role="radiogroup"] > label[data-checked="true"] {
         background-color: #1E88E5 !important;
-        color: #F6F9FF !important;
+        color: white !important;
         box-shadow: 0 4px 15px rgba(30, 136, 229, 0.4);
     }
 
@@ -4835,7 +5116,7 @@ st.markdown("""
 
     /* White Dot for Active Tab */
     div[role="radiogroup"] > label[data-checked="true"]::after {
-        background-color: #F6F9FF !important;
+        background-color: white !important;
         box-shadow: 0 0 8px #ffffff;
     }
 
@@ -4933,17 +5214,7 @@ st.markdown("""
 
     /* Responsive text sizes */
     .login-heading {
-        font-size: clamp(1.8rem, 5vw, 3.4rem) !important;
-        color: #F8FAFC !important;
-        font-weight: 700 !important;
-        margin-bottom: 12px !important;
-    }
-
-    .login-subheading {
-        font-size: clamp(0.9rem, 2.5vw, 1.1rem) !important;
-        color: rgba(248, 250, 252, 0.85) !important;
-        font-weight: 500 !important;
-        margin-bottom: 24px !important;
+        font-size: clamp(1.8rem, 5vw, 3.4rem);
     }
 
     .login-tagline {
@@ -5004,7 +5275,6 @@ st.markdown("""
     }
     </style>
 """, unsafe_allow_html=True)
-
 
 # -------------------------------
 # MAIN TAB NAVIGATION
