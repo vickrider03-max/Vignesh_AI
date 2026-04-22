@@ -289,7 +289,7 @@ st.markdown(
         :root {
             --primary: #e8f6ff;
             --secondary: #64748b;
-            --background: #eaf6ff;
+            --background: #ffffff;
             --surface: #f8fafc;
             --text: #1e293b;
             --text-secondary: #64748b;
@@ -311,7 +311,7 @@ st.markdown(
             overflow-x: hidden;
             overflow-y: auto !important;
             height: auto !important;
-            background: var(--background);
+            background: var(--background)!important;
             color: var(--text);
             transition: background 0.3s ease, color 0.3s ease;
         }
