@@ -3804,9 +3804,19 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         .login-panel [data-baseweb="base-input"]:focus-within,
         .login-panel [data-baseweb="input"]:focus-within,
         .login-panel [data-testid="stTextInput"] > div > div:focus-within {
-            border-color: rgba(135, 206, 235, 0.9) !important;
-            box-shadow: 0 0 0 3px rgba(176, 224, 230, 0.25), 0 0 18px rgba(135, 206, 235, 0.2) !important;
+            border: 1.5px solid #87CEEB !important;
+            box-shadow: 0 0 0 2px rgba(135, 206, 235, 0.3) !important;
+                outline : none !important;
         }
+                    
+         /*Remove streamlit red focus */
+        .login-panel input : focus,
+        .login-panel input : invalid {
+                outline : none !important;
+                box-shadow : none ! important;
+                border-color : #87CEEB !important;
+            }   
+                                        
         .login-panel input[type="text"],
         .login-panel input[type="password"] {
             background: transparent !important;
@@ -3904,7 +3914,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         <span class="ai-subtitle">-Smart Document Assistant </span>
         </div>""", unsafe_allow_html=True)
         st.markdown('<h1 class="ai-tagline">Where Documents Become Intelligence</h1>', unsafe_allow_html=True)
-        st.markdown('<p class="ai-description">An enterprise AI control room for secure document insight, comparison, dashboards, and automation.</p>', unsafe_allow_html=True)
+        st.markdown('<p class="ai-description">for secure document insight, comparison, dashboards, and automation.</p>', unsafe_allow_html=True)
         st.markdown(
             """
             <div class="feature-grid">
