@@ -3945,7 +3945,27 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             .login-panel div,
             .login-panel textarea {
              border-color: rgba(176, 224, 230, 0.6) !important;
-            }      
+            } 
+            /* 🚨 HARD KILL: BaseWeb invalid (red) state */
+
+            .login-panel div[data-baseweb="base-input"][aria-invalid="true"],
+            .login-panel div[data-baseweb="input"][aria-invalid="true"],
+            .login-panel [data-baseweb="base-input"] {
+               border: 1.5px solid rgba(176, 224, 230, 0.6) !important;
+               box-shadow: none !important;
+            }
+
+            /* Override inner input focus ring */
+            .login-panel input {
+               outline: none !important;
+               box-shadow: none !important;
+            }
+
+            /* Force consistent focus (blue theme only) */
+            .login-panel div[data-baseweb="base-input"]:focus-within {
+              border: 1.5px solid #87CEEB !important;
+             box-shadow: 0 0 0 2px rgba(135, 206, 235, 0.25) !important;
+            }         
 
     </style>
     """, unsafe_allow_html=True)
@@ -4021,7 +4041,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         #st.markdown('<div class="login-heading">Welcome back</div>', unsafe_allow_html=True)
         st.markdown('<div class="login-subheading">Sign in to IntelliDoc AI</div>', unsafe_allow_html=True)
 
-        login_username = st.text_input("👤 Username", placeholder="Username", key="username")
+        login_username = st.text_input("👤 Username", placeholder="Username", key="username", label_visibility="collapsed")
         login_password = st.text_input("🔒 Password", type="password", placeholder="Password", key="password")
 
         st.caption("Standard users can leave password empty")
