@@ -3810,11 +3810,11 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         }
                     
          /*Remove streamlit red focus */
-        .login-panel input : focus,
-        .login-panel input : invalid {
-                outline : none !important;
-                box-shadow : none ! important;
-                border-color : #87CEEB !important;
+        .login-panel input:focus,
+        .login-panel input:invalid {
+                outline:none !important;
+                box-shadow:none ! important;
+                border-color: #87CEEB !important;
             }   
                                         
         .login-panel input[type="text"],
@@ -3887,6 +3887,38 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 padding: 24px 20px !important;
             }
         }
+         /* 🔥 HARD OVERRIDE - kills ALL red focus from Streamlit/BaseWeb */
+
+            .login-panel *:focus {
+             outline: none !important;
+            }  
+            .login-panel input,
+            .login-panel textarea {
+               box-shadow: none !important;
+            }
+
+           /* Target BaseWeb internal input container */
+            .login-panel div[data-baseweb="base-input"] {
+              border: 1.5px solid rgba(176, 224, 230, 0.6) !important;
+            }   
+
+            /* Focus state */
+           .login-panel div[data-baseweb="base-input"]:focus-within {
+               border: 1.5px solid #87CEEB !important;
+              box-shadow: 0 0 0 2px rgba(135, 206, 235, 0.3) !important;
+            }    
+
+            /* Remove error (red) state completely */
+            .login-panel div[data-baseweb="base-input"][aria-invalid="true"] {
+                border: 1.5px solid #87CEEB !important;
+                box-shadow: none !important;
+            }
+
+            /* Also kill any red glow from deeper layers */
+            .login-panel div[data-baseweb="input"] {
+               box-shadow: none !important;
+            }     
+
     </style>
     """, unsafe_allow_html=True)
 
