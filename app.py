@@ -3553,7 +3553,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                 radial-gradient(circle at top left, rgba(176, 224, 230, 0.35) 0%, rgba(176, 224, 230, 0) 40%),
                 radial-gradient(circle at top right, rgba(230, 245, 250, 0.3) 0%, rgba(230, 245, 250, 0) 45%),
                 radial-gradient(circle at bottom left, rgba(176, 196, 222, 0.25) 0%, rgba(176, 196, 222, 0) 40%),
-                linear-gradient(135deg, #F5F9FB 0%, #E8F4F8 35%, #EDF8FC 100%) !important;
+                linear-gradient(135deg, #0f172a 0%, #1e293b 40%, #111827 100%) !important;
             min-height: 100vh !important;
             display: flex !important;
             align-items: stretch !important;
