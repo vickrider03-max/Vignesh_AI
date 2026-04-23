@@ -4041,7 +4041,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         #st.markdown('<div class="login-heading">Welcome back</div>', unsafe_allow_html=True)
         st.markdown('<div class="login-subheading">Sign in to IntelliDoc AI</div>', unsafe_allow_html=True)
 
-        login_username = st.text_input("👤 Username", placeholder="Username", key="username", label_visibility="collapsed")
+        login_username = st.text_input("👤 Username", placeholder="Username", key="username")
         login_password = st.text_input("🔒 Password", type="password", placeholder="Password", key="password")
 
         st.caption("Standard users can leave password empty")
