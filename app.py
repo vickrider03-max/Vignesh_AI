@@ -3917,7 +3917,35 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             /* Also kill any red glow from deeper layers */
             .login-panel div[data-baseweb="input"] {
                box-shadow: none !important;
-            }     
+            }   
+
+         /* 🚨 NUCLEAR OVERRIDE — removes ALL red states */
+
+            .login-panel *[aria-invalid="true"],
+            .login-panel *[data-baseweb="base-input"][aria-invalid="true"],
+            .login-panel *[data-baseweb="input"][aria-invalid="true"] {
+                border-color: #87CEEB !important;
+                box-shadow: none !important;
+            }
+
+         /* Remove any red focus ring from BaseWeb */
+            .login-panel *:focus-visible {
+                outline: none !important;
+                box-shadow: none !important;
+            }
+
+            /* Force our focus style ONLY */
+            .login-panel div[data-baseweb="base-input"]:focus-within {
+                border: 1.5px solid #87CEEB !important;
+              box-shadow: 0 0 0 2px rgba(135, 206, 235, 0.3) !important;
+            }
+
+            /* Kill ANY red borders globally inside login */
+            .login-panel input,
+            .login-panel div,
+            .login-panel textarea {
+             border-color: rgba(176, 224, 230, 0.6) !important;
+            }      
 
     </style>
     """, unsafe_allow_html=True)
