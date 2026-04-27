@@ -255,10 +255,13 @@ def get_needle_minimalist_logo():
 # -------------------------------
 st.set_page_config(page_title="🧠 IntelliDoc AI ", layout="wide")
 
-# Mobile viewport meta tag for proper scaling
+# Mobile viewport meta tag for proper scaling on all devices
 st.markdown(
     """
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     """,
     unsafe_allow_html=True,
 )
@@ -532,7 +535,7 @@ st.markdown(
 
         .dashboard-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
             gap: 1rem;
             margin: 1rem 0;
         }
@@ -1018,7 +1021,7 @@ def render_status_strip():
         }}
         .dashboard-grid {{
             display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr));
             gap: 10px;
             padding: 4px 2px;
         }}
@@ -3974,7 +3977,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         /* Feature cards */
         .feature-grid {
             display: grid;
-            grid-template-columns: repeat(2, minmax(280px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
             gap: 16px;
             align-items: stretch;
             margin-top: 8px;
@@ -4029,21 +4032,30 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             margin-top: 16px !important;
         }
 
-        /* Responsive design */
+        /* Responsive design - Tablets */
         @media (max-width: 768px) {
+            [data-testid="stAppViewContainer"] {
+                flex-direction: column !important;
+            }
             [data-testid="column"]:first-child {
                 padding: 24px 12px 16px !important;
                 order: 2 !important;
                 min-height: auto !important;
+                flex: 1 1 100% !important;
+                width: 100% !important;
             }
             [data-testid="column"]:nth-child(2) {
                 width: 100% !important;
                 padding: 12px !important;
                 order: 1 !important;
                 min-height: auto !important;
+                flex: 1 1 100% !important;
+            }
+            [data-testid="stHorizontalBlock"] {
+                flex-direction: column !important;
             }
             .ai-tagline {
-                font-size: 2rem !important;
+                font-size: clamp(1.6rem, 5vw, 2rem) !important;
             }
             .login-panel {
                 width: 100% !important;
@@ -4051,6 +4063,48 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             }
             .feature-grid {
                 grid-template-columns: 1fr;
+            }
+        }
+        /* Responsive design - Small phones */
+        @media (max-width: 480px) {
+            [data-testid="column"]:first-child {
+                padding: 12px 8px !important;
+            }
+            [data-testid="column"]:nth-child(2) {
+                padding: 8px !important;
+            }
+            .ai-tagline {
+                font-size: clamp(1.3rem, 5vw, 1.7rem) !important;
+                margin-bottom: 16px !important;
+            }
+            .ai-description {
+                font-size: 0.9rem !important;
+                margin-bottom: 20px !important;
+            }
+            .login-panel {
+                padding: 16px 14px !important;
+                border-radius: 16px !important;
+            }
+            .brand-strip {
+                gap: 8px !important;
+            }
+            .brand-logo-3d {
+                width: 44px !important;
+                height: 44px !important;
+            }
+            .trust-row {
+                font-size: 0.85rem !important;
+                margin-bottom: 24px !important;
+            }
+            .feature-card {
+                padding: 12px !important;
+                min-height: auto !important;
+            }
+            .feature-card h4 {
+                font-size: 0.95rem !important;
+            }
+            .feature-card li {
+                font-size: 0.85rem !important;
             }
         }
     </style>
@@ -4173,18 +4227,40 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             [data-testid="column"]:first-child {
                 padding: 24px 12px 16px !important;
                 order: 2 !important;
+                flex: 1 1 100% !important;
+                width: 100% !important;
             }
             [data-testid="column"]:nth-child(2) {
                 width: 100% !important;
                 padding: 12px !important;
                 order: 1 !important;
+                flex: 1 1 100% !important;
+            }
+            [data-testid="stHorizontalBlock"] {
+                flex-direction: column !important;
             }
             .ai-tagline {
-                font-size: 2rem !important;
+                font-size: clamp(1.6rem, 5vw, 2rem) !important;
             }
             .login-panel {
                 width: 100% !important;
                 padding: 24px 20px !important;
+            }
+        }
+        @media (max-width: 480px) {
+            .login-panel {
+                padding: 16px 14px !important;
+                border-radius: 16px !important;
+            }
+            .login-panel .stButton > button,
+            .login-panel div.stButton > button {
+                min-height: 48px !important;
+                font-size: 16px !important;
+            }
+            .login-panel input[type="text"],
+            .login-panel input[type="password"] {
+                font-size: 16px !important;
+                padding: 14px 16px !important;
             }
         }
          /* 🔥 HARD OVERRIDE - kills ALL red focus from Streamlit/BaseWeb */
@@ -5627,6 +5703,480 @@ st.markdown("""
         }
     }
     </style>
+""", unsafe_allow_html=True)
+
+# =====================================================
+# COMPREHENSIVE RESPONSIVE DESIGN FOR ALL DEVICES
+# =====================================================
+# Ensures the app renders correctly on smartphones, tablets,
+# laptops, desktops, and large monitors without breaking
+# any existing features.
+st.markdown("""
+<style>
+    /* ---- FLUID ROOT ---- */
+    html {
+        -webkit-text-size-adjust: 100%;
+        -ms-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+    }
+
+    /* ---- SAFE-AREA INSETS (notched phones) ---- */
+    .block-container,
+    .main .block-container {
+        padding-left: max(env(safe-area-inset-left, 0px), 0.75rem) !important;
+        padding-right: max(env(safe-area-inset-right, 0px), 0.75rem) !important;
+    }
+
+    /* ---- GLOBAL FLUID IMAGES & MEDIA ---- */
+    img, video, svg, canvas, iframe, embed, object {
+        max-width: 100%;
+        height: auto;
+    }
+
+    /* ---- TABLES: scrollable on small screens ---- */
+    table {
+        display: block;
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* ---- CODE BLOCKS: prevent overflow ---- */
+    pre, code {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        max-width: 100%;
+    }
+
+    /* ---- PLOTLY CHARTS: responsive container ---- */
+    .js-plotly-plot, .plotly {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    .js-plotly-plot .plot-container {
+        width: 100% !important;
+    }
+
+    /* ---- EXTRA-SMALL PHONES (<=360px) ---- */
+    @media (max-width: 360px) {
+        .block-container,
+        .main .block-container {
+            padding: 0.4rem !important;
+        }
+        h1 { font-size: clamp(1.1rem, 5vw, 1.4rem) !important; }
+        h2 { font-size: clamp(0.95rem, 4.5vw, 1.2rem) !important; }
+        h3 { font-size: clamp(0.85rem, 4vw, 1.05rem) !important; }
+        .stButton > button {
+            padding: 0.4rem 0.6rem !important;
+            font-size: 0.8rem !important;
+            min-height: 44px !important;
+        }
+        .metric-card {
+            padding: 0.6rem !important;
+        }
+        .card-value {
+            font-size: clamp(0.8rem, 4vw, 1rem) !important;
+        }
+        .card-label {
+            font-size: 0.55rem !important;
+        }
+        .feature-grid {
+            grid-template-columns: 1fr !important;
+            gap: 8px !important;
+        }
+        .feature-card {
+            padding: 12px !important;
+            min-height: auto !important;
+        }
+        .login-panel {
+            padding: 16px 12px !important;
+            border-radius: 16px !important;
+        }
+        .ai-tagline {
+            font-size: clamp(1.4rem, 6vw, 1.8rem) !important;
+        }
+        .ai-description {
+            font-size: 0.9rem !important;
+            margin-bottom: 24px !important;
+        }
+        div[role="radiogroup"] > label {
+            flex: 1 1 100% !important;
+            min-width: 0 !important;
+            padding: 10px 12px !important;
+            font-size: 14px !important;
+        }
+    }
+
+    /* ---- SMALL PHONES (361px - 480px) ---- */
+    @media (min-width: 361px) and (max-width: 480px) {
+        .block-container,
+        .main .block-container {
+            padding: 0.5rem !important;
+        }
+        h1 { font-size: clamp(1.2rem, 5vw, 1.6rem) !important; }
+        h2 { font-size: clamp(1rem, 4.5vw, 1.3rem) !important; }
+        .dashboard-grid {
+            grid-template-columns: 1fr !important;
+            gap: 8px !important;
+        }
+        .feature-grid {
+            grid-template-columns: 1fr !important;
+        }
+        .login-panel {
+            padding: 20px 16px !important;
+        }
+        div[role="radiogroup"] > label {
+            flex: 1 1 calc(50% - 6px) !important;
+            min-width: 0 !important;
+        }
+    }
+
+    /* ---- LARGE PHONES / SMALL TABLETS (481px - 767px) ---- */
+    @media (min-width: 481px) and (max-width: 767px) {
+        .block-container,
+        .main .block-container {
+            padding: 0.75rem !important;
+        }
+        .dashboard-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+        }
+        .feature-grid {
+            grid-template-columns: 1fr !important;
+        }
+        div[role="radiogroup"] > label {
+            flex: 1 1 calc(50% - 8px) !important;
+        }
+    }
+
+    /* ---- TABLET PORTRAIT (768px - 1023px) ---- */
+    @media (min-width: 768px) and (max-width: 1023px) {
+        .block-container,
+        .main .block-container {
+            padding: 1rem 1.25rem !important;
+        }
+        .dashboard-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+        }
+        .feature-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+        }
+        [data-testid="stSidebar"] {
+            width: 260px !important;
+            min-width: 220px !important;
+        }
+    }
+
+    /* ---- TABLET LANDSCAPE / SMALL LAPTOPS (1024px - 1279px) ---- */
+    @media (min-width: 1024px) and (max-width: 1279px) {
+        .block-container,
+        .main .block-container {
+            padding: 1.25rem 2rem !important;
+        }
+        .dashboard-grid {
+            grid-template-columns: repeat(3, 1fr) !important;
+        }
+    }
+
+    /* ---- LAPTOPS & DESKTOPS (1280px - 1599px) ---- */
+    @media (min-width: 1280px) and (max-width: 1599px) {
+        .block-container,
+        .main .block-container {
+            padding: 1.5rem 2.5rem !important;
+            max-width: 1500px !important;
+        }
+        .dashboard-grid {
+            grid-template-columns: repeat(4, 1fr) !important;
+        }
+    }
+
+    /* ---- LARGE DESKTOPS & MONITORS (1600px - 1919px) ---- */
+    @media (min-width: 1600px) and (max-width: 1919px) {
+        .block-container,
+        .main .block-container {
+            max-width: 1600px !important;
+            padding: 1.5rem 3rem !important;
+        }
+        .dashboard-grid {
+            grid-template-columns: repeat(4, 1fr) !important;
+        }
+    }
+
+    /* ---- ULTRA-WIDE & 4K (1920px+) ---- */
+    @media (min-width: 1920px) {
+        .block-container,
+        .main .block-container {
+            max-width: 1920px !important;
+            margin: 0 auto !important;
+            padding: 2rem 4rem !important;
+        }
+        .dashboard-grid {
+            grid-template-columns: repeat(5, 1fr) !important;
+        }
+        body {
+            font-size: 17px;
+        }
+    }
+
+    /* ---- MOBILE: full-width sidebar toggle ---- */
+    @media (max-width: 767px) {
+        /* Sidebar: slide-over drawer on mobile */
+        [data-testid="stSidebar"],
+        .stSidebar {
+            width: 85vw !important;
+            max-width: 320px !important;
+            min-width: 0 !important;
+            z-index: 9999 !important;
+        }
+        [data-testid="stSidebar"] > div {
+            width: 100% !important;
+            max-width: 100% !important;
+            padding: 0.75rem !important;
+            overflow-x: hidden !important;
+        }
+
+        /* Main content: full width on mobile */
+        section.main,
+        [data-testid="stMain"],
+        div[data-testid="stMain"],
+        div[data-testid="stAppViewContainer"] {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin-left: 0 !important;
+            padding-left: 0 !important;
+        }
+
+        /* Horizontal blocks: wrap on mobile */
+        [data-testid="stHorizontalBlock"] {
+            flex-wrap: wrap !important;
+            gap: 0.5rem !important;
+        }
+        [data-testid="stHorizontalBlock"] > div {
+            min-width: 0 !important;
+            flex: 1 1 100% !important;
+        }
+
+        /* Columns: stack vertically on phone */
+        [data-testid="column"],
+        [data-testid="stColumn"] {
+            min-width: 100% !important;
+            width: 100% !important;
+            flex: 1 1 100% !important;
+        }
+
+        /* All Streamlit widgets: full width */
+        .stSelectbox,
+        .stMultiSelect,
+        .stTextInput,
+        .stTextArea,
+        .stNumberInput,
+        .stSlider,
+        .stCheckbox,
+        .stRadio,
+        .stDownloadButton,
+        .stFileUploader,
+        .stDataFrame,
+        [data-testid="stDataFrame"],
+        [data-testid="stMetric"],
+        [data-testid="stPlotlyChart"],
+        iframe {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+        }
+
+        /* Data tables: horizontal scroll */
+        .stDataFrame,
+        [data-testid="stDataFrame"],
+        [data-testid="stTable"] {
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+        }
+
+        /* Plotly charts: fit container */
+        [data-testid="stPlotlyChart"] {
+            overflow-x: auto !important;
+        }
+
+        /* Touch targets: minimum 44px */
+        .stButton > button,
+        [role="button"],
+        input,
+        select,
+        textarea {
+            min-height: 44px !important;
+        }
+        .stButton > button {
+            font-size: 15px !important;
+            padding: 10px 14px !important;
+        }
+
+        /* Prevent text zoom on iOS */
+        input[type="text"],
+        input[type="password"],
+        input[type="email"],
+        input[type="number"],
+        textarea,
+        select {
+            font-size: 16px !important;
+        }
+
+        /* File chips: wrap text */
+        .file-chip, .file-chip-wrap, .app-card {
+            max-width: 100% !important;
+            overflow-wrap: anywhere !important;
+            word-break: break-word !important;
+        }
+
+        /* Tab pills: 2-column grid */
+        div[role="radiogroup"] {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            gap: 6px !important;
+        }
+        div[role="radiogroup"] > label {
+            flex: 1 1 calc(50% - 6px) !important;
+            min-width: 120px !important;
+            text-align: center !important;
+            justify-content: center !important;
+            min-height: 44px !important;
+        }
+
+        /* Expander: full width */
+        .streamlit-expanderHeader {
+            font-size: 14px !important;
+        }
+
+        /* Metric cards on phone */
+        [data-testid="stMetric"] {
+            overflow-wrap: anywhere !important;
+        }
+
+        /* Login page mobile */
+        [data-testid="column"]:first-child {
+            order: 2 !important;
+            min-height: auto !important;
+            padding: 16px 12px !important;
+        }
+        [data-testid="column"]:nth-child(2) {
+            order: 1 !important;
+            min-height: auto !important;
+            width: 100% !important;
+            padding: 12px !important;
+        }
+    }
+
+    /* ---- TABLET MID-RANGE (768px - 1180px) ---- */
+    @media (min-width: 768px) and (max-width: 1180px) {
+        [data-testid="stHorizontalBlock"] {
+            gap: 0.75rem !important;
+        }
+        [data-testid="column"],
+        [data-testid="stColumn"] {
+            min-width: 0 !important;
+        }
+        .stDataFrame,
+        [data-testid="stDataFrame"],
+        [data-testid="stTable"],
+        [data-testid="stPlotlyChart"],
+        iframe {
+            max-width: 100% !important;
+            overflow-x: auto !important;
+        }
+        div[role="radiogroup"] {
+            flex-wrap: wrap !important;
+        }
+    }
+
+    /* ---- LANDSCAPE PHONES ---- */
+    @media (orientation: landscape) and (max-height: 500px) {
+        .stApp {
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        .block-container,
+        .main .block-container {
+            padding: 0.35rem 0.5rem !important;
+        }
+        /* Reduce vertical padding for landscape */
+        .metric-card { padding: 0.5rem !important; }
+        .stButton > button { min-height: 36px !important; padding: 6px 12px !important; }
+    }
+
+    /* ---- TOUCH DEVICES (no hover) ---- */
+    @media (hover: none) and (pointer: coarse) {
+        .stButton > button,
+        [role="button"] {
+            min-height: 48px !important;
+            padding: 12px 16px !important;
+        }
+        input, select, textarea {
+            min-height: 44px !important;
+            padding: 10px 12px !important;
+        }
+        /* Larger tap targets for sidebar file buttons */
+        [data-testid="stSidebar"] button {
+            min-height: 48px !important;
+        }
+    }
+
+    /* ---- HIGH-DPI / RETINA DISPLAYS ---- */
+    @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+        body {
+            -webkit-font-smoothing: antialiased !important;
+            -moz-osx-font-smoothing: grayscale !important;
+        }
+        img {
+            image-rendering: -webkit-optimize-contrast;
+        }
+    }
+
+    /* ---- PRINT ---- */
+    @media print {
+        .stSidebar, [data-testid="stSidebar"],
+        .stButton, [role="button"],
+        [data-testid="stHeader"],
+        [data-testid="stToolbar"],
+        footer,
+        .st-key-mobile_show_files_btn,
+        .st-key-mobile_open_workspace_btn {
+            display: none !important;
+        }
+        body {
+            background: white !important;
+            color: black !important;
+        }
+        .block-container {
+            max-width: 100% !important;
+            padding: 0.5in !important;
+        }
+        img {
+            max-width: 100% !important;
+            page-break-inside: avoid !important;
+        }
+    }
+
+    /* ---- DARK MODE (system preference) ---- */
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --background: #1a1a2e;
+            --surface: #16213e;
+            --text: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --border: #333;
+        }
+    }
+
+    /* ---- REDUCED MOTION (accessibility) ---- */
+    @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+            scroll-behavior: auto !important;
+        }
+    }
+</style>
 """, unsafe_allow_html=True)
 
 
