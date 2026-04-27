@@ -42,6 +42,10 @@ PREVIEW_TOKENS = {}  # token -> {'file_name': str, 'timestamp': datetime}
 PREVIEW_STORE = {}   # token -> file_dict
 
 PREVIEW_DATA_FILE = "preview_data.pkl"
+PDF_PREVIEW_RESOLUTION = 100
+PDF_PREVIEW_WINDOW = 5
+PDF_ASSET_SCAN_PAGE_LIMIT = 10
+MAX_VECTOR_TEXT_CHARS = 250000
 
 # ===============================================
 # CACHING SYSTEM FOR PERFORMANCE OPTIMIZATION
@@ -1550,7 +1554,11 @@ def extract_text(file_name, file_bytes):
 
 
 def extract_pdf_content(bio):
-    """Extract text, tables, and metadata from PDF."""
+    """Extract searchable PDF text quickly.
+
+    Full table/image extraction is intentionally deferred to preview/download
+    helpers because scanning every page of a large manual is slow.
+    """
     content = []
     try:
         with pdfplumber.open(bio) as pdf:
@@ -1565,29 +1573,12 @@ def extract_pdf_content(bio):
             
             content.append(("METADATA", f"Total Pages: {len(pdf.pages)}"))
             
-            # Extract content from each page
+            # Extract text from each page. Avoid table/image scans here so Chat
+            # can load large manuals without blocking on expensive page parsing.
             for i, page in enumerate(pdf.pages):
-                page_content = []
-                
-                # Extract text
                 page_text = page.extract_text() or ""
                 if page_text.strip():
-                    page_content.append(f"Page {i+1} Text:\n{page_text}")
-                
-                # Extract tables
-                tables = page.extract_tables()
-                if tables:
-                    for j, table in enumerate(tables):
-                        if table and any(any(cell for cell in row) for row in table):
-                            table_text = "\n".join([" | ".join(str(cell) if cell else "" for cell in row) for row in table])
-                            page_content.append(f"Page {i+1} Table {j+1}:\n{table_text}")
-                
-                # Check for images (basic detection)
-                if hasattr(page, 'images') and page.images:
-                    content.append(("IMAGE", f"Page {i+1}: {len(page.images)} images detected"))
-                
-                if page_content:
-                    content.append(("TEXT", "\n\n".join(page_content)))
+                    content.append(("TEXT", f"Page {i+1} Text:\n{page_text}"))
     
     except Exception as e:
         content.append(("ERROR", f"PDF extraction failed: {str(e)}"))
@@ -2029,20 +2020,42 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None, hig
                 else:
                     # For large PDFs, show only first 3 pages by default
                     if total_pages > 10:
-                        st.info(f"Showing first 3 pages of {total_pages} total pages")
+                        st.info(f"This PDF has {total_pages} pages. Use the controls below to preview any page.")
                         pages_to_show = list(range(min(3, total_pages)))
                     else:
                         pages_to_show = list(range(total_pages))
                 
+                default_page = highlight_page if highlight_page and 1 <= highlight_page <= total_pages else 1
+                preview_key_base = hashlib.md5(file_name.encode("utf-8")).hexdigest()[:12]
+                page_start = st.number_input(
+                    "Start page",
+                    min_value=1,
+                    max_value=total_pages,
+                    value=default_page,
+                    step=1,
+                    key=f"pdf_preview_start_{preview_key_base}",
+                )
+                pages_to_render_count = st.slider(
+                    "Pages to preview",
+                    min_value=1,
+                    max_value=min(PDF_PREVIEW_WINDOW, total_pages),
+                    value=1 if highlight_page else min(3, total_pages),
+                    key=f"pdf_preview_count_{preview_key_base}",
+                )
+                render_tables = st.checkbox(
+                    "Detect tables on previewed pages",
+                    value=False,
+                    key=f"pdf_preview_tables_{preview_key_base}",
+                    help="Table detection is slower, so it only runs when enabled.",
+                )
+                page_end = min(total_pages, int(page_start) + int(pages_to_render_count) - 1)
+                pages_to_show = range(int(page_start) - 1, page_end)
+                st.caption(f"Showing page {int(page_start)} to {page_end} of {total_pages}. Change the start page to preview any page.")
+
                 # Render pages
                 highlight_found = False
-                for i, page in enumerate(pdf.pages):
-                    if selected_page_index is not None and i != selected_page_index:
-                        continue
-                    if selected_page_index is None and i >= 3 and total_pages > 10:
-                        if st.button(f"Load Page {i+1}"):
-                            st.rerun()
-                        continue
+                for i in pages_to_show:
+                    page = pdf.pages[i]
                     
                     try:
                         # Extract page text for highlighting
@@ -2056,11 +2069,11 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None, hig
                                 st.markdown(f"<div id='{page_anchor_id}'></div>", unsafe_allow_html=True)
                         
                         # Render page image with caching
-                        page_cache_key = f"{file_name}_page_{i}_image"
+                        page_cache_key = f"{file_name}_page_{i}_image_{PDF_PREVIEW_RESOLUTION}"
                         cached_image = FILE_TEXT_CACHE.get(page_cache_key)
                         
                         if cached_image is None:
-                            page_image = page.to_image(resolution=120)  # Lower resolution for speed
+                            page_image = page.to_image(resolution=PDF_PREVIEW_RESOLUTION)
                             image_bytes_io = BytesIO()
                             page_image.original.save(image_bytes_io, format="PNG")
                             image_bytes = image_bytes_io.getvalue()
@@ -2075,8 +2088,8 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None, hig
                             st.markdown("### Highlighted Text", unsafe_allow_html=True)
                             st.markdown(render_text_block(page_text, highlight_term, anchor_id=None), unsafe_allow_html=True)
                         
-                        # Extract and cache tables
-                        tables = page.extract_tables()
+                        # Extract tables only when requested; this is slow on large manuals.
+                        tables = page.extract_tables() if render_tables else []
                         if tables:
                             for j, table in enumerate(tables):
                                 if table and any(any(cell for cell in row) for row in table):
@@ -2537,7 +2550,7 @@ def build_summary_download_assets(file_name, file_bytes):
     try:
         if file_name_lower.endswith(".pdf"):
             with pdfplumber.open(BytesIO(file_bytes)) as pdf:
-                for page_index, page in enumerate(pdf.pages, start=1):
+                for page_index, page in enumerate(pdf.pages[:PDF_ASSET_SCAN_PAGE_LIMIT], start=1):
                     for image_index, image_info in enumerate(page.images or [], start=1):
                         try:
                             bbox = (
@@ -3027,7 +3040,7 @@ def extract_excel_data(file_name, file_bytes):
 @st.cache_data(show_spinner=False)
 def create_vector_store(text):
     splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
-    chunks = splitter.split_text(text[:50000])  # limit size for speed
+    chunks = splitter.split_text(text[:MAX_VECTOR_TEXT_CHARS])
     emb = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     return FAISS.from_texts(chunks, emb)
 
@@ -3095,18 +3108,10 @@ def get_document_asset_counts(file_name, file_bytes, extracted_text):
     image_count = 0
 
     if file_name_lower.endswith(".pdf"):
-        try:
-            with pdfplumber.open(BytesIO(file_bytes)) as pdf:
-                page_count = len(pdf.pages)
-                for page in pdf.pages:
-                    tables = page.extract_tables() or []
-                    table_count += sum(1 for table in tables if table and any(any(cell for cell in row) for row in table))
-                    image_count += len(getattr(page, "images", []) or [])
-        except Exception:
-            page_match = re.search(r"Total Pages:\s*(\d+)", extracted_text)
-            page_count = int(page_match.group(1)) if page_match else 0
-            table_count = len(re.findall(r"Page \d+ Table \d+:", extracted_text))
-            image_count = len(re.findall(r"\[IMAGE:", extracted_text))
+        page_match = re.search(r"Total Pages:\s*(\d+)", extracted_text)
+        page_count = int(page_match.group(1)) if page_match else len(re.findall(r"Page \d+ Text:", extracted_text))
+        table_count = len(re.findall(r"Page \d+ Table \d+:", extracted_text))
+        image_count = len(re.findall(r"\[IMAGE:", extracted_text))
     elif file_name_lower.endswith(".pptx"):
         slide_match = re.search(r"Total Slides:\s*(\d+)", extracted_text)
         page_count = int(slide_match.group(1)) if slide_match else 0
@@ -5557,9 +5562,13 @@ if active_main_tab == "💬 Chat":
                                 if file_text.strip():
                                     file_bytes = file_entry["bytes"] if file_entry else b""
                                     result.append(build_detailed_document_summary(f, file_bytes, file_text))
-                                    summary_assets = build_summary_download_assets(f, file_bytes)
-                                    summary_image_downloads.extend(summary_assets.get("images", []))
-                                    summary_table_downloads.extend(summary_assets.get("tables", []))
+                                    page_match = re.search(r"Total Pages:\s*(\d+)", file_text)
+                                    page_count = int(page_match.group(1)) if page_match else 0
+                                    is_large_pdf = f.lower().endswith(".pdf") and page_count > PDF_ASSET_SCAN_PAGE_LIMIT
+                                    if not is_large_pdf:
+                                        summary_assets = build_summary_download_assets(f, file_bytes)
+                                        summary_image_downloads.extend(summary_assets.get("images", []))
+                                        summary_table_downloads.extend(summary_assets.get("tables", []))
                                 else:
                                     result.append(f"📄 **{f}**\n\nNo readable content found in this document.")
 
