@@ -196,6 +196,8 @@ if ('caches' in window) {
 
 def render_html_frame(html_content, height="content", width="stretch"):
     """Render inline HTML through st.iframe."""
+    if isinstance(height, int) and height < 1:
+        height = 1
     encoded_html = urllib.parse.quote(str(html_content), safe="")
     st.iframe(f"data:text/html;charset=utf-8,{encoded_html}", width=width, height=height)
 
