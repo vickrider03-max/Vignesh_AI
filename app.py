@@ -1226,10 +1226,10 @@ def set_help_popup_state(tab_name, is_open):
 # SIMPLE HEADER - Moved higher for better visibility
 # ============================================
 if st.session_state.is_authenticated:
-    header_col, logout_col = st.columns([8, 1])
+    header_col, logout_col = st.columns([7, 1.15], vertical_alignment="center")
 
     with header_col:
-        brain_col, title_col = st.columns([0.7, 7.3])
+        brain_col, title_col = st.columns([0.45, 7.55], vertical_alignment="center")
         with brain_col:
             if st.button("🧠", key="header_brain_icon", help="Click to show/hide helper tips"):
                 helper_tab_map = {
@@ -1324,6 +1324,17 @@ if st.session_state.is_authenticated:
                 background: rgba(219, 234, 254, 0.95) !important;
                 color: #1d4ed8 !important;
                 border: 1px solid rgba(59, 130, 246, 0.35) !important;
+                width: 46px !important;
+                height: 46px !important;
+                min-width: 46px !important;
+                min-height: 46px !important;
+                padding: 0 !important;
+                font-size: 1.55rem !important;
+                line-height: 1 !important;
+                display: inline-flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                border-radius: 12px !important;
             }
             .header-brain-icon-large:hover {
                 transform: scale(1.08);
@@ -1339,17 +1350,17 @@ if st.session_state.is_authenticated:
                     const text = (btn.innerText || '').trim().replace(/\\s+/g, '');
                     if (title === 'Click to show/hide helper tips' || text === '🧠') {
                         btn.classList.add('header-brain-icon-large');
-                        btn.style.setProperty('font-size', '3.8rem', 'important');
-                        btn.style.setProperty('padding', '0.5rem 0.85rem', 'important');
-                        btn.style.setProperty('min-width', '4.4rem', 'important');
-                        btn.style.setProperty('min-height', '4.4rem', 'important');
-                        btn.style.setProperty('width', 'auto', 'important');
-                        btn.style.setProperty('height', 'auto', 'important');
+                        btn.style.setProperty('font-size', '1.55rem', 'important');
+                        btn.style.setProperty('padding', '0', 'important');
+                        btn.style.setProperty('min-width', '46px', 'important');
+                        btn.style.setProperty('min-height', '46px', 'important');
+                        btn.style.setProperty('width', '46px', 'important');
+                        btn.style.setProperty('height', '46px', 'important');
                         btn.style.setProperty('display', 'inline-flex', 'important');
                         btn.style.setProperty('align-items', 'center', 'important');
                         btn.style.setProperty('justify-content', 'center', 'important');
                         btn.style.setProperty('overflow', 'visible', 'important');
-                        btn.style.setProperty('border-radius', '1rem', 'important');
+                        btn.style.setProperty('border-radius', '12px', 'important');
                         btn.style.setProperty('line-height', '1', 'important');
                         btn.style.setProperty('box-sizing', 'border-box', 'important');
                         btn.style.setProperty('transform', 'none', 'important');
@@ -1357,7 +1368,7 @@ if st.session_state.is_authenticated:
                         btn.style.setProperty('border', '1px solid rgba(59, 130, 246, 0.35)', 'important');
                         btn.style.setProperty('color', '#1d4ed8', 'important');
                         Array.from(btn.querySelectorAll('*')).forEach(child => {
-                            child.style.setProperty('font-size', '3.8rem', 'important');
+                            child.style.setProperty('font-size', '1.55rem', 'important');
                             child.style.setProperty('line-height', '1', 'important');
                         });
                     }
@@ -5446,6 +5457,105 @@ st.markdown("""
     }
     </style>
 """, unsafe_allow_html=True)
+
+
+st.markdown(
+    """
+    <style>
+    /* Header sizing fixes */
+    [data-testid="stHorizontalBlock"]:has(.st-key-header_brain_icon) {
+        align-items: center !important;
+        gap: 0.75rem !important;
+    }
+    .st-key-header_brain_icon button {
+        width: 46px !important;
+        min-width: 46px !important;
+        height: 46px !important;
+        min-height: 46px !important;
+        padding: 0 !important;
+        font-size: 1.55rem !important;
+        line-height: 1 !important;
+        border-radius: 12px !important;
+    }
+    .st-key-main_logout_btn button {
+        min-height: 42px !important;
+        padding: 0.55rem 0.75rem !important;
+        white-space: nowrap !important;
+    }
+
+    /* Mobile layout repair: keep sidebar and main content from overlapping. */
+    @media (max-width: 767px) {
+        html, body, .stApp {
+            width: 100% !important;
+            max-width: 100% !important;
+            overflow-x: hidden !important;
+        }
+        div[data-testid="stAppViewContainer"] {
+            width: 100% !important;
+            max-width: 100% !important;
+            overflow-x: hidden !important;
+        }
+        .block-container,
+        .main .block-container,
+        section.main .block-container,
+        div[data-testid="stMain"] .block-container {
+            width: 100% !important;
+            max-width: 100% !important;
+            padding: 0.75rem !important;
+            margin: 0 !important;
+        }
+        [data-testid="stSidebar"],
+        .stSidebar {
+            width: 100% !important;
+            min-width: 0 !important;
+            max-width: 100% !important;
+            position: relative !important;
+            transform: none !important;
+            overflow-x: hidden !important;
+        }
+        [data-testid="stSidebar"] > div {
+            width: 100% !important;
+            max-width: 100% !important;
+            padding-left: 0.75rem !important;
+            padding-right: 0.75rem !important;
+        }
+        [data-testid="stHorizontalBlock"] {
+            flex-wrap: wrap !important;
+            gap: 0.5rem !important;
+        }
+        [data-testid="stHorizontalBlock"] > div {
+            min-width: 0 !important;
+        }
+        [data-testid="stHorizontalBlock"]:has(.st-key-header_brain_icon) {
+            display: grid !important;
+            grid-template-columns: 52px minmax(0, 1fr) !important;
+        }
+        [data-testid="stHorizontalBlock"]:has(.st-key-main_logout_btn) {
+            display: flex !important;
+            align-items: center !important;
+        }
+        .st-key-main_logout_btn {
+            margin-left: auto !important;
+        }
+        div[role="radiogroup"] {
+            flex-direction: row !important;
+            flex-wrap: wrap !important;
+            justify-content: stretch !important;
+            gap: 8px !important;
+        }
+        div[role="radiogroup"] > label {
+            flex: 1 1 calc(50% - 8px) !important;
+            min-width: 135px !important;
+            width: auto !important;
+        }
+        .dashboard-grid {
+            grid-template-columns: 1fr !important;
+        }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 # -------------------------------
