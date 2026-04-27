@@ -4222,6 +4222,83 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             border-radius: 10px !important;
         }
 
+        /* Login form styling via Streamlit key selectors (works without .login-panel wrapper) */
+        .st-key-username [data-testid="stTextInput"],
+        .st-key-password [data-testid="stTextInput"] {
+            margin-bottom: 8px !important;
+        }
+        .st-key-username [data-testid="stTextInput"] label,
+        .st-key-username [data-testid="stTextInput"] label p,
+        .st-key-username [data-testid="stTextInput"] label span,
+        .st-key-password [data-testid="stTextInput"] label,
+        .st-key-password [data-testid="stTextInput"] label p,
+        .st-key-password [data-testid="stTextInput"] label span {
+            color: #3B5E7F !important;
+            -webkit-text-fill-color: #3B5E7F !important;
+            opacity: 1 !important;
+        }
+        .st-key-username [data-baseweb="base-input"],
+        .st-key-username [data-baseweb="input"],
+        .st-key-username [data-testid="stTextInput"] > div > div,
+        .st-key-password [data-baseweb="base-input"],
+        .st-key-password [data-baseweb="input"],
+        .st-key-password [data-testid="stTextInput"] > div > div {
+            background: rgba(230, 244, 248, 0.85) !important;
+            border: 1.5px solid rgba(176, 224, 230, 0.6) !important;
+            border-radius: 12px !important;
+            box-shadow: none !important;
+        }
+        .st-key-username [data-baseweb="base-input"]:focus-within,
+        .st-key-username [data-baseweb="input"]:focus-within,
+        .st-key-password [data-baseweb="base-input"]:focus-within,
+        .st-key-password [data-baseweb="input"]:focus-within {
+            border: 1.5px solid #87CEEB !important;
+            box-shadow: 0 0 0 2px rgba(135, 206, 235, 0.3) !important;
+            outline: none !important;
+        }
+        .st-key-username input:focus,
+        .st-key-username input:invalid,
+        .st-key-password input:focus,
+        .st-key-password input:invalid {
+            outline: none !important;
+            box-shadow: none !important;
+            border-color: #87CEEB !important;
+        }
+        .st-key-username input[type="text"],
+        .st-key-password input[type="password"] {
+            background: transparent !important;
+            color: #2C5F7F !important;
+            caret-color: #4D94B9 !important;
+            -webkit-text-fill-color: #2C5F7F !important;
+            border: none !important;
+            box-shadow: none !important;
+            font-weight: 600 !important;
+            letter-spacing: 0.2px !important;
+            font-size: 1rem !important;
+            padding: 12px 16px !important;
+        }
+        .st-key-username input[type="text"]::placeholder,
+        .st-key-password input[type="password"]::placeholder {
+            color: rgba(91, 127, 166, 0.65) !important;
+            opacity: 1 !important;
+            -webkit-text-fill-color: rgba(91, 127, 166, 0.65) !important;
+        }
+        .st-key-username input[type="text"]:focus,
+        .st-key-password input[type="password"]:focus {
+            background: transparent !important;
+            color: #2C5F7F !important;
+            -webkit-text-fill-color: #2C5F7F !important;
+            outline: none !important;
+        }
+        .st-key-signin .stButton > button,
+        .st-key-signin div.stButton > button {
+            width: 100% !important;
+            min-height: 42px !important;
+            padding: 0.45rem 0.9rem !important;
+            font-size: 0.98rem !important;
+            border-radius: 10px !important;
+        }
+
         /* Responsive design */
         @media (max-width: 768px) {
             [data-testid="column"]:first-child {
