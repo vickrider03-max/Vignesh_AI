@@ -169,31 +169,6 @@ def cleanup_expired_preview_tokens():
     if expired_tokens:
         save_preview_data()
 
-
-# Streamlit relies on fresh frontend assets and websocket message state. A custom
-# service worker can leave stale cached assets behind and trigger Cached ForwardMsg
-# MISS errors during reruns, especially after login.
-CACHE_SCRIPT = """
-<script>
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.getRegistrations().then(registrations => {
-        registrations.forEach(registration => registration.unregister());
-    }).catch(err => {
-        console.log('ServiceWorker cleanup skipped:', err);
-    });
-}
-
-if ('caches' in window) {
-    caches.keys().then(keys => {
-        keys.forEach(key => caches.delete(key));
-    }).catch(err => {
-        console.log('Cache cleanup skipped:', err);
-    });
-}
-</script>
-"""
-
-
 def render_html_frame(html_content, height="content", width="stretch"):
     """Render inline HTML through st.iframe."""
     if isinstance(height, int) and height < 1:
@@ -386,9 +361,6 @@ load_preview_data()
 
 # Clean up expired preview tokens on app start
 cleanup_expired_preview_tokens()
-
-# Remove stale browser caches that can break Streamlit websocket reruns.
-render_html_frame(CACHE_SCRIPT, height=0)
 
 try:
     logo_data = get_needle_minimalist_logo()
@@ -976,6 +948,7 @@ for key, default_value in [
     ("chat_summary_downloads", {"images": [], "tables": []}),
     ("messages", []),
     ("welcome_shown", False),
+    ("mobile_sidebar_visible", False),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default_value
@@ -1414,6 +1387,104 @@ if st.session_state.is_authenticated:
         st.session_state.welcome_shown = True
 
     render_status_strip()
+
+
+def render_mobile_workspace_controls():
+    if not st.session_state.get("is_authenticated"):
+        return
+
+    show_sidebar = st.session_state.get("mobile_sidebar_visible", False)
+    if show_sidebar:
+        mobile_mode_css = """
+        <style>
+        @media (max-width: 767px) {
+            section.main,
+            [data-testid="stMain"],
+            div[data-testid="stMain"] {
+                display: none !important;
+            }
+            [data-testid="stSidebar"],
+            .stSidebar {
+                display: block !important;
+                width: 100% !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+                position: relative !important;
+                transform: none !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+            }
+            [data-testid="stSidebar"] > div {
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+        }
+        </style>
+        """
+    else:
+        mobile_mode_css = """
+        <style>
+        @media (max-width: 767px) {
+            [data-testid="stSidebar"],
+            .stSidebar {
+                display: none !important;
+                visibility: hidden !important;
+                width: 0 !important;
+                min-width: 0 !important;
+                max-width: 0 !important;
+                transform: translateX(-100%) !important;
+            }
+            section.main,
+            [data-testid="stMain"],
+            div[data-testid="stMain"],
+            div[data-testid="stAppViewContainer"] {
+                display: block !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                margin-left: 0 !important;
+                padding-left: 0 !important;
+            }
+        }
+        </style>
+        """
+
+    st.markdown(
+        mobile_mode_css
+        + """
+        <style>
+        .st-key-mobile_show_files_btn,
+        .st-key-mobile_open_workspace_btn {
+            display: none;
+        }
+        @media (max-width: 767px) {
+            .st-key-mobile_show_files_btn,
+            .st-key-mobile_open_workspace_btn {
+                display: block !important;
+                margin-bottom: 0.75rem !important;
+            }
+            .st-key-mobile_show_files_btn button,
+            .st-key-mobile_open_workspace_btn button {
+                width: 100% !important;
+                min-height: 46px !important;
+                border-radius: 12px !important;
+                border: 2px solid #93c5fd !important;
+                background: #eff6ff !important;
+                color: #1e3a8a !important;
+                font-weight: 800 !important;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+render_mobile_workspace_controls()
+
+if st.session_state.get("is_authenticated"):
+    if st.button("📂 Files / Uploads", key="mobile_show_files_btn"):
+        st.session_state.mobile_sidebar_visible = True
+        st.rerun()
 
 
 # -------------------------------
@@ -2810,6 +2881,10 @@ if preview_file_from_url:
 # preview launch links. Files selected here become available to the individual tabs.
 with st.sidebar:
     if st.session_state.is_authenticated:
+        if st.button("Open Workspace", key="mobile_open_workspace_btn", use_container_width=True):
+            st.session_state.mobile_sidebar_visible = False
+            st.rerun()
+
         creator_timestamp = None
         if st.session_state.user_role == "creator" and st.session_state.login_history:
             creator_entries = [
@@ -4215,7 +4290,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
                     </ul>
                 </div>
                 <div class="feature-card">
-                    <h4>🚗 CAPL</h4>
+                    <h4>📡 CAPL</h4>
                     <ul>
                         <li>Upload or create <code>.can</code> files</li>
                         <li>Built-in CAPL editor</li>
@@ -5461,6 +5536,53 @@ st.markdown("""
         }
     }
 
+    @keyframes selectedPillGlow {
+        0%, 100% {
+            box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.18), 0 0 14px rgba(59, 130, 246, 0.28);
+        }
+        50% {
+            box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.24), 0 0 26px rgba(59, 130, 246, 0.48);
+        }
+    }
+
+    .st-key-active_main_tab div[role="radiogroup"] > label[data-checked="true"] {
+        background: linear-gradient(135deg, #dbeafe 0%, #e0f2fe 48%, #ede9fe 100%) !important;
+        border: 2px solid #60a5fa !important;
+        color: #0f172a !important;
+        font-weight: 800 !important;
+        transform: translateY(-1px);
+        animation: selectedPillGlow 2.2s ease-in-out infinite;
+    }
+
+    .st-key-active_main_tab div[role="radiogroup"] > label[data-checked="true"] p,
+    .st-key-dashboard_chart_type div[role="radiogroup"] > label[data-checked="true"] p,
+    .st-key-dashboard_bar_orientation div[role="radiogroup"] > label[data-checked="true"] p {
+        color: #0f172a !important;
+        font-weight: 800 !important;
+    }
+
+    .st-key-dashboard_chart_type div[role="radiogroup"],
+    .st-key-dashboard_bar_orientation div[role="radiogroup"] {
+        justify-content: flex-start !important;
+        margin-bottom: 0.5rem;
+    }
+
+    .st-key-dashboard_chart_type div[role="radiogroup"] > label,
+    .st-key-dashboard_bar_orientation div[role="radiogroup"] > label {
+        min-width: 132px !important;
+        border-radius: 14px !important;
+        border: 1px solid #d7e3f4 !important;
+        background: #f8fbff !important;
+    }
+
+    .st-key-dashboard_chart_type div[role="radiogroup"] > label[data-checked="true"],
+    .st-key-dashboard_bar_orientation div[role="radiogroup"] > label[data-checked="true"] {
+        background: linear-gradient(135deg, #ecfeff 0%, #dbeafe 100%) !important;
+        border: 2px solid #38bdf8 !important;
+        color: #0f172a !important;
+        animation: selectedPillGlow 2.2s ease-in-out infinite;
+    }
+
     /* Reduced motion for accessibility */
     @media (prefers-reduced-motion: reduce) {
         *,
@@ -5756,6 +5878,8 @@ if active_main_tab == "📊 Dashboard":
     with dashboard_reset_col:
         if st.button("🧼 Reset", key="reset_dashboard_selection"):
             st.session_state.file_dropdown = "--Select File--"
+            st.session_state.dashboard_chart_type = "Pie Chart"
+            st.session_state.dashboard_bar_orientation = "Vertical"
             st.rerun()
 
     show_current_sidebar_selection()
@@ -6088,10 +6212,22 @@ if active_main_tab == "📊 Dashboard":
                 ensure_file_processed(file_dropdown)
             file_entry = get_uploaded_file_entry(file_dropdown)
             file_bytes = file_entry["bytes"] if file_entry else b""
-            chart_type = st.radio("Chart type", ["Pie Chart", "Bar Chart"], index=0)
+            chart_type = st.radio(
+                "Chart type",
+                ["Pie Chart", "Bar Chart"],
+                index=0,
+                horizontal=True,
+                key="dashboard_chart_type",
+            )
             bar_orientation = "Vertical"
             if chart_type == "Bar Chart":
-                bar_orientation = st.radio("Bar orientation", ["Vertical", "Horizontal"], index=0)
+                bar_orientation = st.radio(
+                    "Bar orientation",
+                    ["Vertical", "Horizontal"],
+                    index=0,
+                    horizontal=True,
+                    key="dashboard_bar_orientation",
+                )
             horizontal_bar = (bar_orientation == "Horizontal")
 
             if file_dropdown.lower().endswith(".xlsx"):
