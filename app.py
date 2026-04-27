@@ -15,6 +15,7 @@ from functools import lru_cache
 from collections import OrderedDict
 
 import docx, openpyxl, pdfplumber, streamlit as st
+import streamlit.components.v1 as components
 from docx.text.paragraph import Paragraph
 from docx.table import Table
 import pandas as pd
@@ -170,11 +171,13 @@ def cleanup_expired_preview_tokens():
         save_preview_data()
 
 def render_html_frame(html_content, height="content", width="stretch"):
-    """Render inline HTML through st.iframe."""
+    """Render inline HTML with Streamlit's supported components API."""
+    if height == "content":
+        height = 240
     if isinstance(height, int) and height < 1:
         height = 1
-    encoded_html = urllib.parse.quote(str(html_content), safe="")
-    st.iframe(f"data:text/html;charset=utf-8,{encoded_html}", width=width, height=height)
+    component_width = None if width in (None, "stretch") else width
+    components.html(str(html_content), width=component_width, height=height, scrolling=True)
 
 
 # -------------------------------
@@ -1605,10 +1608,14 @@ def ensure_file_processed(file_name):
         return
     file_name_lower = file_name.lower()
     file_bytes = file_info["bytes"]
+    new_hash = get_file_hash(file_bytes)
+    hash_cache_key = f"{file_name}_hash"
+    has_changed = FILE_HASH_CACHE.get(hash_cache_key) != new_hash
+    FILE_HASH_CACHE[hash_cache_key] = new_hash
     
     # Check cache first
     cached_text = FILE_TEXT_CACHE.get(file_name)
-    if cached_text is not None and not file_has_changed(file_name, file_bytes):
+    if cached_text is not None and not has_changed:
         st.session_state.file_texts[file_name] = cached_text
         if file_name_lower.endswith(".xlsx"):
             cached_excel = EXCEL_DATA_CACHE.get(file_name)
@@ -1617,12 +1624,12 @@ def ensure_file_processed(file_name):
         return
     
     # Process file if not in cache
-    if file_name not in st.session_state.file_texts or file_has_changed(file_name, file_bytes):
+    if file_name not in st.session_state.file_texts or has_changed:
         extracted_text = extract_text(file_name, file_bytes)
         st.session_state.file_texts[file_name] = extracted_text
         FILE_TEXT_CACHE.set(file_name, extracted_text)
 
-    if file_name_lower.endswith(".xlsx") and file_name not in st.session_state.excel_data_by_file:
+    if file_name_lower.endswith(".xlsx") and (file_name not in st.session_state.excel_data_by_file or has_changed):
         excel_data = extract_excel_data(file_name, file_bytes)
         st.session_state.excel_data_by_file[file_name] = excel_data
         EXCEL_DATA_CACHE.set(file_name, excel_data)
@@ -2049,7 +2056,7 @@ def create_preview_link(file_name, highlight_term=None, page_num=None):
         params.append(f"highlight={urllib.parse.quote_plus(highlight_term)}")
     if page_num is not None:
         params.append(f"page={urllib.parse.quote_plus(str(page_num))}")
-    return "./?" + "&".join(params)
+    return "?" + "&".join(params)
 
 
 def create_heading_anchor(text):
@@ -2876,11 +2883,13 @@ if "preview_token" in query_params and query_params["preview_token"]:
         st.title("Document Preview")
         st.warning("This preview link is no longer available.")
         st.info("Return to the main app and click the eye preview button next to the uploaded file again.")
+        st.link_button("Back to workspace", "?", icon="↩️")
         st.stop()
 
 if preview_file_from_url:
     preview_entry = PREVIEW_STORE.get(preview_token)
     st.title("📄 Document Preview")
+    st.link_button("Back to workspace", "?", icon="↩️")
     if preview_entry is not None:
         st.markdown(f"### {preview_entry['name']}")
         st.markdown("---")
@@ -2963,20 +2972,19 @@ with st.sidebar:
                     background: #ffd3b5 !important;
                     border-color: #ffb18f !important;
                 }
-                .file-icon-button {
-                    display: inline-flex;
-                    justify-content: center;
-                    align-items: center;
-                    width: 38px;
-                    height: 38px;
+                [data-testid="stSidebar"] div[data-testid="stLinkButton"] a {
+                    min-height: 38px;
                     border-radius: 12px;
-                    background: transparent;
-                    color: #5a9fd4;
-                    text-decoration: none;
-                    font-size: 18px;
+                    padding: 0.35rem 0.5rem;
+                    white-space: nowrap;
+                    justify-content: center;
+                    background: #f5fbff !important;
+                    border: 1px solid #d0e8f8 !important;
+                    color: #173152 !important;
                 }
-                .file-icon-button:hover {
-                    background: #f0faff;
+                [data-testid="stSidebar"] div[data-testid="stLinkButton"] a:hover {
+                    background: #e8f6ff !important;
+                    border-color: #a0c8e8 !important;
                 }
                 [data-testid="stSidebar"] [class*="st-key-del_file_"] button[kind="tertiary"] {
                     background: transparent;
@@ -3036,7 +3044,7 @@ with st.sidebar:
         st.markdown("### Uploaded files")
         
         for idx, file_dict in enumerate(st.session_state.uploaded_files[:]):
-            cols = st.columns([0.65, 0.18, 0.17], vertical_alignment="center")
+            cols = st.columns([0.56, 0.27, 0.17], vertical_alignment="center")
             with cols[0]:
                 file_name = file_dict["name"]
                 is_selected = file_name in st.session_state.selected_files
@@ -3054,13 +3062,15 @@ with st.sidebar:
                         st.session_state.selected_files.append(file_name)
                     st.rerun()
             with cols[1]:
-                token = str(uuid.uuid4())
-                PREVIEW_TOKENS[token] = {'file_name': file_name, 'timestamp': datetime.now()}
-                PREVIEW_STORE[token] = file_dict
-                save_preview_data()
-                st.markdown(
-                    f"<a href='./?preview_token={token}' target='_blank' class='file-icon-button' title='Preview {html.escape(file_name)}'>👁️</a>",
-                    unsafe_allow_html=True,
+                preview_url = create_preview_link(file_name)
+                st.link_button(
+                    "Open",
+                    preview_url or "#",
+                    help=f"Open preview for {file_name}",
+                    icon="👁️",
+                    type="secondary",
+                    use_container_width=True,
+                    disabled=preview_url is None,
                 )
             with cols[2]:
                 if st.button("🗑️", key=f"del_file_{idx}", help=f"Delete {file_name}", use_container_width=True, type="tertiary"):
@@ -5735,8 +5745,67 @@ st.markdown(
             min-width: 135px !important;
             width: auto !important;
         }
+        .stSelectbox,
+        .stMultiSelect,
+        .stTextInput,
+        .stTextArea,
+        .stNumberInput,
+        .stSlider,
+        .stCheckbox,
+        .stRadio,
+        .stDownloadButton,
+        .stFileUploader,
+        .stDataFrame,
+        [data-testid="stDataFrame"],
+        [data-testid="stMetric"],
+        [data-testid="stPlotlyChart"],
+        iframe {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+        }
+        .stDataFrame,
+        [data-testid="stDataFrame"],
+        [data-testid="stTable"],
+        [data-testid="stPlotlyChart"] {
+            overflow-x: auto !important;
+        }
+        [data-testid="column"],
+        [data-testid="stColumn"] {
+            min-width: min(100%, 260px) !important;
+        }
+        [data-testid="stMetric"] {
+            overflow-wrap: anywhere !important;
+        }
+        .app-card,
+        .file-chip-wrap,
+        .file-chip {
+            max-width: 100% !important;
+            overflow-wrap: anywhere !important;
+        }
         .dashboard-grid {
             grid-template-columns: 1fr !important;
+        }
+    }
+
+    @media (min-width: 768px) and (max-width: 1180px) {
+        [data-testid="stHorizontalBlock"] {
+            gap: 0.75rem !important;
+        }
+        [data-testid="column"],
+        [data-testid="stColumn"] {
+            min-width: 0 !important;
+        }
+        .stDataFrame,
+        [data-testid="stDataFrame"],
+        [data-testid="stTable"],
+        [data-testid="stPlotlyChart"],
+        iframe {
+            max-width: 100% !important;
+            overflow-x: auto !important;
+        }
+        div[role="radiogroup"] {
+            flex-wrap: wrap !important;
         }
     }
     </style>
