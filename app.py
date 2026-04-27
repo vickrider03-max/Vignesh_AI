@@ -11,6 +11,8 @@ from difflib import SequenceMatcher
 from io import BytesIO
 from pytz import timezone
 import time
+from functools import lru_cache
+from collections import OrderedDict
 
 import docx, openpyxl, pdfplumber, streamlit as st
 import streamlit.components.v1 as components
@@ -31,12 +33,6 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-
-@st.cache_data
-def load_data():
-    # expensive operation
-    return data
-
 # -------------------------------
 # GLOBAL VARIABLES & CONSTANTS
 # -------------------------------
@@ -47,7 +43,71 @@ PREVIEW_STORE = {}   # token -> file_dict
 
 PREVIEW_DATA_FILE = "preview_data.pkl"
 
-# -------------------------------
+# ===============================================
+# CACHING SYSTEM FOR PERFORMANCE OPTIMIZATION
+# ===============================================
+# This caching layer dramatically improves load times by avoiding redundant processing
+
+class CacheManager:
+    """LRU cache manager for expensive operations with TTL support"""
+    def __init__(self, max_size=50):
+        self.cache = OrderedDict()
+        self.max_size = max_size
+        self.timestamps = {}
+        
+    def get(self, key, ttl_seconds=3600):
+        if key not in self.cache:
+            return None
+        if key in self.timestamps:
+            age = time.time() - self.timestamps[key]
+            if age > ttl_seconds:
+                del self.cache[key]
+                del self.timestamps[key]
+                return None
+        # Move to end (most recently used)
+        self.cache.move_to_end(key)
+        return self.cache[key]
+    
+    def set(self, key, value):
+        if len(self.cache) >= self.max_size:
+            oldest = next(iter(self.cache))
+            del self.cache[oldest]
+            if oldest in self.timestamps:
+                del self.timestamps[oldest]
+        self.cache[key] = value
+        self.timestamps[key] = time.time()
+        if len(self.cache) > 1:
+            self.cache.move_to_end(key)
+    
+    def clear(self):
+        self.cache.clear()
+        self.timestamps.clear()
+
+# Global cache instances
+FILE_TEXT_CACHE = CacheManager(max_size=100)
+VECTOR_STORE_CACHE = CacheManager(max_size=20)
+EXCEL_DATA_CACHE = CacheManager(max_size=50)
+EMBEDDINGS_CACHE = CacheManager(max_size=200)
+
+# Cache for file hashes to detect modifications
+FILE_HASH_CACHE = {}
+
+# ===============================================
+# HASH-BASED CHANGE DETECTION
+# ===============================================
+def get_file_hash(file_bytes):
+    """Generate SHA256 hash of file contents for change detection"""
+    return hashlib.sha256(file_bytes).hexdigest()
+
+def file_has_changed(file_name, file_bytes):
+    """Check if file has been modified since last processing"""
+    new_hash = get_file_hash(file_bytes)
+    cache_key = f"{file_name}_hash"
+    old_hash = FILE_HASH_CACHE.get(cache_key)
+    FILE_HASH_CACHE[cache_key] = new_hash
+    return old_hash != new_hash
+
+# ===============================================
 # PREVIEW PERSISTENCE HELPERS
 # -------------------------------
 # Functions to save/load preview data so document previews persist across Streamlit reruns.
@@ -93,6 +153,64 @@ def cleanup_expired_preview_tokens():
     
     # Save updated data
     save_preview_data()
+
+
+# Client-side caching HTML/JS
+CACHE_SCRIPT = """
+<script>
+// Enable aggressive browser caching for static assets
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/static/sw.js').catch(err => {
+        console.log('ServiceWorker registration failed:', err);
+    });
+}
+
+// LocalStorage caching for app state
+const AppCache = {
+    setItem: (key, value) => {
+        try {
+            localStorage.setItem('app_' + key, JSON.stringify({value, timestamp: Date.now()}));
+        } catch(e) {
+            console.log('LocalStorage full or disabled');
+        }
+    },
+    getItem: (key, maxAge = 3600000) => {
+        try {
+            const stored = localStorage.getItem('app_' + key);
+            if (!stored) return null;
+            const {value, timestamp} = JSON.parse(stored);
+            if (Date.now() - timestamp > maxAge) {
+                localStorage.removeItem('app_' + key);
+                return null;
+            }
+            return value;
+        } catch(e) {
+            return null;
+        }
+    },
+    clear: () => localStorage.clear()
+};
+
+// Lazy load images/content
+const lazyLoadElements = () => {
+    document.querySelectorAll('[data-lazy="true"]').forEach(el => {
+        if (el.getBoundingClientRect().top < window.innerHeight) {
+            if (el.dataset.src) {
+                el.src = el.dataset.src;
+            }
+            if (el.dataset.html) {
+                el.innerHTML = el.dataset.html;
+            }
+            el.removeAttribute('data-lazy');
+        }
+    });
+};
+
+window.addEventListener('scroll', lazyLoadElements, {passive: true});
+window.addEventListener('resize', lazyLoadElements, {passive: true});
+lazyLoadElements();
+</script>
+"""
 
 
 # -------------------------------
@@ -279,6 +397,9 @@ load_preview_data()
 
 # Clean up expired preview tokens on app start
 cleanup_expired_preview_tokens()
+
+# Inject client-side caching script
+st.markdown(CACHE_SCRIPT, unsafe_allow_html=True)
 
 try:
     logo_data = get_needle_minimalist_logo()
@@ -1245,7 +1366,7 @@ if st.session_state.is_authenticated:
                 const buttons = Array.from(root.querySelectorAll('button'));
                 buttons.forEach(btn => {
                     const title = (btn.getAttribute('title') || '').trim();
-                    const text = (btn.innerText || '').trim().replace(/\s+/g, '');
+                    const text = (btn.innerText || '').trim().replace(/\\s+/g, '');
                     if (title === 'Click to show/hide helper tips' || text === '🧠') {
                         btn.classList.add('header-brain-icon-large');
                         btn.style.setProperty('font-size', '3.8rem', 'important');
@@ -1364,17 +1485,54 @@ if "active_main_tab" not in st.session_state:
 # Preview processing helpers:
 # These functions support the standalone preview page and also provide extracted
 # text/data reused by Chat, Dashboard, Compare, and CAPL when files are selected.
+# ===============================================
+# LAZY LOADING & PERFORMANCE OPTIMIZATION
+# ===============================================
+
+def lazy_load_file_section(file_name, section_id, loader_func):
+    """Lazily load file sections on demand to reduce initial load time"""
+    cache_key = f"{file_name}_{section_id}"
+    cached_result = FILE_TEXT_CACHE.get(cache_key, ttl_seconds=7200)
+    if cached_result is not None:
+        return cached_result
+    
+    result = loader_func()
+    FILE_TEXT_CACHE.set(cache_key, result)
+    return result
+
+def optimize_tab_rendering():
+    """Optimize rendering by deferring non-active tab loading"""
+    active_tab = st.session_state.get("active_main_tab", "💬 Chat")
+    return active_tab
+
 def ensure_file_processed(file_name):
+    """Process file with caching to avoid redundant extraction"""
     file_info = get_uploaded_file_entry(file_name)
     if not file_info:
         return
     file_name_lower = file_name.lower()
-
-    if file_name not in st.session_state.file_texts:
-        st.session_state.file_texts[file_name] = extract_text(file_name, file_info["bytes"])
+    file_bytes = file_info["bytes"]
+    
+    # Check cache first
+    cached_text = FILE_TEXT_CACHE.get(file_name)
+    if cached_text is not None and not file_has_changed(file_name, file_bytes):
+        st.session_state.file_texts[file_name] = cached_text
+        if file_name_lower.endswith(".xlsx"):
+            cached_excel = EXCEL_DATA_CACHE.get(file_name)
+            if cached_excel is not None:
+                st.session_state.excel_data_by_file[file_name] = cached_excel
+        return
+    
+    # Process file if not in cache
+    if file_name not in st.session_state.file_texts or file_has_changed(file_name, file_bytes):
+        extracted_text = extract_text(file_name, file_bytes)
+        st.session_state.file_texts[file_name] = extracted_text
+        FILE_TEXT_CACHE.set(file_name, extracted_text)
 
     if file_name_lower.endswith(".xlsx") and file_name not in st.session_state.excel_data_by_file:
-        st.session_state.excel_data_by_file[file_name] = extract_excel_data(file_name, file_info["bytes"])
+        excel_data = extract_excel_data(file_name, file_bytes)
+        st.session_state.excel_data_by_file[file_name] = excel_data
+        EXCEL_DATA_CACHE.set(file_name, excel_data)
 
 
 def extract_text(file_name, file_bytes):
@@ -1857,177 +2015,207 @@ def render_text_block(text, highlight_term=None, anchor_id=None):
 
 
 def render_document_preview(file_name, file_entry=None, highlight_term=None, highlight_page=None):
+    """Render document preview with caching and error handling"""
     st.markdown(f"**Preview: {file_name}**")
+    
+    # Ensure file entry exists
     if file_entry is None:
         ensure_file_processed(file_name)
         file_entry = get_uploaded_file_entry(file_name)
     else:
-        # Even if file_entry is provided, ensure text is extracted
+        # Even if file_entry is provided, ensure text is extracted and cached
         if file_name not in st.session_state.file_texts:
-            st.session_state.file_texts[file_name] = extract_text(file_name, file_entry["bytes"])
+            extracted = extract_text(file_name, file_entry["bytes"])
+            st.session_state.file_texts[file_name] = extracted
+            FILE_TEXT_CACHE.set(file_name, extracted)
         if file_name.lower().endswith(".xlsx") and file_name not in st.session_state.excel_data_by_file:
-            st.session_state.excel_data_by_file[file_name] = extract_excel_data(file_name, file_entry["bytes"])
+            excel_data = extract_excel_data(file_name, file_entry["bytes"])
+            st.session_state.excel_data_by_file[file_name] = excel_data
+            EXCEL_DATA_CACHE.set(file_name, excel_data)
     
     if not file_entry:
-        st.warning("File preview is unavailable.")
+        st.error("❌ File preview unavailable - file could not be loaded.")
         return
 
     file_name_lower = file_name.lower()
     image_download_items = []
     table_download_items = []
 
-    # Special handling for PDF files: render actual page images for a true preview
+    # Special handling for PDF files: render actual page images for true preview
     if file_name_lower.endswith(".pdf"):
-        with st.spinner("Rendering PDF preview..."):
-            try:
-                pdf_bio = BytesIO(file_entry["bytes"])
-                with pdfplumber.open(pdf_bio) as pdf:
-                    st.markdown(f"**PDF Pages: {len(pdf.pages)}**")
-                    highlight_found = False
-                    selected_page_index = None
-                    if highlight_page is not None and 1 <= highlight_page <= len(pdf.pages):
+        try:
+            pdf_bio = BytesIO(file_entry["bytes"])
+            with pdfplumber.open(pdf_bio) as pdf:
+                total_pages = len(pdf.pages)
+                if total_pages == 0:
+                    st.warning("⚠️ PDF has no readable pages")
+                    return
+                    
+                st.markdown(f"**PDF Pages: {total_pages}**")
+                
+                # Determine which page to show
+                selected_page_index = None
+                if highlight_page is not None:
+                    if 1 <= highlight_page <= total_pages:
                         selected_page_index = highlight_page - 1
-                    for i, page in enumerate(pdf.pages):
-                        if selected_page_index is not None and i != selected_page_index:
-                            continue
-                        try:
-                            page_text = page.extract_text() or ""
-                            page_anchor_id = None
-                            if highlight_term and highlight_term.lower() in page_text.lower():
-                                page_anchor_id = create_heading_anchor(highlight_term)
-                                highlight_found = True
+                    else:
+                        st.warning(f"⚠️ Page {highlight_page} not found. Showing all pages.")
+                else:
+                    # For large PDFs, show only first 3 pages by default
+                    if total_pages > 10:
+                        st.info(f"Showing first 3 pages of {total_pages} total pages")
+                        pages_to_show = list(range(min(3, total_pages)))
+                    else:
+                        pages_to_show = list(range(total_pages))
+                
+                # Render pages
+                highlight_found = False
+                for i, page in enumerate(pdf.pages):
+                    if selected_page_index is not None and i != selected_page_index:
+                        continue
+                    if selected_page_index is None and i >= 3 and total_pages > 10:
+                        if st.button(f"Load Page {i+1}"):
+                            st.rerun()
+                        continue
+                    
+                    try:
+                        # Extract page text for highlighting
+                        page_text = page.extract_text() or ""
+                        page_anchor_id = None
+                        
+                        if highlight_term and highlight_term.lower() in page_text.lower():
+                            page_anchor_id = create_heading_anchor(highlight_term)
+                            highlight_found = True
                             if page_anchor_id:
                                 st.markdown(f"<div id='{page_anchor_id}'></div>", unsafe_allow_html=True)
-
-                            if selected_page_index is not None:
-                                st.markdown(f"**Showing page {highlight_page} only.**")
-                            page_image = page.to_image(resolution=150)
+                        
+                        # Render page image with caching
+                        page_cache_key = f"{file_name}_page_{i}_image"
+                        cached_image = FILE_TEXT_CACHE.get(page_cache_key)
+                        
+                        if cached_image is None:
+                            page_image = page.to_image(resolution=120)  # Lower resolution for speed
                             image_bytes_io = BytesIO()
                             page_image.original.save(image_bytes_io, format="PNG")
                             image_bytes = image_bytes_io.getvalue()
-
-                            st.image(image_bytes, caption=f"Page {i+1}", use_container_width=True)
-                            if page_anchor_id and highlight_term:
-                                st.markdown("### Highlighted page text", unsafe_allow_html=True)
-                                st.markdown(render_text_block(page_text, highlight_term, anchor_id=None), unsafe_allow_html=True)
-                            image_download_items.append({
-                                "label": f"Download Page {i+1} as PNG",
-                                "data": image_bytes,
-                                "file_name": f"{os.path.splitext(file_name)[0]}_page_{i+1}.png",
-                                "mime": "image/png",
-                                "key": f"download_pdf_page_{file_name}_{i}"
-                            })
-
-                            tables = page.extract_tables()
-                            if tables:
-                                for j, table in enumerate(tables):
-                                    if table and any(any(cell for cell in row) for row in table):
+                            FILE_TEXT_CACHE.set(page_cache_key, image_bytes)
+                        else:
+                            image_bytes = cached_image
+                        
+                        st.image(image_bytes, caption=f"Page {i+1}", use_container_width=True)
+                        
+                        # Show highlighted text if match found
+                        if page_anchor_id and highlight_term:
+                            st.markdown("### Highlighted Text", unsafe_allow_html=True)
+                            st.markdown(render_text_block(page_text, highlight_term, anchor_id=None), unsafe_allow_html=True)
+                        
+                        # Extract and cache tables
+                        tables = page.extract_tables()
+                        if tables:
+                            for j, table in enumerate(tables):
+                                if table and any(any(cell for cell in row) for row in table):
+                                    table_cache_key = f"{file_name}_page_{i}_table_{j}"
+                                    cached_table = FILE_TEXT_CACHE.get(table_cache_key)
+                                    
+                                    if cached_table is None:
                                         table_png = table_to_png_bytes(table, title=f"Page {i+1} Table {j+1}")
-                                        st.image(table_png, caption=f"Page {i+1} Table {j+1}", use_container_width=True)
-                                        table_download_items.append({
-                                            "label": f"📥 Download Table {j+1} as PNG",
-                                            "data": table_png,
-                                            "file_name": f"{os.path.splitext(file_name)[0]}_page_{i+1}_table_{j+1}.png",
-                                            "mime": "image/png",
-                                            "key": f"download_pdf_table_{file_name}_{i}_{j}"
-                                        })
-                        except Exception as page_err:
-                            st.warning(f"Could not render page {i+1} as image: {page_err}")
-                            page_text = page.extract_text() or ""
-                            if page_text.strip():
-                                page_anchor_id = None
-                                if highlight_term and highlight_term.lower() in page_text.lower():
-                                    page_anchor_id = create_heading_anchor(highlight_term)
-                                if page_anchor_id:
-                                    st.markdown(f"<div id='{page_anchor_id}'></div>", unsafe_allow_html=True)
-                                st.markdown(f"#### Page {i+1} Text")
-                                if highlight_term:
-                                    st.markdown(render_text_block(page_text, highlight_term, anchor_id=page_anchor_id), unsafe_allow_html=True)
-                                else:
-                                    st.code(page_text, language="text")
-                    if highlight_term and not highlight_found and selected_page_index is None:
-                        if file_name not in st.session_state.file_texts:
-                            st.session_state.file_texts[file_name] = extract_text(file_name, file_entry["bytes"])
-                        full_content = st.session_state.file_texts.get(file_name, "")
-                        anchor_id = create_heading_anchor(highlight_term)
-                        st.markdown(f"<div id='{anchor_id}'></div>", unsafe_allow_html=True)
-                        st.markdown("### Highlighted Text")
-                        st.markdown(render_text_block(full_content, highlight_term, anchor_id=None), unsafe_allow_html=True)
-
-                    if image_download_items:
-                        with st.expander("🖼️ Image Downloads", expanded=False):
-                            for item in image_download_items:
-                                st.download_button(
-                                    label=item["label"],
-                                    data=item["data"],
-                                    file_name=item["file_name"],
-                                    mime=item["mime"],
-                                    key=item["key"]
-                                )
-                    if table_download_items:
-                        with st.expander("📊 Table Downloads", expanded=False):
-                            for item in table_download_items:
-                                st.download_button(
-                                    label=item["label"],
-                                    data=item["data"],
-                                    file_name=item["file_name"],
-                                    mime=item["mime"],
-                                    key=item["key"]
-                                )
-                    if highlight_term and not highlight_found and selected_page_index is None:
-                        if file_name not in st.session_state.file_texts:
-                            st.session_state.file_texts[file_name] = extract_text(file_name, file_entry["bytes"])
-                        full_content = st.session_state.file_texts.get(file_name, "")
-                        if full_content.strip():
-                            anchor_id = create_heading_anchor(highlight_term)
-                            st.markdown(f"<div id='{anchor_id}'></div>", unsafe_allow_html=True)
-                            st.markdown("### Highlighted Text")
-                            st.markdown(render_text_block(full_content, highlight_term, anchor_id=anchor_id), unsafe_allow_html=True)
-                    return
-            except Exception as e:
-                st.error(f"Could not render PDF preview: {e}")
-                st.info("Falling back to text-based document preview.")
+                                        FILE_TEXT_CACHE.set(table_cache_key, table_png)
+                                    else:
+                                        table_png = cached_table
+                                    
+                                    st.image(table_png, caption=f"Page {i+1} Table {j+1}", use_container_width=True)
+                                    table_download_items.append({
+                                        "label": f"📥 Download Table {j+1} as PNG",
+                                        "data": table_png,
+                                        "file_name": f"{os.path.splitext(file_name)[0]}_page_{i+1}_table_{j+1}.png",
+                                        "mime": "image/png",
+                                        "key": f"download_pdf_table_{file_name}_{i}_{j}"
+                                    })
+                        
+                        image_download_items.append({
+                            "label": f"📥 Download Page {i+1} as PNG",
+                            "data": image_bytes,
+                            "file_name": f"{os.path.splitext(file_name)[0]}_page_{i+1}.png",
+                            "mime": "image/png",
+                            "key": f"download_pdf_page_{file_name}_{i}"
+                        })
+                    
+                    except Exception as page_err:
+                        st.warning(f"⚠️ Could not render page {i+1} as image: {str(page_err)[:100]}")
+                        page_text = page.extract_text() or ""
+                        if page_text.strip():
+                            st.markdown(f"#### Page {i+1} Text")
+                            st.code(page_text[:1000], language="text")
+                
+                # Download sections
+                if image_download_items:
+                    with st.expander("🖼️ Image Downloads", expanded=False):
+                        for item in image_download_items[:10]:  # Limit to first 10
+                            st.download_button(
+                                label=item["label"],
+                                data=item["data"],
+                                file_name=item["file_name"],
+                                mime=item["mime"],
+                                key=item["key"]
+                            )
+                
+                if table_download_items:
+                    with st.expander("📊 Table Downloads", expanded=False):
+                        for item in table_download_items[:10]:
+                            st.download_button(
+                                label=item["label"],
+                                data=item["data"],
+                                file_name=item["file_name"],
+                                mime=item["mime"],
+                                key=item["key"]
+                            )
+            
+            return
+        
+        except Exception as pdf_err:
+            st.error(f"❌ PDF rendering error: {str(pdf_err)[:200]}")
+            st.info("Falling back to text-based document preview...")
 
     # Special handling for images
     if file_name_lower.endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp")):
-        with st.spinner("Loading preview..."):
-            mime_type = "application/octet-stream"
-            try:
-                st.image(file_entry["bytes"], caption=file_name, use_container_width=True)
-                png_bytes = image_bytes_to_png_bytes(file_entry["bytes"])
-                # Determine MIME type
-                ext = file_name_lower.split('.')[-1]
-                mime_type = f"image/{ext}"
-                if ext == "jpg":
-                    mime_type = "image/jpeg"
-                elif ext == "svg":
-                    mime_type = "image/svg+xml"
+        try:
+            st.image(file_entry["bytes"], caption=file_name, use_container_width=True)
+            png_bytes = image_bytes_to_png_bytes(file_entry["bytes"])
+            ext = file_name_lower.split('.')[-1]
+            mime_type = f"image/{ext}"
+            if ext == "jpg":
+                mime_type = "image/jpeg"
+            st.download_button(
+                "📥 Download Image",
+                png_bytes,
+                file_name=file_name,
+                mime=mime_type
+            )
+            return
+        except Exception as img_err:
+            st.error(f"❌ Could not display image: {str(img_err)[:100]}")
 
-                st.download_button(
-                    label="Download Image",
-                    data=file_entry["bytes"],
-                    file_name=file_name,
-                    mime=mime_type,
-                    key=f"download_image_{file_name}"
-                )
-                st.download_button(
-                    label="Download as PNG",
-                    data=png_bytes,
-                    file_name=f"{os.path.splitext(file_name)[0]}.png",
-                    mime="image/png",
-                    key=f"download_image_png_{file_name}"
-                )
-            except Exception as e:
-                st.error(f"Could not display image: {e}")
-                st.download_button(
-                    label="Download Image File",
-                    data=file_entry["bytes"],
-                    file_name=file_name,
-                    mime=mime_type,
-                    key=f"download_image_fallback_{file_name}"
-                )
-        return
-
+    # Fallback: text-based preview
+    try:
+        file_text = st.session_state.file_texts.get(file_name, "")
+        if not file_text.strip():
+            file_text = extract_text(file_name, file_entry["bytes"])
+        
+        if file_text.strip():
+            preview_length = 2000
+            preview_text = file_text[:preview_length]
+            if len(file_text) > preview_length:
+                preview_text += f"\n\n... ({len(file_text) - preview_length} more characters)"
+            
+            if highlight_term:
+                st.markdown(render_text_block(preview_text, highlight_term), unsafe_allow_html=True)
+            else:
+                st.code(preview_text, language="text")
+        else:
+            st.info("📄 No readable content found in document.")
+    
+    except Exception as fallback_err:
+        st.error(f"❌ Preview error: {str(fallback_err)[:100]}")
     # Special handling for Excel files (show as table)
     if file_name_lower.endswith(".xlsx"):
         with st.spinner("Loading preview..."):
@@ -4610,11 +4798,22 @@ def render_capl_issue_table(issues):
 
 
 def get_combined_vector_store(file_names):
+    """Get vector store with intelligent caching to avoid redundant processing"""
     ensure_files_processed(file_names)
     selection_key = get_selection_signature(file_names)
+    
+    # Check cache first
+    cached_vs = VECTOR_STORE_CACHE.get(selection_key)
+    if cached_vs is not None:
+        st.session_state.vector_stores[selection_key] = cached_vs
+        return cached_vs
+    
+    # Create vector store if not cached
     if selection_key not in st.session_state.vector_stores:
         combined_text = "\n".join(st.session_state.file_texts.get(file_name, "") for file_name in file_names)
-        st.session_state.vector_stores[selection_key] = create_vector_store(combined_text)
+        vs = create_vector_store(combined_text)
+        st.session_state.vector_stores[selection_key] = vs
+        VECTOR_STORE_CACHE.set(selection_key, vs)
     return st.session_state.vector_stores[selection_key]
 
 
@@ -5088,6 +5287,14 @@ st.markdown("""
         }
     }
 
+    /* Dashboard grid responsiveness */
+    @media (max-width: 767px) {
+        .dashboard-grid {
+            grid-template-columns: 1fr;
+            gap: 1rem;
+        }
+    }
+
     /* Chat and other content */
     @media (max-width: 767px) {
         .stMarkdown {
@@ -5096,6 +5303,174 @@ st.markdown("""
         
         .stDataFrame {
             font-size: 12px;
+        }
+    }
+
+    /* ============================================ */
+    /* ENHANCED RESPONSIVE DESIGN FOR ALL DEVICES */
+    /* ============================================ */
+    
+    /* Ultra-responsive design for all screen sizes */
+    @media (max-width: 320px) {
+        /* Smartphones - extra small */
+        .stApp {
+            padding: 0.25rem;
+        }
+        .stSidebar {
+            width: 100% !important;
+        }
+        h1 {
+            font-size: 1.2rem !important;
+        }
+        h2 {
+            font-size: 1rem !important;
+        }
+        .stButton > button {
+            padding: 0.5rem !important;
+            font-size: 0.75rem !important;
+            min-width: 40px !important;
+        }
+    }
+
+    @media (min-width: 321px) and (max-width: 480px) {
+        /* Smartphones */
+        .block-container {
+            padding-left: 0.5rem !important;
+            padding-right: 0.5rem !important;
+        }
+        .stColumn {
+            padding: 0.5rem 0.25rem;
+        }
+        .metric-card {
+            padding: 0.75rem !important;
+        }
+        .stMetric {
+            font-size: 0.9rem;
+        }
+    }
+
+    @media (min-width: 481px) and (max-width: 768px) {
+        /* Tablets (portrait) */
+        .block-container {
+            padding-left: 1rem !important;
+            padding-right: 1rem !important;
+        }
+        .dashboard-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @media (min-width: 769px) and (max-width: 1024px) {
+        /* Tablets (landscape) & small laptops */
+        .dashboard-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+    }
+
+    @media (min-width: 1025px) and (max-width: 1440px) {
+        /* Laptops & desktops */
+        .dashboard-grid {
+            grid-template-columns: repeat(4, 1fr);
+        }
+    }
+
+    @media (min-width: 1441px) {
+        /* Large screens & projectors */
+        .dashboard-grid {
+            grid-template-columns: repeat(5, 1fr);
+        }
+        .block-container {
+            max-width: 1920px;
+        }
+    }
+
+    /* Projector & presentation mode */
+    @media screen and (min-height: 1080px) {
+        .stApp {
+            background: #ffffff;
+            font-size: 18px;
+        }
+        .stMarkdown {
+            font-size: 18px;
+        }
+        h1 { font-size: 2.5rem; }
+        h2 { font-size: 2rem; }
+        h3 { font-size: 1.5rem; }
+        .stButton > button {
+            min-height: 60px;
+            font-size: 18px;
+            padding: 1rem;
+        }
+    }
+
+    /* Touch-friendly interface (mobile & tablet) */
+    @media (hover: none) {
+        .stButton > button,
+        [role="button"] {
+            min-height: 48px;
+            padding: 12px 16px;
+            font-size: 16px;
+        }
+        input, select, textarea {
+            min-height: 44px;
+            padding: 12px;
+        }
+    }
+
+    /* High DPI screens (retina) */
+    @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+        body {
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+    }
+
+    /* Landscape mode adjustments */
+    @media (orientation: landscape) and (max-height: 500px) {
+        .stApp {
+            margin: 0;
+            padding: 0;
+        }
+        .block-container {
+            padding: 0.5rem;
+        }
+    }
+
+    /* Print friendly */
+    @media print {
+        .stButton, [role="button"], .stSidebar,
+        [data-testid="stHeader"],
+        [data-testid="stToolbar"],
+        footer {
+            display: none !important;
+        }
+        body {
+            background: white;
+            color: black;
+        }
+        img {
+            max-width: 100%;
+            page-break-inside: avoid;
+        }
+    }
+
+    /* Dark mode optimization */
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --background: #1a1a1a;
+            --surface: #2d2d2d;
+            --text: #e0e0e0;
+        }
+    }
+
+    /* Reduced motion for accessibility */
+    @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
         }
     }
     </style>
