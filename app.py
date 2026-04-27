@@ -15,7 +15,6 @@ from functools import lru_cache
 from collections import OrderedDict
 
 import docx, openpyxl, pdfplumber, streamlit as st
-import streamlit.components.v1 as components
 from docx.text.paragraph import Paragraph
 from docx.table import Table
 import pandas as pd
@@ -193,6 +192,12 @@ if ('caches' in window) {
 }
 </script>
 """
+
+
+def render_html_frame(html_content, height="content", width="stretch"):
+    """Render inline HTML through st.iframe."""
+    encoded_html = urllib.parse.quote(str(html_content), safe="")
+    st.iframe(f"data:text/html;charset=utf-8,{encoded_html}", width=width, height=height)
 
 
 # -------------------------------
@@ -381,7 +386,7 @@ load_preview_data()
 cleanup_expired_preview_tokens()
 
 # Remove stale browser caches that can break Streamlit websocket reruns.
-components.html(CACHE_SCRIPT, height=0, scrolling=False)
+render_html_frame(CACHE_SCRIPT, height=0)
 
 try:
     logo_data = get_needle_minimalist_logo()
@@ -1170,7 +1175,7 @@ def render_status_strip():
     </div>
     """
 
-    components.html(status_html, height=120)
+    render_html_frame(status_html, height=120)
 
 
 def _help_state_key(tab_name):
@@ -1306,7 +1311,7 @@ if st.session_state.is_authenticated:
 
     st.divider()
 
-    components.html(
+    render_html_frame(
         """
         <style>
             section.main > div:first-child {
@@ -1396,7 +1401,6 @@ if st.session_state.is_authenticated:
         </script>
         """,
         height=0,
-        scrolling=False,
     )
 
     if not st.session_state.get('welcome_shown', False):
@@ -6369,7 +6373,7 @@ if active_main_tab == "📂 Compare":
     if st.session_state.compare_result_html and st.session_state.compare_result_files:
         st.info("Compared files: " + ", ".join(st.session_state.compare_result_files))
         st.markdown(f"### Comparison Results ({len(st.session_state.compare_result_files)} files)")
-        st.components.v1.html(st.session_state.compare_result_html, height=800, scrolling=True)
+        render_html_frame(st.session_state.compare_result_html, height=800)
 
         st.markdown("### Download Excel Comparison")
         st.download_button(
