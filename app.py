@@ -155,60 +155,26 @@ def cleanup_expired_preview_tokens():
     save_preview_data()
 
 
-# Client-side caching HTML/JS
+# Streamlit relies on fresh frontend assets and websocket message state. A custom
+# service worker can leave stale cached assets behind and trigger Cached ForwardMsg
+# MISS errors during reruns, especially after login.
 CACHE_SCRIPT = """
 <script>
-// Enable aggressive browser caching for static assets
 if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/static/sw.js').catch(err => {
-        console.log('ServiceWorker registration failed:', err);
+    navigator.serviceWorker.getRegistrations().then(registrations => {
+        registrations.forEach(registration => registration.unregister());
+    }).catch(err => {
+        console.log('ServiceWorker cleanup skipped:', err);
     });
 }
 
-// LocalStorage caching for app state
-const AppCache = {
-    setItem: (key, value) => {
-        try {
-            localStorage.setItem('app_' + key, JSON.stringify({value, timestamp: Date.now()}));
-        } catch(e) {
-            console.log('LocalStorage full or disabled');
-        }
-    },
-    getItem: (key, maxAge = 3600000) => {
-        try {
-            const stored = localStorage.getItem('app_' + key);
-            if (!stored) return null;
-            const {value, timestamp} = JSON.parse(stored);
-            if (Date.now() - timestamp > maxAge) {
-                localStorage.removeItem('app_' + key);
-                return null;
-            }
-            return value;
-        } catch(e) {
-            return null;
-        }
-    },
-    clear: () => localStorage.clear()
-};
-
-// Lazy load images/content
-const lazyLoadElements = () => {
-    document.querySelectorAll('[data-lazy="true"]').forEach(el => {
-        if (el.getBoundingClientRect().top < window.innerHeight) {
-            if (el.dataset.src) {
-                el.src = el.dataset.src;
-            }
-            if (el.dataset.html) {
-                el.innerHTML = el.dataset.html;
-            }
-            el.removeAttribute('data-lazy');
-        }
+if ('caches' in window) {
+    caches.keys().then(keys => {
+        keys.forEach(key => caches.delete(key));
+    }).catch(err => {
+        console.log('Cache cleanup skipped:', err);
     });
-};
-
-window.addEventListener('scroll', lazyLoadElements, {passive: true});
-window.addEventListener('resize', lazyLoadElements, {passive: true});
-lazyLoadElements();
+}
 </script>
 """
 
@@ -398,8 +364,8 @@ load_preview_data()
 # Clean up expired preview tokens on app start
 cleanup_expired_preview_tokens()
 
-# Inject client-side caching script
-st.markdown(CACHE_SCRIPT, unsafe_allow_html=True)
+# Remove stale browser caches that can break Streamlit websocket reruns.
+components.html(CACHE_SCRIPT, height=0, scrolling=False)
 
 try:
     logo_data = get_needle_minimalist_logo()
