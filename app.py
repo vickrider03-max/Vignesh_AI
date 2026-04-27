@@ -41,7 +41,8 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 PREVIEW_TOKENS = {}  # token -> {'file_name': str, 'timestamp': datetime}
 PREVIEW_STORE = {}   # token -> file_dict
 
-PREVIEW_DATA_FILE = "preview_data.pkl"
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+PREVIEW_DATA_FILE = os.path.join(APP_DIR, "preview_data.pkl")
 PDF_PREVIEW_RESOLUTION = 100
 PDF_PREVIEW_WINDOW = 5
 PDF_ASSET_SCAN_PAGE_LIMIT = 10
@@ -123,10 +124,17 @@ def load_preview_data():
         try:
             with open(PREVIEW_DATA_FILE, "rb") as f:
                 data = pickle.load(f)
-                PREVIEW_TOKENS = data.get("tokens", {})
-                PREVIEW_STORE = data.get("store", {})
+            if not isinstance(data, dict):
+                raise ValueError("preview data is not a dictionary")
+            PREVIEW_TOKENS = data.get("tokens", {}) if isinstance(data.get("tokens", {}), dict) else {}
+            PREVIEW_STORE = data.get("store", {}) if isinstance(data.get("store", {}), dict) else {}
         except Exception as e:
-            st.warning(f"Could not load preview data: {e}")
+            backup_path = f"{PREVIEW_DATA_FILE}.corrupt.{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            try:
+                os.replace(PREVIEW_DATA_FILE, backup_path)
+                st.warning("Preview cache was corrupted and has been reset. Please open the document preview again from the sidebar.")
+            except Exception:
+                st.warning(f"Could not load preview data: {e}")
             PREVIEW_TOKENS = {}
             PREVIEW_STORE = {}
 
@@ -137,8 +145,12 @@ def save_preview_data():
             "tokens": PREVIEW_TOKENS,
             "store": PREVIEW_STORE
         }
-        with open(PREVIEW_DATA_FILE, "wb") as f:
+        temp_file = f"{PREVIEW_DATA_FILE}.tmp"
+        with open(temp_file, "wb") as f:
             pickle.dump(data, f)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temp_file, PREVIEW_DATA_FILE)
     except Exception as e:
         st.warning(f"Could not save preview data: {e}")
 
@@ -155,8 +167,8 @@ def cleanup_expired_preview_tokens():
         if token in PREVIEW_STORE:
             del PREVIEW_STORE[token]
     
-    # Save updated data
-    save_preview_data()
+    if expired_tokens:
+        save_preview_data()
 
 
 # Streamlit relies on fresh frontend assets and websocket message state. A custom
@@ -2761,11 +2773,9 @@ if "preview_token" in query_params and query_params["preview_token"]:
 
     # If preview_token is present but not found, show error and stop
     if not token_data:
-        st.title("Preview Error")
-        st.error(f"Preview token '{preview_token}' not found or expired.")
-        st.write("Debug info:")
-        st.write(f"Available tokens: {list(PREVIEW_TOKENS.keys())}")
-        st.write(f"Query params: {query_params}")
+        st.title("Document Preview")
+        st.warning("This preview link is no longer available.")
+        st.info("Return to the main app and click the eye preview button next to the uploaded file again.")
         st.stop()
 
 if preview_file_from_url:
