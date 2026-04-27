@@ -31,6 +31,12 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+
+@st.cache_data
+def load_data():
+    # expensive operation
+    return data
+
 # -------------------------------
 # GLOBAL VARIABLES & CONSTANTS
 # -------------------------------
