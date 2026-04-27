@@ -1103,7 +1103,30 @@ def render_status_strip():
         }}
         @media (max-width: 560px) {{
             .dashboard-grid {{
-                grid-template-columns: 1fr;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 8px;
+                padding: 4px 2px 8px;
+            }}
+            .metric-card {{
+                min-height: 74px;
+                border-radius: 12px;
+                padding: 9px 8px;
+                box-shadow: 0 6px 14px rgba(15, 23, 42, 0.12);
+            }}
+            .card-label {{
+                font-size: 0.54rem !important;
+                letter-spacing: 0.04em;
+                margin-bottom: 4px;
+                white-space: normal;
+            }}
+            .card-value {{
+                font-size: clamp(0.82rem, 4vw, 1rem) !important;
+                line-height: 1.15;
+                overflow-wrap: anywhere;
+            }}
+            #live-timer {{
+                font-size: clamp(0.78rem, 3.8vw, 0.95rem) !important;
+                letter-spacing: 0.02em;
             }}
         }}
     </style>
@@ -1150,7 +1173,7 @@ def render_status_strip():
     </div>
     """
 
-    render_html_frame(status_html, height=120)
+    render_html_frame(status_html, height=180)
 
 
 def _help_state_key(tab_name):
@@ -5663,6 +5686,32 @@ st.markdown(
         }
         [data-testid="stHorizontalBlock"] > div {
             min-width: 0 !important;
+        }
+        [data-testid="stHorizontalBlock"]:has(.st-key-reset_chat_selection),
+        [data-testid="stHorizontalBlock"]:has(.st-key-reset_dashboard_selection),
+        [data-testid="stHorizontalBlock"]:has(.st-key-reset_compare_selection),
+        [data-testid="stHorizontalBlock"]:has(.st-key-reset_capl_selection) {
+            display: grid !important;
+            grid-template-columns: minmax(0, 1fr) auto !important;
+            align-items: center !important;
+            column-gap: 0.75rem !important;
+        }
+        [data-testid="stHorizontalBlock"]:has(.st-key-reset_chat_selection) > div,
+        [data-testid="stHorizontalBlock"]:has(.st-key-reset_dashboard_selection) > div,
+        [data-testid="stHorizontalBlock"]:has(.st-key-reset_compare_selection) > div,
+        [data-testid="stHorizontalBlock"]:has(.st-key-reset_capl_selection) > div {
+            width: auto !important;
+            min-width: 0 !important;
+        }
+        .st-key-reset_chat_selection button,
+        .st-key-reset_dashboard_selection button,
+        .st-key-reset_compare_selection button,
+        .st-key-reset_capl_selection button {
+            width: auto !important;
+            min-width: 92px !important;
+            white-space: nowrap !important;
+            padding-left: 0.75rem !important;
+            padding-right: 0.75rem !important;
         }
         [data-testid="stHorizontalBlock"]:has(.st-key-header_brain_icon) {
             display: grid !important;
