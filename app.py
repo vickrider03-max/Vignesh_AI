@@ -255,13 +255,10 @@ def get_needle_minimalist_logo():
 # -------------------------------
 st.set_page_config(page_title="🧠 IntelliDoc AI ", layout="wide")
 
-# Mobile viewport meta tag for proper scaling on all devices
+# Mobile viewport meta tag for proper scaling
 st.markdown(
     """
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     """,
     unsafe_allow_html=True,
 )
@@ -535,7 +532,7 @@ st.markdown(
 
         .dashboard-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
             gap: 1rem;
             margin: 1rem 0;
         }
@@ -1021,7 +1018,7 @@ def render_status_strip():
         }}
         .dashboard-grid {{
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr));
+            grid-template-columns: repeat(4, minmax(0, 1fr));
             gap: 10px;
             padding: 4px 2px;
         }}
@@ -3305,7 +3302,193 @@ def render_chat_summary_downloads():
                 )
 
 
+def build_adaptive_document_analysis(file_name, file_bytes, text):
+    raw_text = str(text or "")
+    lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+    words = re.findall(r"\w+", raw_text)
+    title_match = re.search(r"Title:\s*(.+)", raw_text)
+    title = title_match.group(1).strip() if title_match and title_match.group(1).strip() else file_name
+
+    keyword_counts = Counter(
+        word.lower()
+        for word in words
+        if len(word) > 3 and word.lower() not in SUMMARY_STOPWORDS and not word.isdigit()
+    )
+    keywords = [word.title() for word, _ in keyword_counts.most_common(8)]
+    keyword_text = ", ".join(keywords) if keywords else "Not available"
+    page_count, image_count, table_count = get_document_asset_counts(file_name, file_bytes, raw_text)
+
+    ignored_prefixes = (
+        "pdf metadata:", "document metadata:", "meta tags:", "total pages:", "total slides:",
+        "workbook contains", "error:", "[image:", "[embedded_image:", "table:"
+    )
+
+    def clean_content_lines(max_items=12):
+        cleaned = []
+        seen = set()
+        for line in lines:
+            line_lower = line.lower()
+            if line_lower.startswith(ignored_prefixes):
+                continue
+            if len(line) < 8 or len(line) > 240:
+                continue
+            if re.fullmatch(r"[\W_]+", line):
+                continue
+            if line in seen:
+                continue
+            seen.add(line)
+            cleaned.append(line)
+            if len(cleaned) >= max_items:
+                break
+        return cleaned
+
+    key_lines = clean_content_lines(12)
+    headings = extract_document_headings(raw_text)
+    toc_entries = extract_toc_with_page_numbers(raw_text)
+    lower_text = raw_text.lower()
+    file_name_lower = file_name.lower()
+    type_scores = {
+        "technical": sum(1 for term in [
+            "architecture", "system", "module", "component", "workflow", "api", "interface",
+            "configuration", "requirement", "software", "hardware", "capl", "diagnostic", "test"
+        ] if term in lower_text),
+        "business": sum(1 for term in [
+            "strategy", "market", "customer", "revenue", "business", "goal", "objective",
+            "stakeholder", "risk", "cost", "benefit", "performance", "operation"
+        ] if term in lower_text),
+        "research": sum(1 for term in [
+            "abstract", "methodology", "experiment", "hypothesis", "dataset", "findings",
+            "results", "conclusion", "references", "study", "analysis"
+        ] if term in lower_text),
+    }
+    if file_name_lower.endswith((".can", ".capl")):
+        type_scores["technical"] += 4
+    if file_name_lower.endswith((".xlsx", ".html", ".htm")):
+        type_scores["business"] += 1
+    document_type = max(type_scores, key=type_scores.get) if max(type_scores.values() or [0]) > 0 else "general"
+
+    def pick_lines(patterns, limit=5):
+        selected = []
+        seen = set()
+        for line in key_lines + lines:
+            if len(line) < 8 or len(line) > 260:
+                continue
+            line_lower = line.lower()
+            if any(pattern in line_lower for pattern in patterns) and line not in seen:
+                selected.append(line)
+                seen.add(line)
+            if len(selected) >= limit:
+                break
+        return selected
+
+    feature_lines = pick_lines(["feature", "component", "module", "function", "capability", "system", "interface", "configuration"])
+    workflow_lines = pick_lines(["step", "process", "workflow", "flow", "first", "then", "after", "before", "execute", "upload", "select"])
+    use_case_lines = pick_lines(["use case", "application", "used for", "used to", "can be used", "supports", "helps", "enables"])
+    important_note_lines = pick_lines(["warning", "caution", "note", "limit", "constraint", "assumption", "must", "shall", "required", "error"])
+
+    context_bits = []
+    if page_count:
+        context_bits.append(f"{page_count} pages/sections")
+    if image_count:
+        context_bits.append(f"{image_count} images")
+    if table_count:
+        context_bits.append(f"{table_count} tables")
+    context_text = ", ".join(context_bits) if context_bits else f"{len(lines)} content lines"
+
+    def bullet_list(items, fallback):
+        usable_items = [item for item in items if item] or fallback
+        return "<ul>" + "".join(f"<li>{html.escape(str(item))}</li>" for item in usable_items) + "</ul>"
+
+    def section(title_text, body_html):
+        if not body_html:
+            return ""
+        return f"<h4 style='margin:16px 0 6px 0; color:#173152;'>{html.escape(title_text)}</h4>{body_html}"
+
+    structure_items = []
+    if toc_entries:
+        structure_items = [
+            f"{num + ' ' if num else ''}{heading}" + (f" - page {page_num}" if page_num else "")
+            for num, heading, page_num in toc_entries[:6]
+        ]
+    elif headings:
+        structure_items = [f"{num + ' ' if num else ''}{heading}" for num, heading in headings[:6]]
+    else:
+        structure_items = [
+            "Content is presented as extracted text rather than clearly labeled sections.",
+            f"Detected document assets: {context_text}.",
+        ]
+
+    purpose_by_type = {
+        "technical": "to describe a system, process, implementation, test, or technical capability",
+        "business": "to communicate objectives, operational context, metrics, or decision-oriented information",
+        "research": "to explain a problem, method, evidence, findings, and conclusions",
+        "general": "to present information in a readable and referenceable form",
+    }
+    summary_focus = ", ".join(keywords[:4]) if keywords else "the extracted document content"
+    key_point_items = key_lines[:5] or ["No detailed content lines could be extracted, but document metadata was detected."]
+    insight_items = [
+        f"The document appears to focus on {summary_focus}.",
+        f"It should be read as a {document_type} document.",
+    ]
+    if image_count or table_count:
+        insight_items.append("Visual or tabular assets may contain supporting details that complement the extracted text.")
+    if important_note_lines:
+        insight_items.append("Several lines contain requirements, constraints, warnings, or operational notes.")
+
+    simplified_items = [
+        f"In simple terms, this document is about {summary_focus}.",
+        "It collects the main information a reader needs to understand the topic, context, and next actions.",
+    ]
+    takeaway_items = []
+    if keywords:
+        takeaway_items.append(f"Primary themes: {', '.join(keywords[:5])}.")
+    takeaway_items.extend(key_point_items[:4])
+    takeaway_items = takeaway_items[:5]
+
+    summary_html = f"""
+    <div>
+        <div><b>What the document is about:</b> {html.escape(title)}</div>
+        <div><b>Main purpose:</b> {html.escape(purpose_by_type[document_type])}.</div>
+        <div><b>Key context:</b> {html.escape(context_text)}. Detected type: {html.escape(document_type.title())}.</div>
+        <div><b>Important themes:</b> {html.escape(keyword_text)}</div>
+    </div>
+    """
+
+    optional_sections = ""
+    if feature_lines or document_type == "technical":
+        optional_sections += section("Features / Concepts / Components", bullet_list(
+            feature_lines,
+            [f"Relevant concepts include {keyword_text}.", "No explicit feature list was detected in the extracted text."]
+        ))
+    if workflow_lines or document_type == "technical":
+        optional_sections += section("Workflow / Process", bullet_list(
+            workflow_lines,
+            ["No clear step-by-step workflow was detected in the extracted text."]
+        ))
+    if use_case_lines or document_type in ("technical", "business"):
+        optional_sections += section("Use Cases / Applications", bullet_list(
+            use_case_lines,
+            ["Use this document as a reference for understanding the topic, validating details, or planning related work."]
+        ))
+    if important_note_lines:
+        optional_sections += section("Important Notes", bullet_list(important_note_lines, []))
+
+    return f"""
+    <div style="margin-bottom:18px; line-height:1.5;">
+        <h3 style="margin:0 0 10px 0; color:#173152;">Document Analysis: {html.escape(file_name)}</h3>
+        {section("Summary", summary_html)}
+        {section("Key Points", bullet_list(key_point_items, []))}
+        {section("Structure Breakdown", bullet_list(structure_items, []))}
+        {section("Key Insights / Core Insights", bullet_list(insight_items, []))}
+        {optional_sections}
+        {section("Simplified Explanation", bullet_list(simplified_items, []))}
+        {section("Key Takeaways", bullet_list(takeaway_items, []))}
+    </div>
+    """
+
+
 def build_detailed_document_summary(file_name, file_bytes, text):
+    return build_adaptive_document_analysis(file_name, file_bytes, text)
     lines = [line.strip() for line in str(text).splitlines() if line.strip()]
     words = re.findall(r"\w+", str(text))
     title_match = re.search(r"Title:\s*(.+)", str(text))
@@ -3977,7 +4160,7 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
         /* Feature cards */
         .feature-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+            grid-template-columns: repeat(2, minmax(280px, 1fr));
             gap: 16px;
             align-items: stretch;
             margin-top: 8px;
@@ -4032,30 +4215,21 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             margin-top: 16px !important;
         }
 
-        /* Responsive design - Tablets */
+        /* Responsive design */
         @media (max-width: 768px) {
-            [data-testid="stAppViewContainer"] {
-                flex-direction: column !important;
-            }
             [data-testid="column"]:first-child {
                 padding: 24px 12px 16px !important;
                 order: 2 !important;
                 min-height: auto !important;
-                flex: 1 1 100% !important;
-                width: 100% !important;
             }
             [data-testid="column"]:nth-child(2) {
                 width: 100% !important;
                 padding: 12px !important;
                 order: 1 !important;
                 min-height: auto !important;
-                flex: 1 1 100% !important;
-            }
-            [data-testid="stHorizontalBlock"] {
-                flex-direction: column !important;
             }
             .ai-tagline {
-                font-size: clamp(1.6rem, 5vw, 2rem) !important;
+                font-size: 2rem !important;
             }
             .login-panel {
                 width: 100% !important;
@@ -4063,48 +4237,6 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             }
             .feature-grid {
                 grid-template-columns: 1fr;
-            }
-        }
-        /* Responsive design - Small phones */
-        @media (max-width: 480px) {
-            [data-testid="column"]:first-child {
-                padding: 12px 8px !important;
-            }
-            [data-testid="column"]:nth-child(2) {
-                padding: 8px !important;
-            }
-            .ai-tagline {
-                font-size: clamp(1.3rem, 5vw, 1.7rem) !important;
-                margin-bottom: 16px !important;
-            }
-            .ai-description {
-                font-size: 0.9rem !important;
-                margin-bottom: 20px !important;
-            }
-            .login-panel {
-                padding: 16px 14px !important;
-                border-radius: 16px !important;
-            }
-            .brand-strip {
-                gap: 8px !important;
-            }
-            .brand-logo-3d {
-                width: 44px !important;
-                height: 44px !important;
-            }
-            .trust-row {
-                font-size: 0.85rem !important;
-                margin-bottom: 24px !important;
-            }
-            .feature-card {
-                padding: 12px !important;
-                min-height: auto !important;
-            }
-            .feature-card h4 {
-                font-size: 0.95rem !important;
-            }
-            .feature-card li {
-                font-size: 0.85rem !important;
             }
         }
     </style>
@@ -4222,122 +4354,23 @@ if not st.session_state.is_authenticated and "preview_token" not in query_params
             border-radius: 10px !important;
         }
 
-        /* Login form styling via Streamlit key selectors (works without .login-panel wrapper) */
-        .st-key-username [data-testid="stTextInput"],
-        .st-key-password [data-testid="stTextInput"] {
-            margin-bottom: 8px !important;
-        }
-        .st-key-username [data-testid="stTextInput"] label,
-        .st-key-username [data-testid="stTextInput"] label p,
-        .st-key-username [data-testid="stTextInput"] label span,
-        .st-key-password [data-testid="stTextInput"] label,
-        .st-key-password [data-testid="stTextInput"] label p,
-        .st-key-password [data-testid="stTextInput"] label span {
-            color: #3B5E7F !important;
-            -webkit-text-fill-color: #3B5E7F !important;
-            opacity: 1 !important;
-        }
-        .st-key-username [data-baseweb="base-input"],
-        .st-key-username [data-baseweb="input"],
-        .st-key-username [data-testid="stTextInput"] > div > div,
-        .st-key-password [data-baseweb="base-input"],
-        .st-key-password [data-baseweb="input"],
-        .st-key-password [data-testid="stTextInput"] > div > div {
-            background: rgba(230, 244, 248, 0.85) !important;
-            border: 1.5px solid rgba(176, 224, 230, 0.6) !important;
-            border-radius: 12px !important;
-            box-shadow: none !important;
-        }
-        .st-key-username [data-baseweb="base-input"]:focus-within,
-        .st-key-username [data-baseweb="input"]:focus-within,
-        .st-key-password [data-baseweb="base-input"]:focus-within,
-        .st-key-password [data-baseweb="input"]:focus-within {
-            border: 1.5px solid #87CEEB !important;
-            box-shadow: 0 0 0 2px rgba(135, 206, 235, 0.3) !important;
-            outline: none !important;
-        }
-        .st-key-username input:focus,
-        .st-key-username input:invalid,
-        .st-key-password input:focus,
-        .st-key-password input:invalid {
-            outline: none !important;
-            box-shadow: none !important;
-            border-color: #87CEEB !important;
-        }
-        .st-key-username input[type="text"],
-        .st-key-password input[type="password"] {
-            background: transparent !important;
-            color: #2C5F7F !important;
-            caret-color: #4D94B9 !important;
-            -webkit-text-fill-color: #2C5F7F !important;
-            border: none !important;
-            box-shadow: none !important;
-            font-weight: 600 !important;
-            letter-spacing: 0.2px !important;
-            font-size: 1rem !important;
-            padding: 12px 16px !important;
-        }
-        .st-key-username input[type="text"]::placeholder,
-        .st-key-password input[type="password"]::placeholder {
-            color: rgba(91, 127, 166, 0.65) !important;
-            opacity: 1 !important;
-            -webkit-text-fill-color: rgba(91, 127, 166, 0.65) !important;
-        }
-        .st-key-username input[type="text"]:focus,
-        .st-key-password input[type="password"]:focus {
-            background: transparent !important;
-            color: #2C5F7F !important;
-            -webkit-text-fill-color: #2C5F7F !important;
-            outline: none !important;
-        }
-        .st-key-signin .stButton > button,
-        .st-key-signin div.stButton > button {
-            width: 100% !important;
-            min-height: 42px !important;
-            padding: 0.45rem 0.9rem !important;
-            font-size: 0.98rem !important;
-            border-radius: 10px !important;
-        }
-
         /* Responsive design */
         @media (max-width: 768px) {
             [data-testid="column"]:first-child {
                 padding: 24px 12px 16px !important;
                 order: 2 !important;
-                flex: 1 1 100% !important;
-                width: 100% !important;
             }
             [data-testid="column"]:nth-child(2) {
                 width: 100% !important;
                 padding: 12px !important;
                 order: 1 !important;
-                flex: 1 1 100% !important;
-            }
-            [data-testid="stHorizontalBlock"] {
-                flex-direction: column !important;
             }
             .ai-tagline {
-                font-size: clamp(1.6rem, 5vw, 2rem) !important;
+                font-size: 2rem !important;
             }
             .login-panel {
                 width: 100% !important;
                 padding: 24px 20px !important;
-            }
-        }
-        @media (max-width: 480px) {
-            .login-panel {
-                padding: 16px 14px !important;
-                border-radius: 16px !important;
-            }
-            .login-panel .stButton > button,
-            .login-panel div.stButton > button {
-                min-height: 48px !important;
-                font-size: 16px !important;
-            }
-            .login-panel input[type="text"],
-            .login-panel input[type="password"] {
-                font-size: 16px !important;
-                padding: 14px 16px !important;
             }
         }
          /* 🔥 HARD OVERRIDE - kills ALL red focus from Streamlit/BaseWeb */
@@ -5782,480 +5815,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# =====================================================
-# COMPREHENSIVE RESPONSIVE DESIGN FOR ALL DEVICES
-# =====================================================
-# Ensures the app renders correctly on smartphones, tablets,
-# laptops, desktops, and large monitors without breaking
-# any existing features.
-st.markdown("""
-<style>
-    /* ---- FLUID ROOT ---- */
-    html {
-        -webkit-text-size-adjust: 100%;
-        -ms-text-size-adjust: 100%;
-        text-size-adjust: 100%;
-    }
-
-    /* ---- SAFE-AREA INSETS (notched phones) ---- */
-    .block-container,
-    .main .block-container {
-        padding-left: max(env(safe-area-inset-left, 0px), 0.75rem) !important;
-        padding-right: max(env(safe-area-inset-right, 0px), 0.75rem) !important;
-    }
-
-    /* ---- GLOBAL FLUID IMAGES & MEDIA ---- */
-    img, video, svg, canvas, iframe, embed, object {
-        max-width: 100%;
-        height: auto;
-    }
-
-    /* ---- TABLES: scrollable on small screens ---- */
-    table {
-        display: block;
-        width: 100%;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-    }
-
-    /* ---- CODE BLOCKS: prevent overflow ---- */
-    pre, code {
-        white-space: pre-wrap;
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-        max-width: 100%;
-    }
-
-    /* ---- PLOTLY CHARTS: responsive container ---- */
-    .js-plotly-plot, .plotly {
-        width: 100% !important;
-        max-width: 100% !important;
-    }
-    .js-plotly-plot .plot-container {
-        width: 100% !important;
-    }
-
-    /* ---- EXTRA-SMALL PHONES (<=360px) ---- */
-    @media (max-width: 360px) {
-        .block-container,
-        .main .block-container {
-            padding: 0.4rem !important;
-        }
-        h1 { font-size: clamp(1.1rem, 5vw, 1.4rem) !important; }
-        h2 { font-size: clamp(0.95rem, 4.5vw, 1.2rem) !important; }
-        h3 { font-size: clamp(0.85rem, 4vw, 1.05rem) !important; }
-        .stButton > button {
-            padding: 0.4rem 0.6rem !important;
-            font-size: 0.8rem !important;
-            min-height: 44px !important;
-        }
-        .metric-card {
-            padding: 0.6rem !important;
-        }
-        .card-value {
-            font-size: clamp(0.8rem, 4vw, 1rem) !important;
-        }
-        .card-label {
-            font-size: 0.55rem !important;
-        }
-        .feature-grid {
-            grid-template-columns: 1fr !important;
-            gap: 8px !important;
-        }
-        .feature-card {
-            padding: 12px !important;
-            min-height: auto !important;
-        }
-        .login-panel {
-            padding: 16px 12px !important;
-            border-radius: 16px !important;
-        }
-        .ai-tagline {
-            font-size: clamp(1.4rem, 6vw, 1.8rem) !important;
-        }
-        .ai-description {
-            font-size: 0.9rem !important;
-            margin-bottom: 24px !important;
-        }
-        div[role="radiogroup"] > label {
-            flex: 1 1 100% !important;
-            min-width: 0 !important;
-            padding: 10px 12px !important;
-            font-size: 14px !important;
-        }
-    }
-
-    /* ---- SMALL PHONES (361px - 480px) ---- */
-    @media (min-width: 361px) and (max-width: 480px) {
-        .block-container,
-        .main .block-container {
-            padding: 0.5rem !important;
-        }
-        h1 { font-size: clamp(1.2rem, 5vw, 1.6rem) !important; }
-        h2 { font-size: clamp(1rem, 4.5vw, 1.3rem) !important; }
-        .dashboard-grid {
-            grid-template-columns: 1fr !important;
-            gap: 8px !important;
-        }
-        .feature-grid {
-            grid-template-columns: 1fr !important;
-        }
-        .login-panel {
-            padding: 20px 16px !important;
-        }
-        div[role="radiogroup"] > label {
-            flex: 1 1 calc(50% - 6px) !important;
-            min-width: 0 !important;
-        }
-    }
-
-    /* ---- LARGE PHONES / SMALL TABLETS (481px - 767px) ---- */
-    @media (min-width: 481px) and (max-width: 767px) {
-        .block-container,
-        .main .block-container {
-            padding: 0.75rem !important;
-        }
-        .dashboard-grid {
-            grid-template-columns: repeat(2, 1fr) !important;
-        }
-        .feature-grid {
-            grid-template-columns: 1fr !important;
-        }
-        div[role="radiogroup"] > label {
-            flex: 1 1 calc(50% - 8px) !important;
-        }
-    }
-
-    /* ---- TABLET PORTRAIT (768px - 1023px) ---- */
-    @media (min-width: 768px) and (max-width: 1023px) {
-        .block-container,
-        .main .block-container {
-            padding: 1rem 1.25rem !important;
-        }
-        .dashboard-grid {
-            grid-template-columns: repeat(2, 1fr) !important;
-        }
-        .feature-grid {
-            grid-template-columns: repeat(2, 1fr) !important;
-        }
-        [data-testid="stSidebar"] {
-            width: 260px !important;
-            min-width: 220px !important;
-        }
-    }
-
-    /* ---- TABLET LANDSCAPE / SMALL LAPTOPS (1024px - 1279px) ---- */
-    @media (min-width: 1024px) and (max-width: 1279px) {
-        .block-container,
-        .main .block-container {
-            padding: 1.25rem 2rem !important;
-        }
-        .dashboard-grid {
-            grid-template-columns: repeat(3, 1fr) !important;
-        }
-    }
-
-    /* ---- LAPTOPS & DESKTOPS (1280px - 1599px) ---- */
-    @media (min-width: 1280px) and (max-width: 1599px) {
-        .block-container,
-        .main .block-container {
-            padding: 1.5rem 2.5rem !important;
-            max-width: 1500px !important;
-        }
-        .dashboard-grid {
-            grid-template-columns: repeat(4, 1fr) !important;
-        }
-    }
-
-    /* ---- LARGE DESKTOPS & MONITORS (1600px - 1919px) ---- */
-    @media (min-width: 1600px) and (max-width: 1919px) {
-        .block-container,
-        .main .block-container {
-            max-width: 1600px !important;
-            padding: 1.5rem 3rem !important;
-        }
-        .dashboard-grid {
-            grid-template-columns: repeat(4, 1fr) !important;
-        }
-    }
-
-    /* ---- ULTRA-WIDE & 4K (1920px+) ---- */
-    @media (min-width: 1920px) {
-        .block-container,
-        .main .block-container {
-            max-width: 1920px !important;
-            margin: 0 auto !important;
-            padding: 2rem 4rem !important;
-        }
-        .dashboard-grid {
-            grid-template-columns: repeat(5, 1fr) !important;
-        }
-        body {
-            font-size: 17px;
-        }
-    }
-
-    /* ---- MOBILE: full-width sidebar toggle ---- */
-    @media (max-width: 767px) {
-        /* Sidebar: slide-over drawer on mobile */
-        [data-testid="stSidebar"],
-        .stSidebar {
-            width: 85vw !important;
-            max-width: 320px !important;
-            min-width: 0 !important;
-            z-index: 9999 !important;
-        }
-        [data-testid="stSidebar"] > div {
-            width: 100% !important;
-            max-width: 100% !important;
-            padding: 0.75rem !important;
-            overflow-x: hidden !important;
-        }
-
-        /* Main content: full width on mobile */
-        section.main,
-        [data-testid="stMain"],
-        div[data-testid="stMain"],
-        div[data-testid="stAppViewContainer"] {
-            width: 100% !important;
-            max-width: 100% !important;
-            margin-left: 0 !important;
-            padding-left: 0 !important;
-        }
-
-        /* Horizontal blocks: wrap on mobile */
-        [data-testid="stHorizontalBlock"] {
-            flex-wrap: wrap !important;
-            gap: 0.5rem !important;
-        }
-        [data-testid="stHorizontalBlock"] > div {
-            min-width: 0 !important;
-            flex: 1 1 100% !important;
-        }
-
-        /* Columns: stack vertically on phone */
-        [data-testid="column"],
-        [data-testid="stColumn"] {
-            min-width: 100% !important;
-            width: 100% !important;
-            flex: 1 1 100% !important;
-        }
-
-        /* All Streamlit widgets: full width */
-        .stSelectbox,
-        .stMultiSelect,
-        .stTextInput,
-        .stTextArea,
-        .stNumberInput,
-        .stSlider,
-        .stCheckbox,
-        .stRadio,
-        .stDownloadButton,
-        .stFileUploader,
-        .stDataFrame,
-        [data-testid="stDataFrame"],
-        [data-testid="stMetric"],
-        [data-testid="stPlotlyChart"],
-        iframe {
-            width: 100% !important;
-            max-width: 100% !important;
-            min-width: 0 !important;
-        }
-
-        /* Data tables: horizontal scroll */
-        .stDataFrame,
-        [data-testid="stDataFrame"],
-        [data-testid="stTable"] {
-            overflow-x: auto !important;
-            -webkit-overflow-scrolling: touch !important;
-        }
-
-        /* Plotly charts: fit container */
-        [data-testid="stPlotlyChart"] {
-            overflow-x: auto !important;
-        }
-
-        /* Touch targets: minimum 44px */
-        .stButton > button,
-        [role="button"],
-        input,
-        select,
-        textarea {
-            min-height: 44px !important;
-        }
-        .stButton > button {
-            font-size: 15px !important;
-            padding: 10px 14px !important;
-        }
-
-        /* Prevent text zoom on iOS */
-        input[type="text"],
-        input[type="password"],
-        input[type="email"],
-        input[type="number"],
-        textarea,
-        select {
-            font-size: 16px !important;
-        }
-
-        /* File chips: wrap text */
-        .file-chip, .file-chip-wrap, .app-card {
-            max-width: 100% !important;
-            overflow-wrap: anywhere !important;
-            word-break: break-word !important;
-        }
-
-        /* Tab pills: 2-column grid */
-        div[role="radiogroup"] {
-            display: flex !important;
-            flex-wrap: wrap !important;
-            gap: 6px !important;
-        }
-        div[role="radiogroup"] > label {
-            flex: 1 1 calc(50% - 6px) !important;
-            min-width: 120px !important;
-            text-align: center !important;
-            justify-content: center !important;
-            min-height: 44px !important;
-        }
-
-        /* Expander: full width */
-        .streamlit-expanderHeader {
-            font-size: 14px !important;
-        }
-
-        /* Metric cards on phone */
-        [data-testid="stMetric"] {
-            overflow-wrap: anywhere !important;
-        }
-
-        /* Login page mobile */
-        [data-testid="column"]:first-child {
-            order: 2 !important;
-            min-height: auto !important;
-            padding: 16px 12px !important;
-        }
-        [data-testid="column"]:nth-child(2) {
-            order: 1 !important;
-            min-height: auto !important;
-            width: 100% !important;
-            padding: 12px !important;
-        }
-    }
-
-    /* ---- TABLET MID-RANGE (768px - 1180px) ---- */
-    @media (min-width: 768px) and (max-width: 1180px) {
-        [data-testid="stHorizontalBlock"] {
-            gap: 0.75rem !important;
-        }
-        [data-testid="column"],
-        [data-testid="stColumn"] {
-            min-width: 0 !important;
-        }
-        .stDataFrame,
-        [data-testid="stDataFrame"],
-        [data-testid="stTable"],
-        [data-testid="stPlotlyChart"],
-        iframe {
-            max-width: 100% !important;
-            overflow-x: auto !important;
-        }
-        div[role="radiogroup"] {
-            flex-wrap: wrap !important;
-        }
-    }
-
-    /* ---- LANDSCAPE PHONES ---- */
-    @media (orientation: landscape) and (max-height: 500px) {
-        .stApp {
-            margin: 0 !important;
-            padding: 0 !important;
-        }
-        .block-container,
-        .main .block-container {
-            padding: 0.35rem 0.5rem !important;
-        }
-        /* Reduce vertical padding for landscape */
-        .metric-card { padding: 0.5rem !important; }
-        .stButton > button { min-height: 36px !important; padding: 6px 12px !important; }
-    }
-
-    /* ---- TOUCH DEVICES (no hover) ---- */
-    @media (hover: none) and (pointer: coarse) {
-        .stButton > button,
-        [role="button"] {
-            min-height: 48px !important;
-            padding: 12px 16px !important;
-        }
-        input, select, textarea {
-            min-height: 44px !important;
-            padding: 10px 12px !important;
-        }
-        /* Larger tap targets for sidebar file buttons */
-        [data-testid="stSidebar"] button {
-            min-height: 48px !important;
-        }
-    }
-
-    /* ---- HIGH-DPI / RETINA DISPLAYS ---- */
-    @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
-        body {
-            -webkit-font-smoothing: antialiased !important;
-            -moz-osx-font-smoothing: grayscale !important;
-        }
-        img {
-            image-rendering: -webkit-optimize-contrast;
-        }
-    }
-
-    /* ---- PRINT ---- */
-    @media print {
-        .stSidebar, [data-testid="stSidebar"],
-        .stButton, [role="button"],
-        [data-testid="stHeader"],
-        [data-testid="stToolbar"],
-        footer,
-        .st-key-mobile_show_files_btn,
-        .st-key-mobile_open_workspace_btn {
-            display: none !important;
-        }
-        body {
-            background: white !important;
-            color: black !important;
-        }
-        .block-container {
-            max-width: 100% !important;
-            padding: 0.5in !important;
-        }
-        img {
-            max-width: 100% !important;
-            page-break-inside: avoid !important;
-        }
-    }
-
-    /* ---- DARK MODE (system preference) ---- */
-    @media (prefers-color-scheme: dark) {
-        :root {
-            --background: #1a1a2e;
-            --surface: #16213e;
-            --text: #e0e0e0;
-            --text-secondary: #a0a0a0;
-            --border: #333;
-        }
-    }
-
-    /* ---- REDUCED MOTION (accessibility) ---- */
-    @media (prefers-reduced-motion: reduce) {
-        *, *::before, *::after {
-            animation-duration: 0.01ms !important;
-            animation-iteration-count: 1 !important;
-            transition-duration: 0.01ms !important;
-            scroll-behavior: auto !important;
-        }
-    }
-</style>
-""", unsafe_allow_html=True)
-
 
 st.markdown(
     """
@@ -6488,7 +6047,7 @@ if active_main_tab == "💬 Chat":
                 ensure_files_processed(chat_files)
             combined_text = "\n".join([st.session_state.file_texts.get(f, "") for f in chat_files])
     
-            user_input = st.chat_input("Ask something... (type 'clear' to reset chat). Try: 'summarize', 'find:', 'count:', or 'overview'")
+            user_input = st.chat_input("Ask something... (type 'clear' to reset chat). Try: 'analyze', 'summarize', 'find:', 'count:', or 'overview'")
             if user_input:
                 if user_input.strip().lower() == "clear":
                     st.session_state.messages = []
