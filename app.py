@@ -141,19 +141,38 @@ def load_preview_data():
 
 def save_preview_data():
     """Save preview data to file"""
+    temp_file = None
     try:
         data = {
             "tokens": PREVIEW_TOKENS,
             "store": PREVIEW_STORE
         }
-        temp_file = f"{PREVIEW_DATA_FILE}.tmp"
+        preview_dir = os.path.dirname(PREVIEW_DATA_FILE) or "."
+        os.makedirs(preview_dir, exist_ok=True)
+        temp_file = f"{PREVIEW_DATA_FILE}.{os.getpid()}.{uuid.uuid4().hex}.tmp"
         with open(temp_file, "wb") as f:
             pickle.dump(data, f)
             f.flush()
             os.fsync(f.fileno())
         os.replace(temp_file, PREVIEW_DATA_FILE)
     except Exception as e:
-        st.warning(f"Could not save preview data: {e}")
+        # Streamlit reruns can overlap during upload/sidebar rendering. If an
+        # atomic temp replace fails, keep the in-memory preview store working and
+        # fall back to a direct write before showing a warning.
+        try:
+            with open(PREVIEW_DATA_FILE, "wb") as f:
+                pickle.dump({
+                    "tokens": PREVIEW_TOKENS,
+                    "store": PREVIEW_STORE
+                }, f)
+        except Exception as fallback_error:
+            st.warning(f"Could not save preview data: {fallback_error}")
+    finally:
+        if temp_file and os.path.exists(temp_file):
+            try:
+                os.remove(temp_file)
+            except Exception:
+                pass
 
 def cleanup_expired_preview_tokens():
     """Remove preview tokens older than 1 hour to prevent memory accumulation."""
@@ -2240,10 +2259,21 @@ def create_preview_link(file_name, highlight_term=None, page_num=None):
     file_entry = get_uploaded_file_entry(file_name)
     if not file_entry:
         return None
-    token = str(uuid.uuid4())
-    PREVIEW_TOKENS[token] = {'file_name': file_name, 'timestamp': datetime.now()}
-    PREVIEW_STORE[token] = file_entry
-    save_preview_data()
+
+    token = None
+    for existing_token, token_data in list(PREVIEW_TOKENS.items()):
+        if token_data.get("file_name") == file_name and existing_token in PREVIEW_STORE:
+            token = existing_token
+            token_data["timestamp"] = datetime.now()
+            PREVIEW_STORE[existing_token] = file_entry
+            break
+
+    if token is None:
+        token = str(uuid.uuid4())
+        PREVIEW_TOKENS[token] = {'file_name': file_name, 'timestamp': datetime.now()}
+        PREVIEW_STORE[token] = file_entry
+        save_preview_data()
+
     params = [f"preview_token={token}"]
     if highlight_term:
         params.append(f"highlight={urllib.parse.quote_plus(highlight_term)}")
@@ -5357,18 +5387,25 @@ def get_column_counts(data, column):
 
 
 def plot_pie_chart(counts, title):
-    labels, values = list(counts.keys()), list(counts.values())
-    fig = go.Figure(go.Pie(labels=labels[:50], values=values[:50], textinfo='label+value', textposition='outside'))
-    fig.update_layout(title=title, margin=dict(t=80, b=80, l=80, r=80), height=700)
+    fig = px.pie(
+        names=list(counts.keys()),
+        values=list(counts.values()),
+        title=title,
+        hole=0.3,
+    )
+    fig.update_traces(textposition="inside", textinfo="percent+label")
+    fig.update_layout(margin=dict(t=50, b=20, l=20, r=20))
     return fig
 
 
 def plot_bar_chart(counts, title, horizontal=False):
-    labels, values = list(counts.keys()), list(counts.values())
-    fig = px.bar(x=values, y=labels, orientation='h', text=values) if horizontal else px.bar(x=labels, y=values,
-                                                                                             text=values)
-    fig.update_traces(texttemplate='%{text}', textposition='outside', marker_color='skyblue')
-    fig.update_layout(title=title, margin=dict(t=80, b=150 if not horizontal else 80), height=700)
+    labels = list(counts.keys())
+    values = list(counts.values())
+    if horizontal:
+        fig = px.bar(x=values, y=labels, orientation="h", title=title)
+    else:
+        fig = px.bar(x=labels, y=values, title=title)
+    fig.update_layout(margin=dict(t=50, b=80, l=40, r=20))
     return fig
 
 
