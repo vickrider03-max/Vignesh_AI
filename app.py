@@ -3732,8 +3732,303 @@ def build_adaptive_document_analysis(file_name, file_bytes, text):
     return "<div style='margin-bottom:18px; line-height:1.5;'>" + "".join(analysis_sections) + "</div>"
 
 
+def build_product_documentation_analysis(file_name, file_bytes, text):
+    raw_text = str(text or "")
+    lines = [normalize_extracted_line(line) for line in raw_text.splitlines() if line.strip()]
+    lower_text = raw_text.lower()
+    words = re.findall(r"[A-Za-z][A-Za-z0-9_+\-/]{2,}", raw_text)
+
+    ignored_prefixes = (
+        "pdf metadata:", "document metadata:", "odt metadata:", "meta tags:", "total pages:",
+        "total slides:", "workbook contains", "csv rows:", "error:", "[image:", "[embedded_image:",
+        "page ", "slide ", "sheet ", "table:"
+    )
+    metadata_prefixes = (
+        "producer:", "creationdate:", "moddate:", "author:", "creator:", "title:",
+        "subject:", "keywords:", "trapped:", "pdfversion:"
+    )
+
+    def clean_sentence(value):
+        value = normalize_extracted_line(value)
+        value = re.sub(r"^(?:page|slide|sheet)\s+\d+\s*(?:text|content)?\s*:?", "", value, flags=re.IGNORECASE).strip()
+        value = re.sub(r"\s+", " ", value)
+        return value.strip(" -:")
+
+    def meaningful_lines(max_items=180):
+        selected = []
+        seen = set()
+        for line in lines:
+            cleaned = clean_sentence(line)
+            if not cleaned:
+                continue
+            lowered = cleaned.lower()
+            if lowered.startswith(ignored_prefixes) or lowered.startswith(metadata_prefixes):
+                continue
+            if len(cleaned) < 18 or len(cleaned) > 220:
+                continue
+            if re.fullmatch(r"[\W_]+", cleaned):
+                continue
+            if re.fullmatch(r"\d+(?:\.\d+)*\s+.+", cleaned) and len(cleaned.split()) <= 7:
+                continue
+            key = lowered
+            if key in seen:
+                continue
+            seen.add(key)
+            selected.append(cleaned)
+            if len(selected) >= max_items:
+                break
+        return selected
+
+    clean_lines = meaningful_lines()
+    keyword_counts = Counter(
+        word.lower()
+        for word in words
+        if len(word) > 3 and word.lower() not in SUMMARY_STOPWORDS and not word.isdigit()
+    )
+    keywords = [normalize_extracted_line(word).title() for word, _ in keyword_counts.most_common(10)]
+
+    type_scores = {
+        "technical system": sum(1 for term in [
+            "interface", "module", "device", "hardware", "software", "configuration", "channel",
+            "connector", "signal", "protocol", "diagnostic", "architecture", "firmware", "driver"
+        ] if term in lower_text),
+        "process or workflow": sum(1 for term in [
+            "process", "workflow", "procedure", "step", "approval", "operation", "execute", "setup",
+            "install", "configure", "use", "report"
+        ] if term in lower_text),
+        "data or report": sum(1 for term in [
+            "metric", "statistics", "result", "dashboard", "table", "test case", "passed", "failed",
+            "executed", "summary", "analysis"
+        ] if term in lower_text),
+        "business document": sum(1 for term in [
+            "customer", "market", "objective", "stakeholder", "cost", "risk", "benefit", "strategy",
+            "requirement", "decision"
+        ] if term in lower_text),
+    }
+    document_kind = max(type_scores, key=type_scores.get) if max(type_scores.values() or [0]) > 0 else "reference document"
+
+    page_count, image_count, table_count = get_document_asset_counts(file_name, file_bytes, raw_text)
+    title_match = re.search(r"Title:\s*(.+)", raw_text)
+    detected_title = clean_sentence(title_match.group(1)) if title_match else ""
+    display_name = detected_title if detected_title and len(detected_title) < 120 else os.path.splitext(file_name)[0]
+    topic_terms = keywords[:5] or [display_name]
+    topic_phrase = ", ".join(topic_terms[:4])
+
+    def collect_by_terms(terms, limit=6):
+        selected = []
+        seen = set()
+        for line in clean_lines:
+            lowered = line.lower()
+            if any(term in lowered for term in terms):
+                simplified = synthesize_line(line)
+                if simplified and simplified.lower() not in seen:
+                    selected.append(simplified)
+                    seen.add(simplified.lower())
+            if len(selected) >= limit:
+                break
+        return selected
+
+    def synthesize_line(line):
+        line = clean_sentence(line)
+        if not line:
+            return ""
+        line = re.sub(r"\b(?:note|warning|caution)\s*[:\-]\s*", "", line, flags=re.IGNORECASE)
+        line = re.sub(r"\s*\.+\s*\d+\s*$", "", line)
+        if len(line) > 150:
+            line = line[:147].rsplit(" ", 1)[0] + "..."
+        return line[0].upper() + line[1:] if line else line
+
+    capability_terms = [
+        "support", "supports", "feature", "function", "capability", "enable", "allows", "provide",
+        "communication", "measurement", "analysis", "diagnostic", "configuration", "export"
+    ]
+    architecture_terms = [
+        "component", "module", "interface", "channel", "connector", "port", "device", "unit",
+        "software", "hardware", "driver", "network", "table", "sheet", "slide"
+    ]
+    workflow_terms = [
+        "install", "configure", "connect", "select", "upload", "execute", "start", "use",
+        "create", "open", "set", "download", "export", "analyze"
+    ]
+    use_case_terms = [
+        "application", "used for", "used to", "use case", "measurement", "testing", "diagnostic",
+        "report", "automation", "monitoring", "analysis", "configuration"
+    ]
+
+    capabilities = collect_by_terms(capability_terms, 7)
+    architecture_evidence = collect_by_terms(architecture_terms, 7)
+    workflow_evidence = collect_by_terms(workflow_terms, 6)
+    use_case_evidence = collect_by_terms(use_case_terms, 6)
+
+    def has_any(*terms):
+        return any(term in lower_text for term in terms)
+
+    generated_capabilities = []
+    if has_any("can ", "can-fd", "can fd", "lin", "flexray", "ethernet", "protocol", "interface", "communication"):
+        generated_capabilities.append("Supports communication-oriented work through documented protocols, interfaces, or channels.")
+    if has_any("configuration", "configure", "setup", "install", "driver", "software"):
+        generated_capabilities.append("Provides configuration and setup guidance so the system can be prepared for practical use.")
+    if has_any("measurement", "test", "diagnostic", "analysis", "monitor", "report"):
+        generated_capabilities.append("Supports analysis, measurement, diagnostics, reporting, or validation activities.")
+    if has_any("connector", "pin", "port", "socket", "plug", "channel"):
+        generated_capabilities.append("Documents physical or logical connectivity details needed for integration.")
+    if has_any("table", "sheet", "csv", "dashboard", "statistics", "result"):
+        generated_capabilities.append("Contains structured data or results that can be reviewed, summarized, or exported.")
+    if has_any("image", "figure", "diagram", "visual", "illustration"):
+        generated_capabilities.append("Includes visual or diagram-like information that can support engineering reference work.")
+    if generated_capabilities:
+        capabilities = generated_capabilities
+
+    generated_architecture = []
+    if has_any("hardware", "device", "unit", "module", "component"):
+        generated_architecture.append("Hardware or device layer: the physical units, modules, or components described by the source.")
+    if has_any("software", "driver", "application", "tool", "configuration"):
+        generated_architecture.append("Software and configuration layer: tools, drivers, settings, and setup behavior around the system.")
+    if has_any("interface", "protocol", "channel", "network", "communication"):
+        generated_architecture.append("Communication layer: interfaces, protocols, and channels that connect the system to other tools or networks.")
+    if has_any("connector", "pin", "port", "socket", "plug"):
+        generated_architecture.append("Connectivity layer: ports, connectors, pin assignments, or wiring-related details.")
+    if has_any("table", "sheet", "report", "result", "metadata"):
+        generated_architecture.append("Information layer: tables, results, metadata, and reference data used to interpret the document.")
+    if generated_architecture:
+        architecture_evidence = generated_architecture
+
+    generated_workflow = []
+    if has_any("upload", "select", "open", "choose"):
+        generated_workflow.append("Select the relevant file, section, component, or dataset.")
+    if has_any("install", "setup", "driver", "connect"):
+        generated_workflow.append("Prepare the environment by installing, connecting, or setting up the required parts.")
+    if has_any("configure", "configuration", "setting", "parameter"):
+        generated_workflow.append("Configure the required options, channels, interfaces, or parameters.")
+    if has_any("execute", "run", "start", "measurement", "test", "analysis"):
+        generated_workflow.append("Run the intended operation such as measurement, testing, communication, analysis, or review.")
+    if has_any("result", "report", "export", "download", "table"):
+        generated_workflow.append("Review outputs, results, tables, or reports and export anything needed for reference.")
+    if generated_workflow:
+        workflow_evidence = generated_workflow
+
+    generated_use_cases = []
+    if has_any("measurement", "canalyzer", "canoe", "diagnostic", "test"):
+        generated_use_cases.append("Vehicle/network measurement, diagnostics, testing, and validation workflows.")
+    if has_any("configuration", "install", "setup", "driver"):
+        generated_use_cases.append("Setup and configuration reference for engineers or technicians.")
+    if has_any("interface", "connector", "pin", "channel", "protocol"):
+        generated_use_cases.append("Integration reference for ports, channels, protocols, connectors, or pin mappings.")
+    if has_any("report", "dashboard", "statistics", "result", "table"):
+        generated_use_cases.append("Report review, structured data analysis, and documentation support.")
+    if has_any("warning", "caution", "note", "safety", "required"):
+        generated_use_cases.append("Operational guidance where constraints, warnings, or required practices matter.")
+    if generated_use_cases:
+        use_case_evidence = generated_use_cases
+
+    components = []
+    component_candidates = []
+    for pattern in [
+        r"\b[A-Z]{2,}[A-Za-z0-9_+\-/]*\b",
+        r"\b[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z0-9]+){0,2}\b",
+    ]:
+        component_candidates.extend(re.findall(pattern, raw_text))
+    component_counts = Counter(
+        normalize_extracted_line(candidate).strip()
+        for candidate in component_candidates
+        if 3 <= len(normalize_extracted_line(candidate).strip()) <= 45
+        and normalize_extracted_line(candidate).lower() not in SUMMARY_STOPWORDS
+    )
+    for candidate, _ in component_counts.most_common(8):
+        lowered = candidate.lower()
+        if lowered in {"pdf", "metadata", "page", "text", "table", "figure"}:
+            continue
+        components.append(f"{candidate}: appears to be a major referenced part, concept, interface, or artifact in the document.")
+        if len(components) >= 5:
+            break
+
+    if not components and architecture_evidence:
+        components = architecture_evidence[:5]
+
+    assets = []
+    if page_count:
+        assets.append(f"about {page_count} pages or sections")
+    if table_count:
+        assets.append(f"{table_count} table-like data areas")
+    if image_count:
+        assets.append(f"{image_count} visual assets")
+    asset_phrase = ", ".join(assets) if assets else "the available extracted content"
+
+    overview_items = [
+        f"This is a {document_kind} centered on {topic_phrase}.",
+        f"It serves as a practical reference for understanding the subject, its purpose, and how the relevant pieces fit together.",
+    ]
+    if assets:
+        overview_items.append(f"The source contains {asset_phrase}, but the summary below reorganizes the content by meaning rather than document order.")
+
+    core_concept_items = [
+        f"In simple terms, the document explains how {topic_terms[0] if topic_terms else 'the subject'} is used, configured, or understood in context.",
+        "The important ideas are grouped into purpose, structure, capabilities, usage flow, and practical value so a reader can act on them quickly.",
+    ]
+    if capabilities:
+        core_concept_items.append(f"The central behavior is reflected in capabilities such as {', '.join(keywords[:4])}.")
+
+    if not architecture_evidence:
+        architecture_evidence = [
+            "The document content is best understood as a set of related concepts, interfaces, configuration details, and operational notes.",
+            "Related elements are grouped logically instead of following the original document layout."
+        ]
+
+    if not capabilities:
+        capabilities = [
+            "Provides reference information needed to understand and apply the documented subject.",
+            "Combines functional context with technical details where the source provides them."
+        ]
+
+    if not workflow_evidence:
+        workflow_evidence = [
+            "Identify the relevant subject or component.",
+            "Review its purpose, interfaces, configuration needs, and constraints.",
+            "Apply the information in implementation, testing, documentation, or troubleshooting work."
+        ]
+
+    if not use_case_evidence:
+        use_case_evidence = [
+            "Engineering reference and onboarding.",
+            "Configuration or implementation planning.",
+            "Troubleshooting, validation, and documentation support."
+        ]
+
+    takeaway_items = []
+    if keywords:
+        takeaway_items.append(f"The main focus areas are {', '.join(keywords[:5])}.")
+    takeaway_items.append(f"The document is most useful as a {document_kind} rather than as a narrative document.")
+    if capabilities:
+        takeaway_items.append("The key value is translating scattered technical or functional details into usable reference knowledge.")
+    if architecture_evidence:
+        takeaway_items.append("Understanding the relationships between components, interfaces, and usage flow is more important than memorizing the original section order.")
+    takeaway_items = takeaway_items[:5]
+
+    def bullet_list(items):
+        clean_items = [item for item in items if item]
+        return "<ul>" + "".join(f"<li>{html.escape(str(item))}</li>" for item in clean_items) + "</ul>"
+
+    def section(title_text, items):
+        if not items:
+            return ""
+        return f"<h4 style='margin:16px 0 6px 0; color:#173152;'>{html.escape(title_text)}</h4>{bullet_list(items)}"
+
+    sections = [
+        f"<h3 style='margin:0 0 10px 0; color:#173152;'>Document Analysis: {html.escape(file_name)}</h3>",
+        section("Overview", overview_items),
+        section("Core Concept", core_concept_items),
+        section("Architecture / Structure", architecture_evidence[:7]),
+        section("Key Capabilities", capabilities[:7]),
+        section("Components / Modules", components[:6]),
+        section("Workflow / How It Is Used", workflow_evidence[:6]),
+        section("Practical Use Cases", use_case_evidence[:6]),
+        section("Key Takeaways", takeaway_items[:5]),
+    ]
+    return "<div style='margin-bottom:18px; line-height:1.5;'>" + "".join(part for part in sections if part) + "</div>"
+
+
 def build_detailed_document_summary(file_name, file_bytes, text):
-    return build_adaptive_document_analysis(file_name, file_bytes, text)
+    return build_product_documentation_analysis(file_name, file_bytes, text)
 
 
 def extract_quoted_item_name(user_input):
