@@ -3,6 +3,7 @@
 # -------------------------------
 # Standard library and third-party imports for the application.
 import html, re, hashlib, os, json, base64, pickle, zipfile
+import importlib
 import uuid
 import urllib.parse
 import xml.etree.ElementTree as ET
@@ -3056,6 +3057,420 @@ def render_extracted_assets_preview(file_name, file_entry):
             )
 
 
+def format_file_size(byte_count):
+    """Return a readable file size label."""
+    try:
+        size = float(byte_count or 0)
+        for unit in ["B", "KB", "MB", "GB"]:
+            if size < 1024 or unit == "GB":
+                return f"{size:.1f} {unit}" if unit != "B" else f"{int(size)} {unit}"
+            size /= 1024
+    except Exception:
+        return "Unknown"
+
+
+@st.cache_data(show_spinner=False)
+def get_preview_metadata(file_name, file_bytes, extracted_text):
+    """Collect lightweight metadata without rendering the whole document."""
+    metadata = {
+        "File name": file_name,
+        "File type": os.path.splitext(file_name)[1].lower().lstrip(".").upper() or "Unknown",
+        "File size": format_file_size(len(file_bytes or b"")),
+        "Extracted text": f"{len(str(extracted_text or '')):,} characters",
+        "Pages / Slides / Sheets": "Not available",
+        "Tables": "0",
+        "Images": "0",
+    }
+
+    file_name_lower = file_name.lower()
+    try:
+        if file_name_lower.endswith(".pdf"):
+            with pdfplumber.open(BytesIO(file_bytes)) as pdf:
+                metadata["Pages / Slides / Sheets"] = f"{len(pdf.pages)} pages"
+        elif file_name_lower.endswith(".pptx"):
+            prs = Presentation(BytesIO(file_bytes))
+            metadata["Pages / Slides / Sheets"] = f"{len(prs.slides)} slides"
+        elif file_name_lower.endswith(".xlsx"):
+            wb = openpyxl.load_workbook(BytesIO(file_bytes), read_only=True, data_only=True)
+            metadata["Pages / Slides / Sheets"] = f"{len(wb.sheetnames)} sheets"
+        elif file_name_lower.endswith(".docx"):
+            doc = docx.Document(BytesIO(file_bytes))
+            metadata["Tables"] = str(len(doc.tables))
+
+        page_count, image_count, table_count = get_document_asset_counts(file_name, file_bytes, extracted_text)
+        if page_count and metadata["Pages / Slides / Sheets"] == "Not available":
+            metadata["Pages / Slides / Sheets"] = str(page_count)
+        metadata["Tables"] = str(max(int(metadata.get("Tables", "0") or 0), table_count))
+        metadata["Images"] = str(image_count)
+    except Exception:
+        pass
+
+    return metadata
+
+
+def render_preview_metadata_cards(metadata):
+    """Render compact metadata cards for the document viewer."""
+    try:
+        labels = list(metadata.items())
+        cols = st.columns(3)
+        for index, (label, value) in enumerate(labels):
+            with cols[index % 3]:
+                st.metric(label, value)
+    except Exception as e:
+        st.warning(f"Could not render preview metadata: {e}")
+
+
+def chunk_preview_text(text, chunk_size=1200, overlap=180):
+    """Split extracted text into chunks for search and Q&A."""
+    try:
+        clean_text = re.sub(r"\s+", " ", str(text or "")).strip()
+        if not clean_text:
+            return []
+        chunks = []
+        start = 0
+        while start < len(clean_text):
+            end = min(len(clean_text), start + chunk_size)
+            chunk = clean_text[start:end].strip()
+            if chunk:
+                chunks.append(chunk)
+            if end >= len(clean_text):
+                break
+            start = max(0, end - overlap)
+        return chunks
+    except Exception:
+        return []
+
+
+@st.cache_data(show_spinner=False)
+def keyword_search_preview_chunks(text, query, limit=8):
+    """Fast fallback search for preview Q&A and Search tabs."""
+    try:
+        query_terms = [
+            term.lower()
+            for term in re.findall(r"[A-Za-z0-9_+\-/]{2,}", str(query or ""))
+        ]
+        if not query_terms:
+            return []
+
+        scored = []
+        for chunk in chunk_preview_text(text):
+            chunk_lower = chunk.lower()
+            score = sum(chunk_lower.count(term) for term in query_terms)
+            if score:
+                scored.append((score, chunk))
+        scored.sort(key=lambda item: item[0], reverse=True)
+        return [chunk for _, chunk in scored[:limit]]
+    except Exception:
+        return []
+
+
+def semantic_search_preview_chunks(file_name, text, query, limit=5):
+    """Retrieve relevant chunks with FAISS when available, then fall back to keyword search."""
+    try:
+        if not str(query or "").strip() or not str(text or "").strip():
+            return []
+        vector_key = f"preview_vector::{file_name}"
+        if vector_key not in st.session_state.vector_stores:
+            st.session_state.vector_stores[vector_key] = create_vector_store(str(text)[:MAX_VECTOR_TEXT_CHARS])
+        docs = st.session_state.vector_stores[vector_key].similarity_search(query, k=limit)
+        return [doc.page_content for doc in docs if getattr(doc, "page_content", "")]
+    except Exception:
+        return keyword_search_preview_chunks(text, query, limit=limit)
+
+
+def build_preview_answer(file_name, text, question):
+    """Create an extractive answer from retrieved chunks."""
+    try:
+        chunks = semantic_search_preview_chunks(file_name, text, question, limit=5)
+        if not chunks:
+            return "No relevant information was found in the extracted text."
+        answer_parts = []
+        for chunk in chunks[:3]:
+            sentences = re.split(r"(?<=[.!?])\s+", chunk)
+            useful = [normalize_extracted_line(sentence) for sentence in sentences if len(sentence.strip()) > 30]
+            answer_parts.extend(useful[:2])
+        answer = "\n".join(f"- {part}" for part in answer_parts[:6])
+        return answer or "\n\n".join(chunks[:2])
+    except Exception as e:
+        return f"Could not answer the question: {e}"
+
+
+def extract_preview_tables(file_name, file_bytes, extracted_text):
+    """Extract interactive tables from spreadsheets or pipe-delimited extracted text."""
+    tables = []
+    file_name_lower = file_name.lower()
+    try:
+        if file_name_lower.endswith(".csv"):
+            tables.append(("CSV Data", pd.read_csv(BytesIO(file_bytes))))
+        elif file_name_lower.endswith(".xlsx"):
+            workbook = pd.read_excel(BytesIO(file_bytes), sheet_name=None)
+            for sheet_name, df in workbook.items():
+                tables.append((sheet_name, df))
+        elif file_name_lower.endswith(".xls"):
+            try:
+                workbook = pd.read_excel(BytesIO(file_bytes), sheet_name=None)
+                for sheet_name, df in workbook.items():
+                    tables.append((sheet_name, df))
+            except Exception:
+                pass
+        else:
+            current_rows = []
+            table_index = 1
+            for line in str(extracted_text or "").splitlines():
+                if " | " in line:
+                    current_rows.append([cell.strip() for cell in line.split(" | ")])
+                elif current_rows:
+                    width = max(len(row) for row in current_rows)
+                    normalized = [row + [""] * (width - len(row)) for row in current_rows]
+                    tables.append((f"Extracted Table {table_index}", pd.DataFrame(normalized)))
+                    table_index += 1
+                    current_rows = []
+            if current_rows:
+                width = max(len(row) for row in current_rows)
+                normalized = [row + [""] * (width - len(row)) for row in current_rows]
+                tables.append((f"Extracted Table {table_index}", pd.DataFrame(normalized)))
+    except Exception:
+        pass
+    return tables
+
+
+def dataframe_to_xlsx_bytes(df):
+    """Convert a dataframe to an XLSX download."""
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Data")
+    return output.getvalue()
+
+
+def ocr_image_best_effort(file_bytes):
+    """Run optional OCR for image files when pytesseract is installed."""
+    try:
+        pytesseract = importlib.import_module("pytesseract")
+        with Image.open(BytesIO(file_bytes)) as image:
+            return pytesseract.image_to_string(image).strip()
+    except Exception as e:
+        return f"OCR is unavailable or failed: {e}"
+
+
+def build_preview_summary_markdown(file_name, file_bytes, extracted_text):
+    """Build a concise markdown summary for downloads."""
+    try:
+        plain_lines = [
+            normalize_extracted_line(line)
+            for line in str(extracted_text or "").splitlines()
+            if 20 <= len(line.strip()) <= 220
+        ]
+        words = re.findall(r"[A-Za-z][A-Za-z0-9_+\-/]{2,}", str(extracted_text or ""))
+        keyword_counts = Counter(
+            word.lower()
+            for word in words
+            if len(word) > 3 and word.lower() not in SUMMARY_STOPWORDS
+        )
+        keywords = [word.title() for word, _ in keyword_counts.most_common(8)]
+
+        sections = [
+            f"# Document Intelligence Summary: {file_name}",
+            "## Overview",
+            f"- File type: {os.path.splitext(file_name)[1].lower() or 'unknown'}",
+            f"- Extracted text length: {len(str(extracted_text or '')):,} characters",
+            f"- Main themes: {', '.join(keywords) if keywords else 'Not enough readable text detected'}",
+            "## Key Insights",
+        ]
+        key_lines = plain_lines[:5] or ["No reliable readable text was extracted."]
+        sections.extend(f"- {line}" for line in key_lines)
+        sections.extend([
+            "## Practical Use",
+            "- Use the Viewer tab for visual inspection.",
+            "- Use Search and Q&A for targeted analysis over extracted chunks.",
+            "- Use Tables, Images, and Downloads to export reusable assets.",
+        ])
+        return "\n".join(sections)
+    except Exception as e:
+        return f"# Summary unavailable\n\n{e}"
+
+
+def render_professional_document_preview(file_name, file_entry=None, highlight_term=None, highlight_page=None):
+    """Render a professional multi-tab document intelligence preview."""
+    global PDF_PREVIEW_RESOLUTION
+
+    try:
+        if file_entry is None:
+            file_entry = get_uploaded_file_entry(file_name)
+        if not file_entry:
+            st.error("File preview unavailable - file could not be loaded.")
+            return
+
+        file_bytes = file_entry["bytes"]
+        file_name_lower = file_name.lower()
+        reliable_formats = (".pdf", ".docx", ".pptx", ".xlsx", ".csv", ".odt", ".rtf", ".txt", ".md", ".html", ".htm", ".png", ".jpg", ".jpeg", ".webp")
+        best_effort_formats = (".doc", ".ppt", ".xls", ".pages")
+
+        if file_name not in st.session_state.file_texts:
+            with st.spinner("Extracting document text for analysis..."):
+                st.session_state.file_texts[file_name] = extract_text(file_name, file_bytes)
+        extracted_text = st.session_state.file_texts.get(file_name, "")
+
+        metadata = get_preview_metadata(file_name, file_bytes, extracted_text)
+
+        st.markdown(
+            """
+            <style>
+                .preview-shell {
+                    padding: 12px 0 2px;
+                }
+                .preview-note {
+                    border: 1px solid #dbeafe;
+                    background: #f8fbff;
+                    border-radius: 10px;
+                    padding: 12px 14px;
+                    color: #173152;
+                    margin: 8px 0 16px;
+                }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        st.sidebar.markdown("### Preview Controls")
+        zoom_percent = st.sidebar.slider("PDF render zoom", 80, 180, 100, 10)
+        PDF_PREVIEW_RESOLUTION = max(72, int(zoom_percent))
+        quick_search = st.sidebar.text_input("Search in this document", value=highlight_term or "")
+        st.sidebar.caption("Large files are rendered in pages, chunks, and cached extraction layers.")
+
+        st.markdown(f"## {html.escape(file_name)}")
+        render_preview_metadata_cards(metadata)
+
+        if file_name_lower.endswith(best_effort_formats):
+            st.warning(
+                "This is a binary or proprietary format. Preview and extraction use best-effort recovery. "
+                "For reliable formatting and analysis, convert to DOCX, PPTX, XLSX, PDF, ODT, RTF, TXT, or HTML."
+            )
+        elif not file_name_lower.endswith(reliable_formats):
+            st.warning("This file type is not fully supported. The app will attempt best-effort extraction.")
+
+        tabs = st.tabs(["Viewer", "Summary", "Search", "Q&A", "Tables", "Images", "Downloads"])
+
+        with tabs[0]:
+            st.markdown("<div class='preview-note'>Visual preview is separated from extracted text analysis. PDFs use page-window rendering so large manuals stay responsive.</div>", unsafe_allow_html=True)
+            render_document_preview(file_name, file_entry=file_entry, highlight_term=quick_search or highlight_term, highlight_page=highlight_page)
+
+        with tabs[1]:
+            summary_md = build_preview_summary_markdown(file_name, file_bytes, extracted_text)
+            st.markdown(summary_md)
+            st.download_button(
+                "Download summary as Markdown",
+                data=summary_md.encode("utf-8"),
+                file_name=f"{os.path.splitext(file_name)[0]}_summary.md",
+                mime="text/markdown",
+                key=f"preview_summary_md_{file_name}",
+            )
+            st.download_button(
+                "Download summary as TXT",
+                data=summary_md.encode("utf-8"),
+                file_name=f"{os.path.splitext(file_name)[0]}_summary.txt",
+                mime="text/plain",
+                key=f"preview_summary_txt_{file_name}",
+            )
+
+        with tabs[2]:
+            search_query = st.text_input("Search extracted text", value=quick_search, key=f"preview_search_{file_name}")
+            if search_query:
+                chunks = keyword_search_preview_chunks(extracted_text, search_query, limit=20)
+                st.caption(f"{len(chunks)} relevant chunks found.")
+                for index, chunk in enumerate(chunks, start=1):
+                    with st.expander(f"Match {index}", expanded=index == 1):
+                        st.write(chunk)
+            else:
+                st.info("Enter a search term to search extracted text chunks.")
+
+        with tabs[3]:
+            question = st.text_input("Ask a question about this document", key=f"preview_qa_{file_name}")
+            if question:
+                answer = build_preview_answer(file_name, extracted_text, question)
+                st.markdown("### Answer")
+                st.markdown(answer)
+                st.download_button(
+                    "Download Q&A result",
+                    data=f"Question: {question}\n\nAnswer:\n{answer}".encode("utf-8"),
+                    file_name=f"{os.path.splitext(file_name)[0]}_qa.txt",
+                    mime="text/plain",
+                    key=f"preview_qa_download_{file_name}",
+                )
+            else:
+                st.info("Ask a focused question. The app retrieves only relevant chunks before answering.")
+
+        with tabs[4]:
+            tables = extract_preview_tables(file_name, file_bytes, extracted_text)
+            if not tables:
+                st.info("No tables were detected. For scanned PDFs, enable page-level table detection in the Viewer tab.")
+            for index, (table_name, df) in enumerate(tables, start=1):
+                with st.expander(table_name, expanded=index == 1):
+                    st.dataframe(df, use_container_width=True, hide_index=True)
+                    st.download_button(
+                        "Download CSV",
+                        data=df.to_csv(index=False).encode("utf-8"),
+                        file_name=f"{os.path.splitext(file_name)[0]}_{index}.csv",
+                        mime="text/csv",
+                        key=f"preview_table_csv_{file_name}_{index}",
+                    )
+                    st.download_button(
+                        "Download XLSX",
+                        data=dataframe_to_xlsx_bytes(df),
+                        file_name=f"{os.path.splitext(file_name)[0]}_{index}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key=f"preview_table_xlsx_{file_name}_{index}",
+                    )
+
+        with tabs[5]:
+            if file_name_lower.endswith((".png", ".jpg", ".jpeg", ".webp")):
+                st.image(file_bytes, caption=file_name, use_container_width=True)
+                if st.checkbox("Run OCR if available", key=f"preview_ocr_{file_name}"):
+                    st.text_area("OCR text", value=ocr_image_best_effort(file_bytes), height=220)
+            render_extracted_assets_preview(file_name, file_entry)
+
+        with tabs[6]:
+            summary_md = build_preview_summary_markdown(file_name, file_bytes, extracted_text)
+            st.download_button(
+                "Summary - Markdown",
+                data=summary_md.encode("utf-8"),
+                file_name=f"{os.path.splitext(file_name)[0]}_summary.md",
+                mime="text/markdown",
+                key=f"preview_download_summary_md_{file_name}",
+            )
+            st.download_button(
+                "Extracted text - TXT",
+                data=str(extracted_text or "").encode("utf-8"),
+                file_name=f"{os.path.splitext(file_name)[0]}_extracted_text.txt",
+                mime="text/plain",
+                key=f"preview_download_text_{file_name}",
+            )
+            report_bytes = None
+            try:
+                report_doc = docx.Document()
+                report_doc.add_heading(f"Document Intelligence Report: {file_name}", level=1)
+                report_doc.add_paragraph(summary_md)
+                report_output = BytesIO()
+                report_doc.save(report_output)
+                report_bytes = report_output.getvalue()
+            except Exception:
+                report_bytes = None
+            if report_bytes:
+                st.download_button(
+                    "Generated report - DOCX",
+                    data=report_bytes,
+                    file_name=f"{os.path.splitext(file_name)[0]}_report.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    key=f"preview_download_report_{file_name}",
+                )
+            with st.expander("Recommended install commands"):
+                st.code(
+                    "pip install streamlit pandas openpyxl python-docx python-pptx pdfplumber beautifulsoup4 pillow plotly faiss-cpu langchain-community langchain-text-splitters sentence-transformers pytesseract",
+                    language="bash",
+                )
+    except Exception as e:
+        st.error(f"Error rendering professional document preview: {e}")
+
+
 # -------------------------------
 # PREVIEW ROUTE HANDLING
 # -------------------------------
@@ -3116,12 +3531,12 @@ if preview_file_from_url:
     if preview_entry is not None:
         st.markdown(f"### {preview_entry['name']}")
         st.markdown("---")
-        render_document_preview(preview_entry['name'], file_entry=preview_entry, highlight_term=highlight_term, highlight_page=preview_page)
-        show_assets = st.checkbox("Show extracted asset previews", value=False)
-        if show_assets:
-            st.markdown("---")
-            st.markdown("### Extracted Assets")
-            render_extracted_assets_preview(preview_entry['name'], file_entry=preview_entry)
+        render_professional_document_preview(
+            preview_entry['name'],
+            file_entry=preview_entry,
+            highlight_term=highlight_term,
+            highlight_page=preview_page,
+        )
     else:
         st.error("Preview file not found in the preview store. Please return to the app and click preview again.")
     st.stop()
