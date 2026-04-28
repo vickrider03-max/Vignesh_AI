@@ -3322,6 +3322,24 @@ def build_adaptive_document_analysis(file_name, file_bytes, text):
         "pdf metadata:", "document metadata:", "meta tags:", "total pages:", "total slides:",
         "workbook contains", "error:", "[image:", "[embedded_image:", "table:"
     )
+    metadata_prefixes = (
+        "producer:", "creationdate:", "moddate:", "author:", "creator:", "title:",
+        "subject:", "keywords:", "trapped:", "pdfversion:"
+    )
+
+    def prettify_extracted_text(value):
+        value = str(value or "").strip()
+        if not value:
+            return value
+        value = re.sub(r"([a-z])([A-Z])", r"\1 \2", value)
+        value = re.sub(r"([A-Za-z])(\d)", r"\1 \2", value)
+        value = re.sub(r"(\d)([A-Za-z])", r"\1 \2", value)
+        value = re.sub(r"\s+", " ", value)
+        value = value.replace("e. g.", "e.g.").replace("i. e.", "i.e.")
+        return value.strip()
+
+    keywords = [prettify_extracted_text(keyword) for keyword in keywords]
+    keyword_text = ", ".join(keywords) if keywords else "Not available"
 
     def clean_content_lines(max_items=12):
         cleaned = []
@@ -3330,10 +3348,14 @@ def build_adaptive_document_analysis(file_name, file_bytes, text):
             line_lower = line.lower()
             if line_lower.startswith(ignored_prefixes):
                 continue
+            if line_lower.startswith(metadata_prefixes):
+                continue
             if len(line) < 8 or len(line) > 240:
                 continue
             if re.fullmatch(r"[\W_]+", line):
                 continue
+            line = prettify_extracted_text(line)
+            line_lower = line.lower()
             if line in seen:
                 continue
             seen.add(line)
@@ -3371,9 +3393,12 @@ def build_adaptive_document_analysis(file_name, file_bytes, text):
         selected = []
         seen = set()
         for line in key_lines + lines:
+            line = prettify_extracted_text(line)
             if len(line) < 8 or len(line) > 260:
                 continue
             line_lower = line.lower()
+            if line_lower.startswith(ignored_prefixes) or line_lower.startswith(metadata_prefixes):
+                continue
             if any(pattern in line_lower for pattern in patterns) and line not in seen:
                 selected.append(line)
                 seen.add(line)
@@ -3407,11 +3432,11 @@ def build_adaptive_document_analysis(file_name, file_bytes, text):
     structure_items = []
     if toc_entries:
         structure_items = [
-            f"{num + ' ' if num else ''}{heading}" + (f" - page {page_num}" if page_num else "")
+            f"{num + ' ' if num else ''}{prettify_extracted_text(heading)}" + (f" - page {page_num}" if page_num else "")
             for num, heading, page_num in toc_entries[:6]
         ]
     elif headings:
-        structure_items = [f"{num + ' ' if num else ''}{heading}" for num, heading in headings[:6]]
+        structure_items = [f"{num + ' ' if num else ''}{prettify_extracted_text(heading)}" for num, heading in headings[:6]]
     else:
         structure_items = [
             "Content is presented as extracted text rather than clearly labeled sections.",
@@ -3445,14 +3470,14 @@ def build_adaptive_document_analysis(file_name, file_bytes, text):
     takeaway_items.extend(key_point_items[:4])
     takeaway_items = takeaway_items[:5]
 
-    summary_html = f"""
-    <div>
-        <div><b>What the document is about:</b> {html.escape(title)}</div>
-        <div><b>Main purpose:</b> {html.escape(purpose_by_type[document_type])}.</div>
-        <div><b>Key context:</b> {html.escape(context_text)}. Detected type: {html.escape(document_type.title())}.</div>
-        <div><b>Important themes:</b> {html.escape(keyword_text)}</div>
-    </div>
-    """
+    summary_html = (
+        "<div>"
+        f"<div><b>What the document is about:</b> {html.escape(title)}</div>"
+        f"<div><b>Main purpose:</b> {html.escape(purpose_by_type[document_type])}.</div>"
+        f"<div><b>Key context:</b> {html.escape(context_text)}. Detected type: {html.escape(document_type.title())}.</div>"
+        f"<div><b>Important themes:</b> {html.escape(keyword_text)}</div>"
+        "</div>"
+    )
 
     optional_sections = ""
     if feature_lines or document_type == "technical":
@@ -3473,84 +3498,21 @@ def build_adaptive_document_analysis(file_name, file_bytes, text):
     if important_note_lines:
         optional_sections += section("Important Notes", bullet_list(important_note_lines, []))
 
-    return f"""
-    <div style="margin-bottom:18px; line-height:1.5;">
-        <h3 style="margin:0 0 10px 0; color:#173152;">Document Analysis: {html.escape(file_name)}</h3>
-        {section("Summary", summary_html)}
-        {section("Key Points", bullet_list(key_point_items, []))}
-        {section("Structure Breakdown", bullet_list(structure_items, []))}
-        {section("Key Insights / Core Insights", bullet_list(insight_items, []))}
-        {optional_sections}
-        {section("Simplified Explanation", bullet_list(simplified_items, []))}
-        {section("Key Takeaways", bullet_list(takeaway_items, []))}
-    </div>
-    """
+    analysis_sections = [
+        f"<h3 style='margin:0 0 10px 0; color:#173152;'>Document Analysis: {html.escape(file_name)}</h3>",
+        section("Summary", summary_html),
+        section("Key Points", bullet_list(key_point_items, [])),
+        section("Structure Breakdown", bullet_list(structure_items, [])),
+        section("Key Insights / Core Insights", bullet_list(insight_items, [])),
+        optional_sections,
+        section("Simplified Explanation", bullet_list(simplified_items, [])),
+        section("Key Takeaways", bullet_list(takeaway_items, [])),
+    ]
+    return "<div style='margin-bottom:18px; line-height:1.5;'>" + "".join(analysis_sections) + "</div>"
 
 
 def build_detailed_document_summary(file_name, file_bytes, text):
     return build_adaptive_document_analysis(file_name, file_bytes, text)
-    lines = [line.strip() for line in str(text).splitlines() if line.strip()]
-    words = re.findall(r"\w+", str(text))
-    title_match = re.search(r"Title:\s*(.+)", str(text))
-    title = title_match.group(1).strip() if title_match and title_match.group(1).strip() else file_name
-
-    keyword_counts = Counter(
-        word.lower()
-        for word in words
-        if len(word) > 3 and word.lower() not in SUMMARY_STOPWORDS and not word.isdigit()
-    )
-    keywords = ", ".join(word.title() for word, _ in keyword_counts.most_common(6)) or "Not available"
-
-    page_count, image_count, table_count = get_document_asset_counts(file_name, file_bytes, str(text))
-
-    ignored_prefixes = (
-        "pdf metadata:", "document metadata:", "meta tags:", "total pages:", "total slides:",
-        "workbook contains", "error:", "[image:", "[embedded_image:"
-    )
-    key_lines = []
-    seen_lines = set()
-    for line in lines:
-        if line.lower().startswith(ignored_prefixes):
-            continue
-        if len(line) < 4:
-            continue
-        if line in seen_lines:
-            continue
-        seen_lines.add(line)
-        key_lines.append(line)
-        if len(key_lines) == 5:
-            break
-
-    preview_text = " ".join(key_lines[:3] if key_lines else lines[:3])[:500]
-
-    escaped_file_name = html.escape(file_name)
-    escaped_title = html.escape(title)
-    escaped_keywords = html.escape(keywords)
-    key_lines_html = "".join(
-        f"<div>{html.escape(line)}</div>"
-        for line in key_lines
-    ) if key_lines else "<div>No key content lines could be extracted.</div>"
-    preview_html = html.escape(f"{preview_text}..." if preview_text else "No readable preview available.")
-
-    return f"""
-    <div style="margin-bottom:16px;">
-        <div style="font-weight:600; color:#173152; margin-bottom:8px;">📄 {escaped_file_name}</div>
-        <div style="font-weight:600; margin:10px 0 6px 0;">Key Information:</div>
-        <div>Title: {escaped_title}</div>
-        <div>Keywords: {escaped_keywords}</div>
-        {key_lines_html}
-        <div style="font-weight:600; margin:12px 0 6px 0;">Document Statistics:</div>
-        <div>Total characters: {len(str(text))}</div>
-        <div>Estimated words: {len(words)}</div>
-        <div>Content lines: {len(lines)}</div>
-        <div>Pages/Sections: {page_count}</div>
-        <div>Images found: {image_count}</div>
-        <div>Tables found: {table_count}</div>
-        <div>Downloadable preview assets: Images {image_count}, Tables {table_count}</div>
-        <div style="font-weight:600; margin:12px 0 6px 0;">Content Preview:</div>
-        <div>{preview_html}</div>
-    </div>
-    """
 
 
 # Document structure helpers:
@@ -5195,9 +5157,9 @@ def get_dynamic_suggestions(tab_name, skill_level):
     """Returns context-aware suggestions based on skill level."""
     suggestions_by_skill = {
         "chat": {
-            "beginner": ["What does this file contain?", "Show me a summary", "Are there any errors?"],
-            "intermediate": ["Count specific items", "Find patterns in data", "Compare sections"],
-            "advanced": ["Create custom queries", "Analyze trends", "Generate insights", "Export filtered data"]
+            "beginner": ["Analyze this document", "Show key takeaways", "Explain simply"],
+            "intermediate": ["Summarize with insights", "Break down structure", "Find important notes"],
+            "advanced": ["Extract workflow", "Identify use cases", "Compare sections", "Generate insights"]
         },
         "dashboard": {
             "beginner": ["Show me all metrics", "What are the totals?", "Create a basic chart"],
@@ -5223,9 +5185,9 @@ def get_next_best_action(tab_name, skill_level):
     """Intelligently recommends the next workflow step."""
     workflow_paths = {
         "chat": {
-            "beginner": "🎯 Pro Tip: Start with 'Show me a summary' to understand the document, then ask specific questions.",
-            "intermediate": "🎯 Next: Try using count() or find() functions to extract specific data efficiently.",
-            "advanced": "🎯 Next: Combine multiple queries for advanced analysis and custom filtering."
+            "beginner": "Pro Tip: Start with 'analyze this document' to get Summary, Key Insights, Structure Breakdown, Simplified Explanation, and Key Takeaways.",
+            "intermediate": "Next: Ask for specific sections such as workflow, use cases, important notes, or simplified explanation.",
+            "advanced": "Next: Combine analysis with find, count, overview, or compare to validate details across selected files."
         },
         "dashboard": {
             "beginner": "🎯 Pro Tip: Select a file to see basic statistics, then explore the visualizations.",
@@ -5261,8 +5223,8 @@ def show_help_popup(tab_name, selected_files):
     helper_defs = {
         "chat": {
             "title": "Chat Helper",
-            "text": "Chat with selected documents and ask for summaries, overviews, keyword search, counts, or explanations.",
-            "hint": "Choose files in the sidebar first, then select the ones you want to use in this tab. Ask: summarize, find, count, overview."
+            "text": "Chat with selected documents and generate clear document analysis that adapts to technical, business, research, or general files.",
+            "hint": "Choose files in the sidebar, select them in Chat, then ask: analyze this document. The response includes Summary, Key Points, Structure Breakdown, Key Insights, Simplified Explanation, and Key Takeaways. You can also ask find, count, overview, or compare."
         },
         "dashboard": {
             "title": "Dashboard Helper",
@@ -5284,6 +5246,7 @@ def show_help_popup(tab_name, selected_files):
     helper_def = helper_defs.get(tab_name, helper_defs["chat"])
     suggestions = get_dynamic_suggestions(tab_name, skill_level)[:4]
     suggestion_tags = "".join(f"<span>{html.escape(s)}</span>" for s in suggestions)
+    next_action = get_next_best_action(tab_name, skill_level)
 
     st.markdown(
         f"""
@@ -5339,6 +5302,16 @@ def show_help_popup(tab_name, selected_files):
             color: #5e3b33;
             font-size: 0.93rem;
         }}
+        .helper-popup-overlay .helper-next-action {{
+            margin-top: 10px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: #fff4eb;
+            border: 1px solid rgba(161, 106, 85, 0.22);
+            color: #4a2f28;
+            font-size: 0.92rem;
+            line-height: 1.45;
+        }}
         .helper-popup-overlay .helper-pill {{
             display: flex;
             flex-wrap: wrap;
@@ -5367,6 +5340,7 @@ def show_help_popup(tab_name, selected_files):
             <div class="helper-meta">Skill: <strong>{skill_level.title()}</strong> · Queries: <strong>{tracker.get('queries', 0)}</strong></div>
             <p>{html.escape(helper_def['text'])}</p>
             <p class="helper-hint">{html.escape(helper_def['hint'])}</p>
+            <div class="helper-next-action">{html.escape(next_action)}</div>
             <div class="helper-pill">{suggestion_tags}</div>
             <div class="helper-footer">Selected file types: <strong>{html.escape(selected_types_text)}</strong><br>Click the header 🧠 to close this helper.</div>
         </div>
@@ -6163,7 +6137,8 @@ if active_main_tab == "💬 Chat":
 
         for msg in st.session_state.messages:
             role = "🧑" if msg["role"] == "user" else "🤖"
-            st.markdown(f"{role} {msg['content']}", unsafe_allow_html=True)
+            st.markdown(f"**{role}**", unsafe_allow_html=True)
+            st.markdown(msg["content"], unsafe_allow_html=True)
 
         render_chat_summary_downloads()
     else:
