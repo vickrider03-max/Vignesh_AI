@@ -2,9 +2,10 @@
 # IMPORTS
 # -------------------------------
 # Standard library and third-party imports for the application.
-import html, re, hashlib, os, json, base64, pickle
+import html, re, hashlib, os, json, base64, pickle, zipfile
 import uuid
 import urllib.parse
+import xml.etree.ElementTree as ET
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from difflib import SequenceMatcher
@@ -948,7 +949,8 @@ for key, default_value in [
     ("file_texts", {}),
     ("vector_stores", {}),
     ("chat_file_selection", []),
-    ("chat_summary_downloads", {"images": [], "tables": []}),
+    ("chat_summary_downloads", {"images": [], "tables": [], "csv": [], "diagrams": []}),
+    ("chat_item_downloads", {"csv": [], "diagrams": []}),
     ("messages", []),
     ("welcome_shown", False),
     ("mobile_sidebar_visible", False),
@@ -1304,7 +1306,7 @@ if st.session_state.is_authenticated:
             st.session_state.file_texts = {}
             st.session_state.vector_stores = {}
             st.session_state.chat_file_selection = []
-            st.session_state.chat_summary_downloads = {"images": [], "tables": []}
+            st.session_state.chat_summary_downloads = {"images": [], "tables": [], "csv": [], "diagrams": []}
             st.session_state.messages = []
             st.session_state.welcome_shown = False
             st.success(f"Goodbye, {goodbye_user}! You have been logged out.")
@@ -1559,7 +1561,7 @@ if "compare_result_files" not in st.session_state:
 if "chat_file_selection" not in st.session_state:
     st.session_state.chat_file_selection = []
 if "chat_summary_downloads" not in st.session_state:
-    st.session_state.chat_summary_downloads = {"images": [], "tables": []}
+    st.session_state.chat_summary_downloads = {"images": [], "tables": [], "csv": [], "diagrams": []}
 if "compare_file_selection" not in st.session_state:
     st.session_state.compare_file_selection = []
 if "file_dropdown" not in st.session_state:
@@ -1646,13 +1648,27 @@ def extract_text(file_name, file_bytes):
             text_parts.extend(extract_pdf_content(bio))
         elif file_name_lower.endswith(".docx"):
             text_parts.extend(extract_docx_content(bio))
+        elif file_name_lower.endswith(".doc"):
+            text_parts.extend(extract_legacy_office_content(bio, "Legacy Word document"))
         elif file_name_lower.endswith(".pptx"):
             text_parts.extend(extract_pptx_content(bio))
+        elif file_name_lower.endswith(".ppt"):
+            text_parts.extend(extract_legacy_office_content(bio, "Legacy PowerPoint document"))
         elif file_name_lower.endswith(".xlsx"):
             text_parts.extend(extract_xlsx_content(bio))
+        elif file_name_lower.endswith(".xls"):
+            text_parts.extend(extract_legacy_office_content(bio, "Legacy Excel workbook"))
+        elif file_name_lower.endswith(".csv"):
+            text_parts.extend(extract_csv_content(bio))
         elif file_name_lower.endswith((".html", ".htm")):
             text_parts.extend(extract_html_content(bio))
-        elif file_name_lower.endswith(".txt"):
+        elif file_name_lower.endswith(".odt"):
+            text_parts.extend(extract_odt_content(bio))
+        elif file_name_lower.endswith(".rtf"):
+            text_parts.extend(extract_rtf_content(bio))
+        elif file_name_lower.endswith(".pages"):
+            text_parts.extend(extract_pages_content(bio))
+        elif file_name_lower.endswith((".txt", ".md", ".log")):
             text_parts.append(("TEXT", bio.read().decode("utf-8", errors="ignore")))
         elif file_name_lower.endswith(".can"):
             text_parts.append(("TEXT", bio.read().decode("utf-8", errors="ignore")))
@@ -2001,6 +2017,24 @@ def extract_xlsx_content(bio):
     return content
 
 
+def extract_csv_content(bio):
+    """Extract CSV rows as table text for Chat, Compare, and Preview."""
+    content = []
+    try:
+        df = pd.read_csv(bio)
+        content.append(("METADATA", f"CSV rows: {len(df)} columns: {len(df.columns)}"))
+        if not df.empty:
+            preview_df = df.fillna("").head(500)
+            table_text = "\n".join(
+                " | ".join(map(str, row))
+                for row in [preview_df.columns.tolist()] + preview_df.values.tolist()
+            )
+            content.append(("TABLE", f"CSV Data:\n{table_text}"))
+    except Exception as e:
+        content.append(("ERROR", f"CSV extraction failed: {str(e)}"))
+    return content
+
+
 def extract_html_content(bio):
     """Extract text and metadata from HTML."""
     content = []
@@ -2033,6 +2067,165 @@ def extract_html_content(bio):
     except Exception as e:
         content.append(("ERROR", f"HTML extraction failed: {str(e)}"))
     
+    return content
+
+
+def xml_text_content(xml_bytes):
+    """Extract readable text from XML-based office documents."""
+    try:
+        root = ET.fromstring(xml_bytes)
+    except Exception:
+        soup = BeautifulSoup(xml_bytes, "xml")
+        return soup.get_text("\n", strip=True)
+
+    text_items = []
+    for element in root.iter():
+        tag_name = element.tag.split("}", 1)[-1].lower()
+        if tag_name in {"p", "h", "span", "line-break", "tab"} and element.text:
+            text_items.append(element.text.strip())
+        if element.tail:
+            text_items.append(element.tail.strip())
+    return "\n".join(item for item in text_items if item)
+
+
+def extract_odt_content(bio):
+    """Extract text and simple tables from OpenDocument Text files."""
+    content = []
+    try:
+        with zipfile.ZipFile(bio) as odt_zip:
+            if "meta.xml" in odt_zip.namelist():
+                meta_text = xml_text_content(odt_zip.read("meta.xml"))
+                if meta_text.strip():
+                    content.append(("METADATA", "ODT Metadata:\n" + meta_text[:2000]))
+
+            if "content.xml" not in odt_zip.namelist():
+                content.append(("ERROR", "ODT content.xml was not found."))
+                return content
+
+            content_xml = odt_zip.read("content.xml")
+            soup = BeautifulSoup(content_xml, "xml")
+            text_blocks = []
+            for node in soup.find_all(["text:h", "text:p"]):
+                text_value = node.get_text(" ", strip=True)
+                if text_value:
+                    text_blocks.append(text_value)
+            if not text_blocks:
+                fallback_text = xml_text_content(content_xml)
+                if fallback_text.strip():
+                    text_blocks.append(fallback_text)
+            if text_blocks:
+                content.append(("TEXT", "\n".join(text_blocks)))
+
+            for table_index, table in enumerate(soup.find_all("table:table"), start=1):
+                rows = []
+                for row in table.find_all("table:table-row"):
+                    cells = [cell.get_text(" ", strip=True) for cell in row.find_all("table:table-cell")]
+                    if any(cells):
+                        rows.append(" | ".join(cells))
+                if rows:
+                    content.append(("TABLE", f"Table {table_index}:\n" + "\n".join(rows)))
+    except Exception as e:
+        content.append(("ERROR", f"ODT extraction failed: {str(e)}"))
+    return content
+
+
+def strip_rtf_to_text(rtf_text):
+    """Best-effort RTF to plain text conversion without external dependencies."""
+    text = rtf_text
+    text = re.sub(r"\\'[0-9a-fA-F]{2}", lambda m: bytes.fromhex(m.group(0)[2:]).decode("latin-1", errors="ignore"), text)
+    text = re.sub(r"\\(par|line)\b", "\n", text)
+    text = re.sub(r"\\tab\b", "\t", text)
+    text = re.sub(r"\\[a-zA-Z]+-?\d* ?", "", text)
+    text = text.replace("\\{", "{").replace("\\}", "}").replace("\\\\", "\\")
+    text = re.sub(r"[{}]", "", text)
+    text = re.sub(r"\n\s*\n\s*\n+", "\n\n", text)
+    return html.unescape(text).strip()
+
+
+def extract_rtf_content(bio):
+    """Extract text from Rich Text Format documents."""
+    content = []
+    try:
+        raw = bio.read()
+        rtf_text = raw.decode("utf-8", errors="ignore")
+        if not rtf_text.strip():
+            rtf_text = raw.decode("latin-1", errors="ignore")
+        plain_text = strip_rtf_to_text(rtf_text)
+        if plain_text:
+            content.append(("TEXT", plain_text))
+        else:
+            content.append(("ERROR", "No readable text was found in the RTF file."))
+    except Exception as e:
+        content.append(("ERROR", f"RTF extraction failed: {str(e)}"))
+    return content
+
+
+def extract_legacy_office_content(bio, label):
+    """Best-effort text recovery for legacy binary Office files."""
+    content = []
+    try:
+        raw = bio.read()
+        decoded = raw.decode("utf-16le", errors="ignore") + "\n" + raw.decode("latin-1", errors="ignore")
+        strings = re.findall(r"[A-Za-z0-9][A-Za-z0-9\s.,;:!?()/_+\-]{3,}", decoded)
+        cleaned = []
+        seen = set()
+        for value in strings:
+            value = re.sub(r"\s+", " ", value).strip()
+            if len(value) < 4 or len(value) > 240:
+                continue
+            if value.lower() in seen:
+                continue
+            seen.add(value.lower())
+            cleaned.append(value)
+            if len(cleaned) >= 1000:
+                break
+
+        if cleaned:
+            content.append(("METADATA", f"{label}: recovered readable text using best-effort binary extraction."))
+            content.append(("TEXT", "\n".join(cleaned)))
+        else:
+            content.append(("ERROR", f"{label} text could not be recovered. Save/export as DOCX, PPTX, XLSX, PDF, RTF, or TXT for full analysis."))
+    except Exception as e:
+        content.append(("ERROR", f"{label} extraction failed: {str(e)}"))
+    return content
+
+
+def extract_pages_content(bio):
+    """Extract readable text from Apple Pages files when XML/text previews exist."""
+    content = []
+    try:
+        with zipfile.ZipFile(bio) as pages_zip:
+            names = pages_zip.namelist()
+            readable_parts = [
+                name for name in names
+                if name.lower().endswith((".xml", ".txt", ".html", ".xhtml"))
+                and not name.lower().startswith(("metadata/", "quicklook/thumbnail"))
+            ]
+
+            extracted_blocks = []
+            for name in readable_parts[:20]:
+                try:
+                    part_bytes = pages_zip.read(name)
+                    if name.lower().endswith((".html", ".xhtml")):
+                        text_value = BeautifulSoup(part_bytes, "html.parser").get_text("\n", strip=True)
+                    elif name.lower().endswith(".xml"):
+                        text_value = xml_text_content(part_bytes)
+                    else:
+                        text_value = part_bytes.decode("utf-8", errors="ignore")
+                    text_value = re.sub(r"\s+", " ", text_value).strip()
+                    if text_value:
+                        extracted_blocks.append(f"{name}\n{text_value}")
+                except Exception:
+                    pass
+
+            if extracted_blocks:
+                content.append(("TEXT", "\n\n".join(extracted_blocks)))
+            else:
+                content.append(("ERROR", "No readable text preview was found in this Pages file. Export it as DOCX/PDF for full analysis."))
+    except zipfile.BadZipFile:
+        content.append(("ERROR", "Pages extraction failed because this file is not a readable Pages ZIP package."))
+    except Exception as e:
+        content.append(("ERROR", f"Pages extraction failed: {str(e)}"))
     return content
 
 
@@ -3019,8 +3212,8 @@ with st.sidebar:
         " 2) Click the file cards you need. " \
         "3) Switch tabs and work with selected files.")
         new_files = st.file_uploader(
-            "Upload PDF, DOCX, TXT, PPTX, XLSX, HTML, CAPL, Images",
-            type=["pdf", "docx", "txt", "pptx", "xlsx", "html", "htm", "capl", "can", "png", "jpg", "jpeg", "gif", "bmp", "webp"],
+            "Upload PDF, Word, PPT, Excel, CSV, TXT, HTML, ODT, RTF, Pages, CAPL, Images",
+            type=["pdf", "doc", "docx", "txt", "md", "log", "ppt", "pptx", "xls", "xlsx", "csv", "html", "htm", "odt", "rtf", "pages", "capl", "can", "png", "jpg", "jpeg", "gif", "bmp", "webp"],
             accept_multiple_files=True,
             key=f"file_uploader_{st.session_state.file_uploader_key}"
         )
@@ -3036,7 +3229,7 @@ with st.sidebar:
                         uploaded_new_file = True
                 if uploaded_new_file:
                     st.session_state.messages = []
-                    st.session_state.chat_summary_downloads = {"images": [], "tables": []}
+                    st.session_state.chat_summary_downloads = {"images": [], "tables": [], "csv": [], "diagrams": []}
                     st.session_state.chat_file_selection = []
                     st.success("✅ New files uploaded. Chat history has been cleared.")
 
@@ -3094,7 +3287,7 @@ with st.sidebar:
             for key in ["uploaded_files", "selected_files", "file_texts", "excel_data_by_file", "vector_stores",
                         "messages"]:
                 st.session_state[key].clear()
-            st.session_state.chat_summary_downloads = {"images": [], "tables": []}
+            st.session_state.chat_summary_downloads = {"images": [], "tables": [], "csv": [], "diagrams": []}
             st.session_state.chat_file_selection = []
             st.session_state.capl_last_analyzed_file = None
             st.session_state.capl_last_issues = None
@@ -3266,15 +3459,21 @@ def get_document_asset_counts(file_name, file_bytes, extracted_text):
     return page_count, image_count, table_count
 
 
+def empty_chat_summary_downloads():
+    return {"images": [], "tables": [], "csv": [], "diagrams": []}
+
+
 # Chat summary helper:
 # Used only in the Chat tab after summarize/analyze actions to expose extracted
 # images and tables as downloads for the files currently selected in chat.
 def render_chat_summary_downloads():
-    downloads = st.session_state.get("chat_summary_downloads", {"images": [], "tables": []})
+    downloads = st.session_state.get("chat_summary_downloads", empty_chat_summary_downloads())
     image_items = downloads.get("images", [])
     table_items = downloads.get("tables", [])
+    csv_items = downloads.get("csv", [])
+    diagram_items = downloads.get("diagrams", [])
 
-    if not image_items and not table_items:
+    if not image_items and not table_items and not csv_items and not diagram_items:
         return
 
     st.markdown("### Summary Downloads")
@@ -3299,6 +3498,28 @@ def render_chat_summary_downloads():
                     file_name=item["file_name"],
                     mime=item["mime"],
                     key=f"chat_summary_table_{index}_{item['file_name']}"
+                )
+
+    if csv_items:
+        with st.expander("Pin Table CSV Downloads", expanded=False):
+            for index, item in enumerate(csv_items):
+                st.download_button(
+                    label=item["label"],
+                    data=item["data"],
+                    file_name=item["file_name"],
+                    mime=item["mime"],
+                    key=f"chat_summary_csv_{index}_{item['file_name']}"
+                )
+
+    if diagram_items:
+        with st.expander("ASCII Diagram Downloads", expanded=False):
+            for index, item in enumerate(diagram_items):
+                st.download_button(
+                    label=item["label"],
+                    data=item["data"],
+                    file_name=item["file_name"],
+                    mime=item["mime"],
+                    key=f"chat_summary_diagram_{index}_{item['file_name']}"
                 )
 
 
@@ -3513,6 +3734,254 @@ def build_adaptive_document_analysis(file_name, file_bytes, text):
 
 def build_detailed_document_summary(file_name, file_bytes, text):
     return build_adaptive_document_analysis(file_name, file_bytes, text)
+
+
+def extract_quoted_item_name(user_input):
+    match = re.search(r"'(.*?)'|\"(.*?)\"", str(user_input or ""))
+    if match:
+        return (match.group(1) or match.group(2) or "").strip()
+
+    patterns = [
+        r"\b(?:item|about|for|related to)\s+([A-Za-z0-9][A-Za-z0-9 _./+\-]{1,80})",
+        r"\b(?:pin(?:s)?|diagram|connector|visual)\s+([A-Za-z0-9][A-Za-z0-9 _./+\-]{1,80})",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, str(user_input or ""), re.IGNORECASE)
+        if match:
+            item = re.split(r"\b(?:from|in|with|please|and|details?|info|information)\b", match.group(1), 1, flags=re.IGNORECASE)[0]
+            return item.strip(" :-")
+    return ""
+
+
+def normalize_extracted_line(line):
+    line = str(line or "").strip()
+    line = re.sub(r"([a-z])([A-Z])", r"\1 \2", line)
+    line = re.sub(r"([A-Za-z])(\d)", r"\1 \2", line)
+    line = re.sub(r"(\d)([A-Za-z])", r"\1 \2", line)
+    line = re.sub(r"\s+", " ", line)
+    return line.strip()
+
+
+def collect_item_context_lines(text, item_name, window=4, limit=80):
+    item_name = str(item_name or "").strip()
+    if not item_name:
+        return []
+
+    lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
+    item_tokens = [token.lower() for token in re.findall(r"[A-Za-z0-9]+", item_name) if len(token) > 1]
+    if not item_tokens:
+        return []
+
+    selected = []
+    seen = set()
+    for index, line in enumerate(lines):
+        line_lower = line.lower()
+        compact_line = re.sub(r"\s+", "", line_lower)
+        compact_item = re.sub(r"\s+", "", item_name.lower())
+        has_match = compact_item in compact_line or all(token in line_lower for token in item_tokens)
+        if not has_match:
+            continue
+
+        start = max(0, index - window)
+        end = min(len(lines), index + window + 1)
+        for context_line in lines[start:end]:
+            pretty_line = normalize_extracted_line(context_line)
+            if len(pretty_line) < 3 or len(pretty_line) > 300:
+                continue
+            key = pretty_line.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            selected.append(pretty_line)
+            if len(selected) >= limit:
+                return selected
+    return selected
+
+
+def select_relevant_lines(context_lines, patterns, limit=8):
+    selected = []
+    seen = set()
+    for line in context_lines:
+        line_lower = line.lower()
+        if any(pattern in line_lower for pattern in patterns) and line not in seen:
+            selected.append(line)
+            seen.add(line)
+        if len(selected) >= limit:
+            break
+    return selected
+
+
+def html_bullet_list(items):
+    if not items:
+        return ""
+    return "<ul>" + "".join(f"<li>{html.escape(str(item))}</li>" for item in items) + "</ul>"
+
+
+def html_section(title, items):
+    if not items:
+        return ""
+    return f"<h4 style='margin:16px 0 6px 0; color:#173152;'>{html.escape(title)}</h4>{html_bullet_list(items)}"
+
+
+def build_item_information_response(file_name, text, item_name):
+    context_lines = collect_item_context_lines(text, item_name, window=5, limit=100)
+    if not context_lines:
+        return f"<div><h3>Item Information: {html.escape(item_name)}</h3><p>No relevant information for this item was found in {html.escape(file_name)}.</p></div>"
+
+    overview = context_lines[:5]
+    features = select_relevant_lines(context_lines, ["feature", "support", "capability", "function", "operation", "application"])
+    technical = select_relevant_lines(context_lines, ["mbit", "kbit", "volt", "channel", "standard", "protocol", "can", "lin", "flexray", "interface", "specification", "iso"])
+    architecture = select_relevant_lines(context_lines, ["structure", "component", "module", "piggy", "channel", "internal", "family", "device"])
+    configuration = select_relevant_lines(context_lines, ["configure", "configuration", "install", "insert", "setup", "use", "driver", "software", "hardware"])
+    connectivity = select_relevant_lines(context_lines, ["connector", "port", "pin", "d-sub", "usb", "channel", "plug", "socket", "interface"])
+    special = select_relevant_lines(context_lines, ["special", "unique", "only", "limitation", "difference", "optional", "available", "not supported"])
+    notes = select_relevant_lines(context_lines, ["note", "warning", "caution", "must", "shall", "important", "avoid", "required"])
+
+    sections = [
+        f"<h3 style='margin:0 0 10px 0; color:#173152;'>Item Information: {html.escape(item_name)}</h3>",
+        f"<p><b>Source:</b> {html.escape(file_name)}</p>",
+        html_section("Overview", overview),
+        html_section("Key Features", features),
+        html_section("Technical Details", technical),
+        html_section("Architecture / Structure", architecture),
+        html_section("Configuration / Usage", configuration),
+        html_section("Interfaces & Connectivity", connectivity),
+        html_section("Special Capabilities", special),
+        html_section("Important Notes", notes),
+    ]
+    return "<div style='margin-bottom:18px; line-height:1.5;'>" + "".join(section for section in sections if section) + "</div>"
+
+
+def extract_pin_rows(context_lines):
+    rows = []
+    seen = set()
+    pin_patterns = [
+        r"\bpin\s*(\d+)\b\s*[:\-]?\s*([A-Za-z0-9_+/.\- ]{0,40})\s*(.*)",
+        r"^\s*(\d{1,2})\s+([A-Za-z][A-Za-z0-9_+/.\-]*)\s*(.*)",
+    ]
+    for line in context_lines:
+        line_lower = line.lower()
+        if not any(term in line_lower for term in ["pin", "signal", "d-sub", "connector", "ground", "shield", "can", "lin", "vbat"]):
+            continue
+        for pattern in pin_patterns:
+            match = re.search(pattern, line, re.IGNORECASE)
+            if not match:
+                continue
+            pin_no = match.group(1).strip()
+            signal = (match.group(2) or "").strip(" :-") or "Not specified"
+            description = (match.group(3) or "").strip(" :-") or line
+            key = (pin_no, signal.lower(), description.lower())
+            if key in seen:
+                break
+            seen.add(key)
+            rows.append({
+                "pin": pin_no,
+                "signal": signal,
+                "description": description,
+                "notes": ""
+            })
+            break
+    return rows[:40]
+
+
+def build_pin_csv(pin_rows):
+    lines = ["Pin Number,Signal Name,Description,Notes"]
+    for row in pin_rows:
+        values = [row["pin"], row["signal"], row["description"], row.get("notes", "")]
+        escaped_values = ['"' + str(value).replace('"', '""') + '"' for value in values]
+        lines.append(",".join(escaped_values))
+    return "\n".join(lines)
+
+
+def build_ascii_pin_diagram(pin_rows, item_name):
+    if not pin_rows:
+        return f"+------------------------------+\n| {item_name[:28]:<28} |\n| Pin diagram not available    |\n+------------------------------+"
+    left = pin_rows[::2]
+    right = pin_rows[1::2]
+    width = 34
+    lines = [f"+{'-' * width}+", f"| {item_name[:width-4]:<{width-4}} |", f"+{'-' * width}+"]
+    max_len = max(len(left), len(right))
+    for index in range(max_len):
+        left_text = ""
+        right_text = ""
+        if index < len(left):
+            left_text = f"{left[index]['pin']}:{left[index]['signal']}"[:15]
+        if index < len(right):
+            right_text = f"{right[index]['pin']}:{right[index]['signal']}"[:15]
+        lines.append(f"| {left_text:<15}  {right_text:>15} |")
+    lines.append(f"+{'-' * width}+")
+    return "\n".join(lines)
+
+
+def build_item_visual_assets(file_name, text, item_name):
+    context_lines = collect_item_context_lines(text, item_name, window=8, limit=140)
+    pin_rows = extract_pin_rows(context_lines)
+    if not pin_rows:
+        return {"csv": [], "diagrams": []}
+
+    safe_item_name = re.sub(r"[^A-Za-z0-9_-]+", "_", str(item_name)).strip("_") or "item"
+    file_base = re.sub(r"[^A-Za-z0-9_-]+", "_", os.path.splitext(file_name)[0]).strip("_") or "document"
+    csv_text = build_pin_csv(pin_rows)
+    ascii_diagram = build_ascii_pin_diagram(pin_rows, item_name)
+
+    return {
+        "csv": [{
+            "label": f"{file_name} - {item_name} pin table CSV",
+            "data": csv_text.encode("utf-8"),
+            "file_name": f"{file_base}_{safe_item_name}_pin_table.csv",
+            "mime": "text/csv",
+        }],
+        "diagrams": [{
+            "label": f"{file_name} - {item_name} ASCII diagram",
+            "data": ascii_diagram.encode("utf-8"),
+            "file_name": f"{file_base}_{safe_item_name}_diagram.txt",
+            "mime": "text/plain",
+        }],
+    }
+
+
+def html_table(headers, rows):
+    if not rows:
+        return ""
+    head_html = "".join(f"<th>{html.escape(header)}</th>" for header in headers)
+    body_html = ""
+    for row in rows:
+        body_html += "<tr>" + "".join(f"<td>{html.escape(str(cell))}</td>" for cell in row) + "</tr>"
+    return f"<table style='border-collapse:collapse; width:100%; margin:8px 0;'><thead><tr>{head_html}</tr></thead><tbody>{body_html}</tbody></table>"
+
+
+def build_item_visual_response(file_name, text, item_name):
+    context_lines = collect_item_context_lines(text, item_name, window=8, limit=140)
+    if not context_lines:
+        return f"<div><h3>Visual / Pin Reference: {html.escape(item_name)}</h3><p>No relevant visual or structural information for this item was found in {html.escape(file_name)}.</p></div>"
+
+    pin_rows = extract_pin_rows(context_lines)
+    connector_lines = select_relevant_lines(context_lines, ["connector", "port", "d-sub", "usb", "channel", "plug", "socket", "interface"], limit=12)
+    image_lines = select_relevant_lines(context_lines, ["figure", "image", "diagram", "pin assignment", "illustration"], limit=10)
+    table_lines = select_relevant_lines(context_lines, ["table", "specification", "signal", "configuration", "pin"], limit=12)
+    csv_text = build_pin_csv(pin_rows) if pin_rows else "Pin Number,Signal Name,Description,Notes\n"
+    ascii_diagram = build_ascii_pin_diagram(pin_rows, item_name)
+    pin_table_rows = [[row["pin"], row["signal"], row["description"], row.get("notes", "")] for row in pin_rows]
+
+    sections = [
+        f"<h3 style='margin:0 0 10px 0; color:#173152;'>Visual / Pin Reference: {html.escape(item_name)}</h3>",
+        f"<p><b>Source:</b> {html.escape(file_name)}</p>",
+        html_section("Pin Diagrams", ["Recreated below from extracted pin/signal lines." if pin_rows else "No explicit pin diagram was found in the extracted text."]),
+        f"<pre style='white-space:pre-wrap; background:#f4f7fb; padding:12px; border-radius:8px;'>{html.escape(ascii_diagram)}</pre>",
+        f"<h4 style='margin:16px 0 6px 0; color:#173152;'>Pin Configuration Table</h4>",
+        html_table(["Pin Number", "Signal Name", "Description", "Notes"], pin_table_rows) if pin_rows else "<p>No pin table data was found.</p>",
+        html_section("Connector Details", connector_lines),
+        html_section("Images & Visuals", image_lines),
+        html_section("Technical Tables", table_lines),
+        f"<h4 style='margin:16px 0 6px 0; color:#173152;'>Downloadable Outputs</h4>",
+        "<p><b>a) Pin table as CSV</b></p>",
+        f"<pre style='white-space:pre-wrap; background:#f4f7fb; padding:12px; border-radius:8px;'>{html.escape(csv_text)}</pre>",
+        "<p><b>b) Diagram as ASCII / structured format</b></p>",
+        f"<pre style='white-space:pre-wrap; background:#f4f7fb; padding:12px; border-radius:8px;'>{html.escape(ascii_diagram)}</pre>",
+        "<p><b>c) Image references or recreated diagrams</b></p>",
+        html_bullet_list(image_lines or ["No direct image reference was found in extracted text; use the recreated ASCII diagram above when pin rows are available."]),
+    ]
+    return "<div style='margin-bottom:18px; line-height:1.5;'>" + "".join(section for section in sections if section) + "</div>"
 
 
 # Document structure helpers:
@@ -5157,9 +5626,9 @@ def get_dynamic_suggestions(tab_name, skill_level):
     """Returns context-aware suggestions based on skill level."""
     suggestions_by_skill = {
         "chat": {
-            "beginner": ["Analyze this document", "Show key takeaways", "Explain simply"],
-            "intermediate": ["Summarize with insights", "Break down structure", "Find important notes"],
-            "advanced": ["Extract workflow", "Identify use cases", "Compare sections", "Generate insights"]
+            "beginner": ["Analyze this document", "Item details \"VN1630A\"", "Pin diagram \"D-SUB9\""],
+            "intermediate": ["Extract item features", "Build pin CSV", "Find connector details"],
+            "advanced": ["Visual reference for item", "Compare sections", "Generate engineering reference", "Extract workflow"]
         },
         "dashboard": {
             "beginner": ["Show me all metrics", "What are the totals?", "Create a basic chart"],
@@ -5185,9 +5654,9 @@ def get_next_best_action(tab_name, skill_level):
     """Intelligently recommends the next workflow step."""
     workflow_paths = {
         "chat": {
-            "beginner": "Pro Tip: Start with 'analyze this document' to get Summary, Key Insights, Structure Breakdown, Simplified Explanation, and Key Takeaways.",
-            "intermediate": "Next: Ask for specific sections such as workflow, use cases, important notes, or simplified explanation.",
-            "advanced": "Next: Combine analysis with find, count, overview, or compare to validate details across selected files."
+            "beginner": "Pro Tip: Start with 'analyze this document', then ask item details like item \"VN1630A\".",
+            "intermediate": "Next: Ask pin diagram \"D-SUB9\" or visual reference \"VN1640A\" to get pin tables, connector details, CSV, and ASCII diagrams.",
+            "advanced": "Next: Combine item extraction with find, count, overview, or compare to validate details across selected files."
         },
         "dashboard": {
             "beginner": "🎯 Pro Tip: Select a file to see basic statistics, then explore the visualizations.",
@@ -5223,8 +5692,8 @@ def show_help_popup(tab_name, selected_files):
     helper_defs = {
         "chat": {
             "title": "Chat Helper",
-            "text": "Chat with selected documents and generate clear document analysis that adapts to technical, business, research, or general files.",
-            "hint": "Choose files in the sidebar, select them in Chat, then ask: analyze this document. The response includes Summary, Key Points, Structure Breakdown, Key Insights, Simplified Explanation, and Key Takeaways. You can also ask find, count, overview, or compare."
+            "text": "Chat with selected documents, analyze whole documents, or extract item-specific engineering references with pin tables and connector details.",
+            "hint": "Examples: analyze this document, item details \"VN1630A\", visual reference \"VN1640A\", pin diagram \"D-SUB9\", find \"keyword\", count \"signal\", overview, compare."
         },
         "dashboard": {
             "title": "Dashboard Helper",
@@ -5995,7 +6464,7 @@ if active_main_tab == "💬 Chat":
     with chat_reset_col:
         if st.button(" 🧼 Reset", key="reset_chat_selection", help="Reset chat selection"):
             st.session_state.chat_file_selection = []
-            st.session_state.chat_summary_downloads = {"images": [], "tables": []}
+            st.session_state.chat_summary_downloads = empty_chat_summary_downloads()
             st.session_state.messages = []
             st.success("✅ Chat reset!")
             st.rerun()
@@ -6021,16 +6490,16 @@ if active_main_tab == "💬 Chat":
                 ensure_files_processed(chat_files)
             combined_text = "\n".join([st.session_state.file_texts.get(f, "") for f in chat_files])
     
-            user_input = st.chat_input("Ask something... (type 'clear' to reset chat). Try: 'analyze', 'summarize', 'find:', 'count:', or 'overview'")
+            user_input = st.chat_input("Ask something... Try: analyze, item details \"VN1630A\", pin diagram \"D-SUB9\", find \"keyword\", count \"signal\", overview")
             if user_input:
                 if user_input.strip().lower() == "clear":
                     st.session_state.messages = []
-                    st.session_state.chat_summary_downloads = {"images": [], "tables": []}
+                    st.session_state.chat_summary_downloads = empty_chat_summary_downloads()
                     st.success("✅ Chat cleared!")
                 else:
                     st.session_state.messages.append({"role": "user", "content": user_input})
                     with st.spinner("Processing your request..."):
-                        st.session_state.chat_summary_downloads = {"images": [], "tables": []}
+                        st.session_state.chat_summary_downloads = empty_chat_summary_downloads()
                         user_input_lower = user_input.lower()
                         # Word count queries
                         if any(t in user_input_lower for t in ["how many", "count", "number of", "occurrences"]):
@@ -6078,6 +6547,43 @@ if active_main_tab == "💬 Chat":
                                 else:
                                     response_lines.append(f"📄 **{f}**\n\nNo readable content found in this document.")
                             response = "\n\n".join(response_lines)
+                        elif any(term in user_input_lower for term in ["pin diagram", "pin table", "pin configuration", "visual reference", "visual and structural", "connector details", "technical tables"]):
+                            item_name = extract_quoted_item_name(user_input)
+                            if not item_name:
+                                response = "⚠️ Specify the item name in quotes. Example: pin diagram \"D-SUB9\" or visual reference \"VN1640A\""
+                            else:
+                                response_blocks = []
+                                pin_csv_downloads = []
+                                ascii_diagram_downloads = []
+                                for f in chat_files:
+                                    file_text = st.session_state.file_texts.get(f, "")
+                                    if file_text.strip():
+                                        response_blocks.append(build_item_visual_response(f, file_text, item_name))
+                                        visual_assets = build_item_visual_assets(f, file_text, item_name)
+                                        pin_csv_downloads.extend(visual_assets.get("csv", []))
+                                        ascii_diagram_downloads.extend(visual_assets.get("diagrams", []))
+                                    else:
+                                        response_blocks.append(f"📄 **{f}**\n\nNo readable content found in this document.")
+                                st.session_state.chat_summary_downloads = {
+                                    "images": [],
+                                    "tables": [],
+                                    "csv": pin_csv_downloads,
+                                    "diagrams": ascii_diagram_downloads,
+                                }
+                                response = "\n\n---\n\n".join(response_blocks)
+                        elif any(term in user_input_lower for term in ["item details", "item information", "extract item", "about item", "information about", "details about"]):
+                            item_name = extract_quoted_item_name(user_input)
+                            if not item_name:
+                                response = "⚠️ Specify the item name in quotes. Example: item details \"VN1630A\" or information about \"D-SUB9\""
+                            else:
+                                response_blocks = []
+                                for f in chat_files:
+                                    file_text = st.session_state.file_texts.get(f, "")
+                                    if file_text.strip():
+                                        response_blocks.append(build_item_information_response(f, file_text, item_name))
+                                    else:
+                                        response_blocks.append(f"📄 **{f}**\n\nNo readable content found in this document.")
+                                response = "\n\n---\n\n".join(response_blocks)
                         elif any(term in user_input_lower for term in ["analyze", "summary", "summarize", "summarise"]):
                             result = []
                             summary_image_downloads = []
@@ -6100,7 +6606,9 @@ if active_main_tab == "💬 Chat":
 
                             st.session_state.chat_summary_downloads = {
                                 "images": summary_image_downloads,
-                                "tables": summary_table_downloads
+                                "tables": summary_table_downloads,
+                                "csv": [],
+                                "diagrams": [],
                             }
                             response = "\n\n---\n\n".join(result)
                         elif "compare" in user_input_lower:
