@@ -46,7 +46,7 @@ PREVIEW_STORE = {}   # token -> file_dict
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 PREVIEW_DATA_FILE = os.path.join(APP_DIR, "preview_data.pkl")
 PDF_PREVIEW_RESOLUTION = 100
-PDF_PREVIEW_WINDOW = 5
+PDF_PREVIEW_WINDOW = 25
 PDF_ASSET_SCAN_PAGE_LIMIT = 10
 MAX_VECTOR_TEXT_CHARS = 250000
 
@@ -2372,29 +2372,52 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None, hig
                     else:
                         st.warning(f"⚠️ Page {highlight_page} not found. Showing all pages.")
                 else:
-                    # For large PDFs, show only first 3 pages by default
+                    # Large PDFs are rendered through the navigation controls below.
                     if total_pages > 10:
                         st.info(f"This PDF has {total_pages} pages. Use the controls below to preview any page.")
-                        pages_to_show = list(range(min(3, total_pages)))
+                        pages_to_show = []
                     else:
                         pages_to_show = list(range(total_pages))
                 
-                default_page = highlight_page if highlight_page and 1 <= highlight_page <= total_pages else 1
                 preview_key_base = hashlib.md5(file_name.encode("utf-8")).hexdigest()[:12]
+                start_key = f"pdf_preview_start_{preview_key_base}"
+                count_key = f"pdf_preview_count_{preview_key_base}"
+                default_page = highlight_page if highlight_page and 1 <= highlight_page <= total_pages else 1
+                if start_key not in st.session_state:
+                    st.session_state[start_key] = default_page
+                if count_key not in st.session_state:
+                    st.session_state[count_key] = 1
+
+                nav_cols = st.columns([1, 1, 2], vertical_alignment="center")
+                with nav_cols[0]:
+                    if st.button("Previous pages", key=f"pdf_prev_{preview_key_base}", use_container_width=True):
+                        current_count = int(st.session_state.get(count_key, 1))
+                        st.session_state[start_key] = max(1, int(st.session_state.get(start_key, 1)) - current_count)
+                        st.rerun()
+                with nav_cols[1]:
+                    if st.button("Next pages", key=f"pdf_next_{preview_key_base}", use_container_width=True):
+                        current_count = int(st.session_state.get(count_key, 1))
+                        next_start = int(st.session_state.get(start_key, 1)) + current_count
+                        st.session_state[start_key] = min(total_pages, next_start)
+                        st.rerun()
+                with nav_cols[2]:
+                    st.caption("Use page navigation for large PDFs. Only the selected window is rendered.")
+
                 page_start = st.number_input(
                     "Start page",
                     min_value=1,
                     max_value=total_pages,
-                    value=default_page,
+                    value=int(st.session_state.get(start_key, default_page)),
                     step=1,
-                    key=f"pdf_preview_start_{preview_key_base}",
+                    key=start_key,
                 )
                 pages_to_render_count = st.slider(
-                    "Pages to preview",
+                    "Pages to render on demand",
                     min_value=1,
                     max_value=min(PDF_PREVIEW_WINDOW, total_pages),
-                    value=1 if highlight_page else min(3, total_pages),
-                    key=f"pdf_preview_count_{preview_key_base}",
+                    value=int(st.session_state.get(count_key, 1)),
+                    key=count_key,
+                    help="Default is one page for lazy loading. Increase only when you explicitly want a multi-page preview window.",
                 )
                 render_tables = st.checkbox(
                     "Detect tables on previewed pages",
@@ -3289,6 +3312,190 @@ def build_preview_summary_markdown(file_name, file_bytes, extracted_text):
         return f"# Summary unavailable\n\n{e}"
 
 
+def render_paginated_text_document_viewer(file_name, extracted_text, page_size=9000):
+    """Render long text-like documents with explicit pagination or full-load mode."""
+    try:
+        text = str(extracted_text or "").strip()
+        if not text:
+            st.info("No readable text was extracted for this document.")
+            return
+
+        base_key = hashlib.md5(file_name.encode("utf-8")).hexdigest()[:12]
+        full_key = f"text_full_view_{base_key}"
+        st.checkbox("Load full document", key=full_key, help="Shows all extracted text. For very large files this may be slower.")
+
+        if st.session_state.get(full_key):
+            st.info("Full document mode is active. No content is truncated.")
+            st.text_area("Full extracted document", value=text, height=720, key=f"text_full_area_{base_key}")
+            return
+
+        total_sections = max(1, (len(text) + page_size - 1) // page_size)
+        st.info("Preview mode: showing one section at a time. Use Load full document to view everything at once.")
+
+        nav_cols = st.columns([1, 1, 2], vertical_alignment="center")
+        page_key = f"text_section_{base_key}"
+        if page_key not in st.session_state:
+            st.session_state[page_key] = 1
+        with nav_cols[0]:
+            if st.button("Previous section", key=f"text_prev_{base_key}", use_container_width=True):
+                st.session_state[page_key] = max(1, int(st.session_state[page_key]) - 1)
+                st.rerun()
+        with nav_cols[1]:
+            if st.button("Next section", key=f"text_next_{base_key}", use_container_width=True):
+                st.session_state[page_key] = min(total_sections, int(st.session_state[page_key]) + 1)
+                st.rerun()
+        with nav_cols[2]:
+            section_number = st.number_input(
+                "Jump to section",
+                min_value=1,
+                max_value=total_sections,
+                value=int(st.session_state[page_key]),
+                key=f"text_jump_{base_key}",
+            )
+            st.session_state[page_key] = int(section_number)
+
+        start = (int(st.session_state[page_key]) - 1) * page_size
+        end = min(len(text), start + page_size)
+        st.caption(f"Showing section {st.session_state[page_key]} of {total_sections}. Characters {start + 1:,}-{end:,} of {len(text):,}.")
+        st.text_area("Document section", value=text[start:end], height=620, key=f"text_section_area_{base_key}_{st.session_state[page_key]}")
+    except Exception as e:
+        st.error(f"Could not render text document viewer: {e}")
+
+
+def render_spreadsheet_document_viewer(file_name, file_bytes):
+    """Render CSV/XLS/XLSX with sheet selection and table pagination."""
+    try:
+        file_name_lower = file_name.lower()
+        base_key = hashlib.md5(file_name.encode("utf-8")).hexdigest()[:12]
+
+        if file_name_lower.endswith(".csv"):
+            sheets = {"CSV Data": pd.read_csv(BytesIO(file_bytes))}
+        else:
+            try:
+                sheets = pd.read_excel(BytesIO(file_bytes), sheet_name=None)
+            except Exception as e:
+                st.warning(f"Spreadsheet preview is best-effort for this format: {e}")
+                rows = extract_excel_data(file_name, file_bytes)
+                sheets = {"Recovered Data": pd.DataFrame(rows)}
+
+        if not sheets:
+            st.info("No sheets or rows were found.")
+            return
+
+        sheet_name = st.selectbox("Sheet", list(sheets.keys()), key=f"sheet_select_{base_key}")
+        df = sheets[sheet_name]
+        total_rows = len(df)
+        rows_per_page = st.selectbox("Rows per page", [25, 50, 100, 250, 500, 1000], index=1, key=f"rows_page_{base_key}")
+        total_pages = max(1, (total_rows + rows_per_page - 1) // rows_per_page)
+
+        page_key = f"sheet_page_{base_key}_{sheet_name}"
+        if page_key not in st.session_state:
+            st.session_state[page_key] = 1
+
+        nav_cols = st.columns([1, 1, 2], vertical_alignment="center")
+        with nav_cols[0]:
+            if st.button("Previous rows", key=f"sheet_prev_{base_key}", use_container_width=True):
+                st.session_state[page_key] = max(1, int(st.session_state[page_key]) - 1)
+                st.rerun()
+        with nav_cols[1]:
+            if st.button("Next rows", key=f"sheet_next_{base_key}", use_container_width=True):
+                st.session_state[page_key] = min(total_pages, int(st.session_state[page_key]) + 1)
+                st.rerun()
+        with nav_cols[2]:
+            jump_page = st.number_input(
+                "Jump to row page",
+                min_value=1,
+                max_value=total_pages,
+                value=int(st.session_state[page_key]),
+                key=f"sheet_jump_{base_key}",
+            )
+            st.session_state[page_key] = int(jump_page)
+
+        start = (int(st.session_state[page_key]) - 1) * rows_per_page
+        end = min(total_rows, start + rows_per_page)
+        st.caption(f"Sheet '{sheet_name}': showing rows {start + 1:,}-{end:,} of {total_rows:,}. All sheets are selectable above.")
+        st.dataframe(df.iloc[start:end], use_container_width=True, hide_index=True)
+    except Exception as e:
+        st.error(f"Could not render spreadsheet viewer: {e}")
+
+
+def render_presentation_document_viewer(file_name, file_bytes, extracted_text):
+    """Render PPTX slides on demand, with best-effort text pagination for PPT."""
+    try:
+        base_key = hashlib.md5(file_name.encode("utf-8")).hexdigest()[:12]
+        if file_name.lower().endswith(".pptx"):
+            prs = Presentation(BytesIO(file_bytes))
+            total_slides = len(prs.slides)
+            if total_slides == 0:
+                st.info("No slides were found.")
+                return
+
+            slide_key = f"slide_number_{base_key}"
+            if slide_key not in st.session_state:
+                st.session_state[slide_key] = 1
+
+            nav_cols = st.columns([1, 1, 2], vertical_alignment="center")
+            with nav_cols[0]:
+                if st.button("Previous slide", key=f"slide_prev_{base_key}", use_container_width=True):
+                    st.session_state[slide_key] = max(1, int(st.session_state[slide_key]) - 1)
+                    st.rerun()
+            with nav_cols[1]:
+                if st.button("Next slide", key=f"slide_next_{base_key}", use_container_width=True):
+                    st.session_state[slide_key] = min(total_slides, int(st.session_state[slide_key]) + 1)
+                    st.rerun()
+            with nav_cols[2]:
+                slide_number = st.number_input(
+                    "Jump to slide",
+                    min_value=1,
+                    max_value=total_slides,
+                    value=int(st.session_state[slide_key]),
+                    key=f"slide_jump_{base_key}",
+                )
+                st.session_state[slide_key] = int(slide_number)
+
+            slide = prs.slides[int(st.session_state[slide_key]) - 1]
+            st.caption(f"Showing slide {st.session_state[slide_key]} of {total_slides}. Slides are rendered on demand.")
+            slide_lines = []
+            for shape in slide.shapes:
+                if hasattr(shape, "text") and shape.text.strip():
+                    slide_lines.append(shape.text.strip())
+                if hasattr(shape, "table"):
+                    table_rows = []
+                    for row in shape.table.rows:
+                        table_rows.append([cell.text.strip() for cell in row.cells])
+                    if table_rows:
+                        st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
+            if slide_lines:
+                st.markdown("### Slide Content")
+                st.markdown("\n\n".join(html.escape(line) for line in slide_lines), unsafe_allow_html=True)
+            else:
+                st.info("This slide has no readable text. Native PPTX image rendering is not available without an external converter.")
+        else:
+            st.warning("Legacy PPT preview uses best-effort extracted text. Convert to PPTX for slide-level rendering.")
+            render_paginated_text_document_viewer(file_name, extracted_text, page_size=7000)
+    except Exception as e:
+        st.error(f"Could not render presentation viewer: {e}")
+
+
+def render_universal_document_viewer(file_name, file_entry, extracted_text, highlight_term=None, highlight_page=None):
+    """Route the Viewer tab to a full-navigation renderer by file type."""
+    try:
+        file_bytes = file_entry["bytes"]
+        file_name_lower = file_name.lower()
+        if file_name_lower.endswith(".pdf"):
+            render_document_preview(file_name, file_entry=file_entry, highlight_term=highlight_term, highlight_page=highlight_page)
+        elif file_name_lower.endswith((".pptx", ".ppt")):
+            render_presentation_document_viewer(file_name, file_bytes, extracted_text)
+        elif file_name_lower.endswith((".xlsx", ".xls", ".csv")):
+            render_spreadsheet_document_viewer(file_name, file_bytes)
+        elif file_name_lower.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp")):
+            st.image(file_bytes, caption=file_name, use_container_width=True)
+        else:
+            render_paginated_text_document_viewer(file_name, extracted_text)
+    except Exception as e:
+        st.error(f"Could not render universal document viewer: {e}")
+
+
 def render_professional_document_preview(file_name, file_entry=None, highlight_term=None, highlight_page=None):
     """Render a professional multi-tab document intelligence preview."""
     global PDF_PREVIEW_RESOLUTION
@@ -3351,8 +3558,14 @@ def render_professional_document_preview(file_name, file_entry=None, highlight_t
         tabs = st.tabs(["Viewer", "Summary", "Search", "Q&A", "Tables", "Images", "Downloads"])
 
         with tabs[0]:
-            st.markdown("<div class='preview-note'>Visual preview is separated from extracted text analysis. PDFs use page-window rendering so large manuals stay responsive.</div>", unsafe_allow_html=True)
-            render_document_preview(file_name, file_entry=file_entry, highlight_term=quick_search or highlight_term, highlight_page=highlight_page)
+            st.markdown("<div class='preview-note'>Viewer mode supports full-document navigation. PDFs, slides, sheets, and long text documents are rendered on demand instead of silently truncating content.</div>", unsafe_allow_html=True)
+            render_universal_document_viewer(
+                file_name,
+                file_entry,
+                extracted_text,
+                highlight_term=quick_search or highlight_term,
+                highlight_page=highlight_page,
+            )
 
         with tabs[1]:
             summary_md = build_preview_summary_markdown(file_name, file_bytes, extracted_text)
