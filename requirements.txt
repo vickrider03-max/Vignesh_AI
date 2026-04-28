@@ -17,3 +17,5 @@ torchvision
 pytz
 numpy
 matplotlib
+pytesseract
+
