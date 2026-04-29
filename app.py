@@ -1791,11 +1791,20 @@ def extract_excel_data(file_name, file_bytes):
     return data
 
 
+def update_uploaded_file_status(file_name, status):
+    """Update the sidebar status badge for an uploaded file."""
+    for file_info in st.session_state.get("uploaded_files", []):
+        if file_info.get("name") == file_name:
+            file_info["status"] = status
+            break
+
+
 def ensure_file_processed(file_name):
     """Process file with caching to avoid redundant extraction"""
     file_info = get_uploaded_file_entry(file_name)
     if not file_info:
         return
+    update_uploaded_file_status(file_name, "processing")
     file_name_lower = file_name.lower()
     file_bytes = file_info["bytes"]
     new_hash = get_file_hash(file_bytes)
@@ -1811,6 +1820,7 @@ def ensure_file_processed(file_name):
             cached_excel = EXCEL_DATA_CACHE.get(file_name)
             if cached_excel is not None:
                 st.session_state.excel_data_by_file[file_name] = cached_excel
+        update_uploaded_file_status(file_name, "ready")
         return
     
     # Process file if not in cache
@@ -1823,6 +1833,8 @@ def ensure_file_processed(file_name):
         excel_data = extract_excel_data(file_name, file_bytes)
         st.session_state.excel_data_by_file[file_name] = excel_data
         EXCEL_DATA_CACHE.set(file_name, excel_data)
+
+    update_uploaded_file_status(file_name, "ready")
 
 
 def ensure_files_processed(file_names):
@@ -2701,80 +2713,31 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None, hig
                     
                 st.markdown(f"**PDF Pages: {total_pages}**")
                 
-                # Determine which page to show
-                selected_page_index = None
-                if highlight_page is not None:
-                    if 1 <= highlight_page <= total_pages:
-                        selected_page_index = highlight_page - 1
-                    else:
-                        st.warning(f"⚠️ Page {highlight_page} not found. Showing all pages.")
-                else:
-                    # Large PDFs are rendered through the navigation controls below.
-                    if total_pages > 10:
-                        st.info(f"This PDF has {total_pages} pages. Use the controls below to preview any page.")
-                        pages_to_show = []
-                    else:
-                        pages_to_show = list(range(total_pages))
-                
                 preview_key_base = hashlib.md5(file_name.encode("utf-8")).hexdigest()[:12]
-                start_key = f"pdf_preview_start_{preview_key_base}"
-                count_key = f"pdf_preview_count_{preview_key_base}"
-                default_page = highlight_page if highlight_page and 1 <= highlight_page <= total_pages else 1
-                if start_key not in st.session_state:
-                    st.session_state[start_key] = default_page
-                if count_key not in st.session_state:
-                    st.session_state[count_key] = 1
+                batch_key = f"pdf_preview_batch_{preview_key_base}"
+                batch_size = 5
+                max_batch = max(0, (total_pages - 1) // batch_size)
+                default_batch = 0
+                if highlight_page and 1 <= highlight_page <= total_pages:
+                    default_batch = (highlight_page - 1) // batch_size
+                elif highlight_page is not None:
+                    st.warning(f"⚠️ Page {highlight_page} not found. Showing the first page batch.")
 
-                nav_cols = st.columns([1, 1, 2], vertical_alignment="center")
-                with nav_cols[0]:
-                    if st.button(
-                        "←",
-                        key=f"pdf_prev_{preview_key_base}",
-                        use_container_width=True,
-                        help="Previous page",
-                    ):
-                        current_count = int(st.session_state.get(count_key, 1))
-                        st.session_state[start_key] = max(1, int(st.session_state.get(start_key, 1)) - current_count)
-                        st.rerun()
-                with nav_cols[1]:
-                    if st.button(
-                        "→",
-                        key=f"pdf_next_{preview_key_base}",
-                        use_container_width=True,
-                        help="Next page",
-                    ):
-                        current_count = int(st.session_state.get(count_key, 1))
-                        next_start = int(st.session_state.get(start_key, 1)) + current_count
-                        st.session_state[start_key] = min(total_pages, next_start)
-                        st.rerun()
-                with nav_cols[2]:
-                    st.caption("Use page navigation for large PDFs. Only the selected window is rendered.")
+                if batch_key not in st.session_state:
+                    st.session_state[batch_key] = default_batch
+                st.session_state[batch_key] = max(0, min(int(st.session_state[batch_key]), max_batch))
 
-                page_start = st.number_input(
-                    "Start page",
-                    min_value=1,
-                    max_value=total_pages,
-                    value=int(st.session_state.get(start_key, default_page)),
-                    step=1,
-                    key=start_key,
-                )
-                pages_to_render_count = st.slider(
-                    "Pages to render on demand",
-                    min_value=1,
-                    max_value=min(PDF_PREVIEW_WINDOW, total_pages),
-                    value=int(st.session_state.get(count_key, 1)),
-                    key=count_key,
-                    help="Default is one page for lazy loading. Increase only when you explicitly want a multi-page preview window.",
-                )
+                batch_start = st.session_state[batch_key] * batch_size
+                batch_end = min(total_pages, batch_start + batch_size)
+                pages_to_show = range(batch_start, batch_end)
+
                 render_tables = st.checkbox(
                     "Detect tables on previewed pages",
                     value=False,
                     key=f"pdf_preview_tables_{preview_key_base}",
                     help="Table detection is slower, so it only runs when enabled.",
                 )
-                page_end = min(total_pages, int(page_start) + int(pages_to_render_count) - 1)
-                pages_to_show = range(int(page_start) - 1, page_end)
-                st.caption(f"Showing page {int(page_start)} to {page_end} of {total_pages}. Change the start page to preview any page.")
+                st.caption(f"Showing pages {batch_start + 1} to {batch_end} of {total_pages}. Five pages are rendered per batch for faster previews.")
 
                 # Render pages
                 highlight_found = False
@@ -2849,6 +2812,27 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None, hig
                         if page_text.strip():
                             st.markdown(f"#### Page {i+1} Text")
                             st.code(page_text[:1000], language="text")
+
+                st.markdown("---")
+                nav_cols = st.columns([1, 1], vertical_alignment="center")
+                with nav_cols[0]:
+                    if st.button(
+                        "⬅ Previous",
+                        key=f"pdf_prev_batch_{preview_key_base}",
+                        use_container_width=True,
+                        disabled=st.session_state[batch_key] <= 0,
+                    ):
+                        st.session_state[batch_key] = max(0, int(st.session_state[batch_key]) - 1)
+                        st.rerun()
+                with nav_cols[1]:
+                    if st.button(
+                        "Next ➡",
+                        key=f"pdf_next_batch_{preview_key_base}",
+                        use_container_width=True,
+                        disabled=batch_end >= total_pages,
+                    ):
+                        st.session_state[batch_key] = min(max_batch, int(st.session_state[batch_key]) + 1)
+                        st.rerun()
                 
                 # Download sections
                 if image_download_items:
@@ -4247,31 +4231,37 @@ with st.sidebar:
         )
 
         if new_files:
-            with st.spinner("Loading uploaded files..."):
-                existing_names = {f["name"] for f in st.session_state.uploaded_files}
-                uploaded_new_file = False
-                for file in new_files:
-                    if file.name not in existing_names:
-                        file_bytes = file.read()
-                        st.session_state.uploaded_files.append({"name": file.name, "bytes": file_bytes})
-                        uploaded_new_file = True
-                if uploaded_new_file:
-                    new_file_names = [file.name for file in new_files if file.name not in existing_names]
-                    ensure_files_processed(new_file_names)
-                    st.session_state.workspace_memory["indexed_files"] = sorted(set(st.session_state.workspace_memory.get("indexed_files", []) + new_file_names))
-                    record_workspace_memory_event(
-                        "upload",
-                        "Documents indexed into shared memory",
-                        "Uploaded and indexed: " + ", ".join(new_file_names),
-                        source="Upload",
-                    )
-                    get_unified_workspace_vector_store(new_file_names)
-                    save_workspace_memory()
-                    save_memory_log("upload", f"Uploaded {len(new_file_names)} new file(s)", {"files": new_file_names})
-                    st.session_state.messages = []
-                    st.session_state.chat_summary_downloads = {"images": [], "tables": [], "csv": [], "diagrams": []}
-                    st.session_state.chat_file_selection = []
-                    st.success("✅ New files uploaded. Chat history has been cleared.")
+            existing_names = {f["name"] for f in st.session_state.uploaded_files}
+            new_file_names = []
+            for file in new_files:
+                if file.name not in existing_names:
+                    file_bytes = file.read()
+                    st.session_state.uploaded_files.append({
+                        "name": file.name,
+                        "bytes": file_bytes,
+                        "status": "queued",
+                    })
+                    new_file_names.append(file.name)
+                    existing_names.add(file.name)
+
+            if new_file_names:
+                for file_name in new_file_names:
+                    update_uploaded_file_status(file_name, "processing")
+                st.toast("📄 File uploaded — initializing pipeline...")
+                st.info("📄 File uploaded — processing in background. You can select files and keep working.")
+                st.session_state.workspace_memory["indexed_files"] = sorted(set(st.session_state.workspace_memory.get("indexed_files", []) + new_file_names))
+                record_workspace_memory_event(
+                    "upload",
+                    "Documents queued for shared memory",
+                    "Uploaded and queued for processing: " + ", ".join(new_file_names),
+                    source="Upload",
+                )
+                save_workspace_memory()
+                save_memory_log("upload", f"Queued {len(new_file_names)} new file(s)", {"files": new_file_names})
+                st.session_state.messages = []
+                st.session_state.chat_summary_downloads = {"images": [], "tables": [], "csv": [], "diagrams": []}
+                st.session_state.chat_file_selection = []
+                st.success("✅ New files uploaded. Chat history has been cleared.")
 
         st.markdown("---")
         st.markdown("### Uploaded files")
@@ -4280,8 +4270,16 @@ with st.sidebar:
             cols = st.columns([0.56, 0.27, 0.17], vertical_alignment="center")
             with cols[0]:
                 file_name = file_dict["name"]
+                file_status = file_dict.get("status", "ready")
+                if file_status == "ready":
+                    status_label = "ready"
+                elif file_status == "queued":
+                    status_label = "queued..."
+                else:
+                    status_label = f"{file_status}..."
                 is_selected = file_name in st.session_state.selected_files
-                button_label = file_name if not is_selected else f"Selected: {file_name}"
+                file_label = f"{file_name} - {status_label}"
+                button_label = file_label if not is_selected else f"Selected: {file_label}"
                 if st.button(
                     button_label,
                     key=f"select_file_{idx}",
@@ -7739,6 +7737,41 @@ def show_help_popup(tab_name, selected_files):
     suggestions = get_dynamic_suggestions(tab_name, skill_level)[:4]
     suggestion_tags = "".join(f"<span>{html.escape(s)}</span>" for s in suggestions)
     next_action = get_next_best_action(tab_name, skill_level)
+    helper_close_key = f"helper_close_{tab_name}"
+
+    st.markdown(
+        f"""
+        <style>
+        .st-key-{helper_close_key} {{
+            position: fixed !important;
+            right: 30px !important;
+            bottom: calc(18px + min(72vh, 420px) - 46px) !important;
+            z-index: 100000 !important;
+            width: 34px !important;
+        }}
+        .st-key-{helper_close_key} button {{
+            width: 34px !important;
+            height: 34px !important;
+            min-height: 34px !important;
+            padding: 0 !important;
+            border: none !important;
+            border-radius: 50% !important;
+            background: rgba(255, 255, 255, 0.95) !important;
+            color: #7a4f3a !important;
+            font-size: 1rem !important;
+            line-height: 1 !important;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08) !important;
+        }}
+        .st-key-{helper_close_key} button:hover {{
+            background: #fee7d0 !important;
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    if st.button("×", key=helper_close_key, help="Close helper"):
+        set_help_popup_state(tab_name, False)
+        st.rerun()
 
     st.markdown(
         f"""
@@ -7764,24 +7797,6 @@ def show_help_popup(tab_name, selected_files):
             margin: 0 0 10px;
             font-size: 1.05rem;
             color: #3c2e2a;
-        }}
-        .helper-popup-overlay .helper-close-btn {{
-            position: absolute;
-            top: 12px;
-            right: 14px;
-            width: 34px;
-            height: 34px;
-            border: none;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.95);
-            color: #7a4f3a;
-            font-size: 1.1rem;
-            line-height: 1;
-            cursor: pointer;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
-        }}
-        .helper-popup-overlay .helper-close-btn:hover {{
-            background: #fee7d0;
         }}
         .helper-popup-overlay .helper-meta {{
             margin-bottom: 12px;
@@ -7827,14 +7842,13 @@ def show_help_popup(tab_name, selected_files):
         }}
         </style>
         <div class="helper-popup-overlay">
-            <button class="helper-close-btn" onclick="this.closest('.helper-popup-overlay').style.display='none'" aria-label="Close helper">×</button>
             <h3>{html.escape(helper_def['title'])}</h3>
             <div class="helper-meta">Skill: <strong>{skill_level.title()}</strong> · Queries: <strong>{tracker.get('queries', 0)}</strong></div>
             <p>{html.escape(helper_def['text'])}</p>
             <p class="helper-hint">{html.escape(helper_def['hint'])}</p>
             <div class="helper-next-action">{html.escape(next_action)}</div>
             <div class="helper-pill">{suggestion_tags}</div>
-            <div class="helper-footer">Selected file types: <strong>{html.escape(selected_types_text)}</strong><br>Click the header 🧠 to close this helper.</div>
+            <div class="helper-footer">Selected file types: <strong>{html.escape(selected_types_text)}</strong><br>Use the close button to hide this helper.</div>
         </div>
         """,
         unsafe_allow_html=True
