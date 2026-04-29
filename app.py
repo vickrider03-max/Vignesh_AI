@@ -13,7 +13,6 @@ from difflib import SequenceMatcher
 from io import BytesIO
 from pytz import timezone
 import time
-from functools import lru_cache
 from collections import OrderedDict
 
 import docx, openpyxl, pdfplumber, streamlit as st
@@ -26,7 +25,6 @@ from pptx import Presentation
 from bs4 import BeautifulSoup
 from PIL import Image, ImageDraw, ImageFont
 import plotly.express as px
-import plotly.graph_objects as go
 
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.llms import HuggingFacePipeline
@@ -1272,19 +1270,19 @@ if st.session_state.is_authenticated:
             section.main .block-container,
             .main .block-container,
             div[data-testid="stMain"] .block-container {
-                padding-top: 8px !important;
+                padding-top: 4px !important;
             }
             div[data-testid="stVerticalBlock"] {
-                gap: 0.5rem !important;
+                gap: 0.25rem !important;
             }
             div[data-testid="stHorizontalBlock"]:has(.st-key-header_brain_icon) {
-                margin-top: -0.75rem !important;
-                margin-bottom: -0.35rem !important;
+                margin-top: -0.5rem !important;
+                margin-bottom: -0.2rem !important;
                 align-items: center !important;
-                min-height: 48px !important;
+                min-height: 40px !important;
             }
             .app-header-title {
-                transform: translateY(-4px);
+                transform: translateY(-2px);
                 line-height: 1.1;
                 margin: 0 !important;
             }
@@ -1298,11 +1296,11 @@ if st.session_state.is_authenticated:
                 color: #64748b;
                 font-size: 0.9rem;
                 font-style: italic;
-                margin-top: 0.08rem;
+                margin-top: 0.04rem;
             }
             .st-key-header_brain_icon,
             .st-key-main_logout_btn {
-                margin-top: -0.45rem !important;
+                margin-top: -0.3rem !important;
             }
             .st-key-main_logout_btn {
                 display: flex !important;
@@ -1311,7 +1309,7 @@ if st.session_state.is_authenticated:
             .compact-header-divider {
                 height: 1px;
                 background: #e2e8f0;
-                margin: 4px 0 8px;
+                margin: 2px 0 4px;
             }
         </style>
         """,
@@ -6882,86 +6880,85 @@ def show_help_popup(tab_name, selected_files):
 # 1. Premium "Soft-Glow" Navigation CSS
 st.markdown("""
     <style>
-    /* Hide default radio UI */
+    .st-key-active_main_tab {
+        margin-top: 16px !important;
+        margin-bottom: 8px !important;
+        position: relative;
+    }
+
+    /* Text-only tabs with glass sliding indicator */
     div[role="radiogroup"] > label > div:first-child { display: none !important; }
     div[role="radiogroup"] {
-        gap: 8px;
+        gap: 24px;
         display: flex;
         margin: 0 !important;
         padding: 0 !important;
-    }
-    .st-key-active_main_tab {
-        margin-top: 8px !important;
-        margin-bottom: 8px !important;
+        position: relative;
+        justify-content: center;
+        border-bottom: 1px solid rgba(59, 130, 246, 0.1);
+        padding-bottom: 8px;
     }
 
-    /* Base Pill Styling */
+    /* Text-only tab styling */
     div[role="radiogroup"] > label {
-        background-color: rgba(128, 128, 128, 0.08) !important;
-        padding: 6px 18px !important;
-        border-radius: 50px !important;
-        border: 1px solid rgba(128, 128, 128, 0.1) !important;
+        background: none !important;
+        border: none !important;
+        padding: 8px 16px !important;
+        border-radius: 0 !important;
         display: flex !important;
         align-items: center !important;
-        height: 38px;
-        min-height: 38px !important;
+        height: auto;
+        min-height: auto !important;
         font-weight: 500;
-        line-height: 1.1 !important;
-        transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+        line-height: 1.2 !important;
+        transition: all 0.3s ease;
+        position: relative;
+        cursor: pointer;
+        color: #64748b;
     }
 
-    /* Active State - Deep Electric Blue */
+    /* Active tab text color */
     div[role="radiogroup"] > label[data-checked="true"] {
-        background-color: #1E88E5 !important;
-        color: #F6F9FF !important;
-        box-shadow: 0 4px 15px rgba(30, 136, 229, 0.4);
+        color: #3b82f6 !important;
+        background: none !important;
+        box-shadow: none !important;
     }
 
-    /* Dot Base Style - Soft Glow */
-    div[role="radiogroup"] > label::after {
-        content: '';
-        margin-left: 12px;
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        filter: blur(0.4px); /* Softens the edges */
+    /* Hover effects */
+    div[role="radiogroup"] > label:hover {
+        color: #3b82f6 !important;
+        transform: translateY(-1px);
     }
 
-    /* White Dot for Active Tab */
+    /* Glass sliding indicator under active tab */
     div[role="radiogroup"] > label[data-checked="true"]::after {
-        background-color: #F6F9FF !important;
-        box-shadow: 0 0 8px #ffffff;
+        content: '';
+        position: absolute;
+        bottom: -8px;
+        left: 50%;
+        width: 60px;
+        height: 2px;
+        background: linear-gradient(90deg, rgba(59, 130, 246, 0.3), rgba(59, 130, 246, 0.6), rgba(59, 130, 246, 0.3));
+        border-radius: 1px;
+        transform: translateX(-50%);
+        box-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
+        animation: indicatorBreath 3s ease-in-out infinite;
     }
 
-    /* --- UPDATED PREMIUM COLORS --- */
-    
-    /* 1. CHAT - Soft Ice Blue (Instead of bright cyan) */
-    div[role="radiogroup"] > label:nth-child(1):not([data-checked="true"])::after { 
-        background-color: #81D4FA; 
-        box-shadow: 0 0 6px #81D4FA;
-    } 
+    /* Breathing animation for indicator */
+    @keyframes indicatorBreath {
+        0%, 100% { opacity: 0.6; transform: translateX(-50%) scaleY(1); }
+        50% { opacity: 1; transform: translateX(-50%) scaleY(1.2); }
+    }
 
-    /* 2. DASHBOARD - Emerald Mint (Softer than standard Green) */
-    div[role="radiogroup"] > label:nth-child(2):not([data-checked="true"])::after { 
-        background-color: #66BB6A; 
-        box-shadow: 0 0 6px #66BB6A;
-    } 
-
-    /* 3. COMPARE - Muted Amber (Less "Caution" yellow) */
-    div[role="radiogroup"] > label:nth-child(3):not([data-checked="true"])::after { 
-        background-color: #FFB74D; 
-        box-shadow: 0 0 6px #FFB74D;
-    } 
-
-    /* 4. CAPL - Royal Orchid (Sophisticated Purple) */
-    div[role="radiogroup"] > label:nth-child(4):not([data-checked="true"])::after { 
-        background-color: #BA68C8; 
-        box-shadow: 0 0 6px #BA68C8;
+    /* Remove old styling */
+    div[role="radiogroup"] > label::after {
+        display: none !important;
     }
 
     /* --- RESPONSIVE DESIGN --- */
     /* Mobile First: Base styles are mobile-friendly */
-    
+
     /* Tablet and up */
     @media (min-width: 768px) {
         div[role="radiogroup"] {
@@ -6970,14 +6967,13 @@ st.markdown("""
         }
         div[role="radiogroup"] > label {
             flex: 0 0 auto;
-            min-width: 112px;
         }
     }
 
     /* Desktop */
     @media (min-width: 1024px) {
         div[role="radiogroup"] > label {
-            min-width: 128px;
+            padding: 8px 20px !important;
         }
     }
 
@@ -6985,22 +6981,59 @@ st.markdown("""
     @media (max-width: 767px) {
         div[role="radiogroup"] {
             flex-direction: column !important;
-            gap: 8px;
-            align-items: stretch;
+            gap: 16px;
+            align-items: center;
+            padding-bottom: 16px;
         }
         div[role="radiogroup"] > label {
-            width: 100% !important;
-            min-height: 50px;
+            width: auto !important;
+            min-height: auto;
             padding: 12px 16px !important;
             font-size: 16px !important; /* Prevent zoom on iOS */
             text-align: center;
         }
-        div[role="radiogroup"] > label::after {
-            margin-left: 8px;
+        div[role="radiogroup"] > label[data-checked="true"]::after {
+            width: 40px;
+            bottom: -12px;
         }
     }
 
-    /* Touch-friendly buttons on mobile */
+    /* Scroll-sync navigation */
+    </style>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const sections = ['chat-section', 'dashboard-section', 'compare-section', 'capl-section'];
+        const tabLabels = document.querySelectorAll('div[role="radiogroup"] > label');
+        
+        const observerOptions = {
+            root: null,
+            rootMargin: '-50% 0px -50% 0px',
+            threshold: 0
+        };
+        
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const sectionId = entry.target.id;
+                    const tabIndex = sections.indexOf(sectionId);
+                    if (tabIndex !== -1 && tabLabels[tabIndex]) {
+                        // Remove active state from all tabs
+                        tabLabels.forEach(label => label.removeAttribute('data-checked'));
+                        // Add active state to current tab
+                        tabLabels[tabIndex].setAttribute('data-checked', 'true');
+                    }
+                }
+            });
+        }, observerOptions);
+        
+        // Observe sections
+        sections.forEach(sectionId => {
+            const section = document.getElementById(sectionId);
+            if (section) observer.observe(section);
+        });
+    });
+    </script>
+    <style>
     @media (max-width: 767px) {
         .stButton > button {
             min-height: 48px !important;
@@ -7522,6 +7555,7 @@ active_main_tab = st.radio("Open Section", main_tab_options, horizontal=True, ke
 # Handles per-tab file selection, direct commands like summarize/find/count,
 # semantic Q&A via vector search, and chat-specific download assets.
 if active_main_tab == "💬 Chat":
+    st.markdown('<div id="chat-section">', unsafe_allow_html=True)
     chat_header_col, chat_reset_col = st.columns([8, 1])
     with chat_header_col:
         st.subheader("Chat with Selected Documents")
@@ -7716,6 +7750,8 @@ if active_main_tab == "💬 Chat":
     else:
         st.info("Select files from the sidebar to start chatting.")
 
+    st.markdown('</div>', unsafe_allow_html=True)
+
 # -------------------------------
 # TAB 2: DASHBOARD
 # -------------------------------
@@ -7723,6 +7759,7 @@ if active_main_tab == "💬 Chat":
 # Focused on structured HTML/XLSX analysis, charts, login/stat extraction, and
 # grouped test fixture reporting for uploaded report files.
 if active_main_tab == "📊 Dashboard":
+    st.markdown('<div id="dashboard-section">', unsafe_allow_html=True)
     dashboard_header_col, dashboard_reset_col = st.columns([8, 1])
     with dashboard_header_col:
         st.subheader("Dashboard")
@@ -8277,6 +8314,8 @@ if active_main_tab == "📊 Dashboard":
                 else:
                     st.warning("No structured test results found.")
 
+    st.markdown('</div>', unsafe_allow_html=True)
+
 # -------------------------------
 # TAB 3: COMPARE
 # -------------------------------
@@ -8284,6 +8323,7 @@ if active_main_tab == "📊 Dashboard":
 # Lets users pick 2+ selected files, generate inline word-level differences,
 # and download the comparison results as an Excel file.
 if active_main_tab == "📂 Compare":
+    st.markdown('<div id="compare-section">', unsafe_allow_html=True)
     compare_header_col, compare_reset_col = st.columns([8, 1])
     with compare_header_col:
         st.subheader("Compare Files")
@@ -8374,6 +8414,8 @@ if active_main_tab == "📂 Compare":
     elif len(selected_files_for_comparison) < 2:
         st.info("Select at least two files to compare.")
 
+    st.markdown('</div>', unsafe_allow_html=True)
+
 # -------------------------------
 # TAB 4: CAPL
 # -------------------------------
@@ -8381,6 +8423,7 @@ if active_main_tab == "📂 Compare":
 # Dedicated to CAPL file selection, live editing, compile/analyze checks, issue
 # reporting, and optional AI-assisted fix generation for CAPL scripts.
 if active_main_tab == "📡 CAPL":
+    st.markdown('<div id="capl-section">', unsafe_allow_html=True)
     capl_header_col, capl_reset_col = st.columns([8, 1])
     with capl_header_col:
         st.subheader("⚙️ CAPL Compiler & Analyzer")
@@ -8561,3 +8604,5 @@ if active_main_tab == "📡 CAPL":
                                 render_capl_issue_table(issues)
                             except Exception as exc:
                                 st.error(f"AI suggestion failed: {exc}")
+
+    st.markdown('</div>', unsafe_allow_html=True)
