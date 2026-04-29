@@ -1031,6 +1031,8 @@ def render_status_strip():
     </script>
     """
 
+    role_label = str(role).title()
+
     status_html = f"""
     <style>
         body {{
@@ -1038,120 +1040,49 @@ def render_status_strip():
             background: transparent;
             font-family: 'Segoe UI', Tahoma, sans-serif;
         }}
-        .dashboard-grid {{
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 8px;
-            padding: 0 2px 4px;
-        }}
-        .metric-card {{
-            position: relative;
+        .context-strip {{
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-height: 28px;
+            color: #64748b;
+            font-size: 0.84rem;
+            line-height: 1;
+            white-space: nowrap;
             overflow: hidden;
-            min-height: 58px;
-            border-radius: 12px;
-            padding: 8px 10px;
-            border: 1px solid rgba(255, 255, 255, 0.5) !important;
-            box-shadow: 0 6px 14px rgba(15, 23, 42, 0.12);
-            transform: translateY(8px) scale(0.98);
-            opacity: 0;
-            animation: riseIn 0.65s ease-out forwards, cardFloat 4.5s ease-in-out infinite;
+            text-overflow: ellipsis;
+            padding: 0 2px;
         }}
-        .metric-card:nth-child(1) {{ animation-delay: 0.05s, 0.9s; }}
-        .metric-card:nth-child(2) {{ animation-delay: 0.15s, 1.05s; }}
-        .metric-card:nth-child(3) {{ animation-delay: 0.25s, 1.2s; }}
-        .metric-card:nth-child(4) {{ animation-delay: 0.35s, 1.35s; }}
-        .metric-card::before {{
-            content: "";
-            position: absolute;
-            width: 100px;
-            height: 100px;
-            top: -40px;
-            right: -20px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.22);
-            filter: blur(4px);
-            animation: bubbleDrift 8s ease-in-out infinite;
+        .context-strip span {{
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            opacity: 0.82;
         }}
-        .metric-card::after {{
-            content: "";
-            position: absolute;
-            width: 60px;
-            height: 60px;
-            bottom: -20px;
-            left: -8px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.16);
+        .context-strip .dot {{
+            color: #cbd5e1;
+            opacity: 1;
         }}
-        .card-label, .card-value {{
-            position: relative;
-            z-index: 1;
-            display: block;
-        }}
-        .card-label {{
-            font-size: 0.58rem !important;
-            font-weight: 700 !important;
-            letter-spacing: 0.05em;
-            text-transform: uppercase;
-            color: rgba(15, 23, 42, 0.68) !important;
-            margin-bottom: 4px;
-        }}
-        .card-value {{
-            font-size: 1rem !important;
-            font-weight: 800 !important;
-            line-height: 1.2;
-            word-break: break-word;
+        .timer-badge {{
+            background: #eff6ff;
+            color: #1e40af;
+            border: 1px solid #dbeafe;
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-weight: 700;
+            opacity: 1 !important;
         }}
         #live-timer {{
-            letter-spacing: 0.06em;
-            animation: timerGlow 1.8s ease-in-out infinite;
-        }}
-        @keyframes riseIn {{
-            from {{ opacity: 0; transform: translateY(8px) scale(0.98); }}
-            to {{ opacity: 1; transform: translateY(0) scale(1); }}
-        }}
-        @keyframes cardFloat {{
-            0%, 100% {{ transform: translateY(0); }}
-            50% {{ transform: translateY(-3px); }}
-        }}
-        @keyframes bubbleDrift {{
-            0%, 100% {{ transform: translate(0, 0); }}
-            50% {{ transform: translate(-8px, 10px); }}
-        }}
-        @keyframes timerGlow {{
-            0%, 100% {{ text-shadow: 0 0 0 rgba(46, 125, 50, 0); }}
-            50% {{ text-shadow: 0 0 12px rgba(46, 125, 50, 0.25); }}
-        }}
-        @media (max-width: 900px) {{
-            .dashboard-grid {{
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-            }}
+            font-family: 'Courier New', monospace;
+            letter-spacing: 0.03em;
         }}
         @media (max-width: 560px) {{
-            .dashboard-grid {{
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-                gap: 8px;
-                padding: 4px 2px 8px;
+            .context-strip {{
+                gap: 7px;
+                font-size: 0.74rem;
             }}
-            .metric-card {{
-                min-height: 74px;
-                border-radius: 12px;
-                padding: 9px 8px;
-                box-shadow: 0 6px 14px rgba(15, 23, 42, 0.12);
-            }}
-            .card-label {{
-                font-size: 0.54rem !important;
-                letter-spacing: 0.04em;
-                margin-bottom: 4px;
-                white-space: normal;
-            }}
-            .card-value {{
-                font-size: clamp(0.82rem, 4vw, 1rem) !important;
-                line-height: 1.15;
-                overflow-wrap: anywhere;
-            }}
-            #live-timer {{
-                font-size: clamp(0.78rem, 3.8vw, 0.95rem) !important;
-                letter-spacing: 0.02em;
+            .timer-badge {{
+                padding: 3px 6px;
             }}
         }}
     </style>
@@ -1178,27 +1109,18 @@ def render_status_strip():
         applyButtonColors();
     </script>
     {live_timer_js}
-    <div class="dashboard-grid">
-        <div class="metric-card" style="background: linear-gradient(135deg, #e8eaf6 0%, #c5cae9 100%); color: #3c4f7e; border: 1px solid #e8eaf6;">
-            <span class="card-label" style="color: #666;">👤 User</span>
-            <span class="card-value" style="color: #3c4f7e;">{html.escape(username)}</span>
-        </div>
-        <div class="metric-card" style="background: linear-gradient(135deg, #fce4ec 0%, #f8bbd9 100%); color: #7b1fa2; border: 1px solid #fce4ec;">
-            <span class="card-label" style="color: #666;">🔑 Role</span>
-            <span class="card-value" style="color: #7b1fa2;">{html.escape(str(role).title())}</span>
-        </div>
-        <div class="metric-card" style="background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); color: #1565c0; border: 1px solid #e3f2fd;">
-            <span class="card-label" style="color: #666;">📁 Available Files</span>
-            <span class="card-value" style="color: #1565c0;">{available_files}</span>
-        </div>
-        <div class="metric-card" style="background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%); color: #2e7d32; border: 1px solid #e8f5e8;">
-            <span class="card-label" style="color: #666;">⏱️ Usage Time</span>
-            <span class="card-value" id="live-timer" style="color: #2e7d32; font-family: 'Courier New', monospace;">{timer_str}</span>
-        </div>
+    <div class="context-strip" title="Current session context">
+        <span>👤 {html.escape(username)}</span>
+        <span class="dot">•</span>
+        <span>🏷️ {html.escape(role_label)}</span>
+        <span class="dot">•</span>
+        <span>📁 {available_files} Files</span>
+        <span class="dot">•</span>
+        <span class="timer-badge">⏱ <span id="live-timer">{timer_str}</span></span>
     </div>
     """
 
-    render_html_frame(status_html, height=118)
+    render_html_frame(status_html, height=34)
 
 
 def _help_state_key(tab_name):
@@ -1272,25 +1194,25 @@ if st.session_state.is_authenticated:
             section.main .block-container,
             .main .block-container,
             div[data-testid="stMain"] .block-container {
-                padding-top: 8px !important;
+                padding-top: 6px !important;
             }
             div[data-testid="stVerticalBlock"] {
-                gap: 0.5rem !important;
+                gap: 0.375rem !important;
             }
             div[data-testid="stHorizontalBlock"]:has(.st-key-header_brain_icon) {
-                margin-top: -0.75rem !important;
-                margin-bottom: -0.35rem !important;
+                margin-top: -0.6rem !important;
+                margin-bottom: -0.2rem !important;
                 align-items: center !important;
-                min-height: 48px !important;
+                min-height: 56px !important;
             }
             .app-header-title {
-                transform: translateY(-4px);
+                transform: translateY(-2px);
                 line-height: 1.1;
                 margin: 0 !important;
             }
             .app-header-main {
                 color: #1e293b;
-                font-size: 1.18rem;
+                font-size: 1.2rem;
                 font-weight: 700;
                 margin: 0;
             }
@@ -1302,16 +1224,23 @@ if st.session_state.is_authenticated:
             }
             .st-key-header_brain_icon,
             .st-key-main_logout_btn {
-                margin-top: -0.45rem !important;
+                margin-top: -0.3rem !important;
             }
             .st-key-main_logout_btn {
                 display: flex !important;
                 align-items: center !important;
+                justify-content: flex-end !important;
+                min-height: 56px !important;
+            }
+            .st-key-main_logout_btn button {
+                min-height: 38px !important;
+                border-radius: 8px !important;
+                padding: 0.45rem 0.8rem !important;
             }
             .compact-header-divider {
                 height: 1px;
                 background: #e2e8f0;
-                margin: 4px 0 8px;
+                margin: 2px 0 6px;
             }
         </style>
         """,
@@ -1329,6 +1258,7 @@ if st.session_state.is_authenticated:
                     "📊 Dashboard": "dashboard",
                     "📂 Compare": "compare",
                     "📡 CAPL": "capl"
+                    
                 }
                 current_helper_tab = helper_tab_map.get(st.session_state.get("active_main_tab", "💬 Chat"), "chat")
                 state_key = _help_state_key(current_helper_tab)
@@ -6888,49 +6818,54 @@ st.markdown("""
         gap: 8px;
         display: flex;
         margin: 0 !important;
-        padding: 0 !important;
+        padding: 0 0 8px !important;
+        border-bottom: 1px solid #e2e8f0;
     }
     .st-key-active_main_tab {
-        margin-top: 8px !important;
-        margin-bottom: 8px !important;
+        margin-top: 6px !important;
+        margin-bottom: 16px !important;
     }
 
     /* Base Pill Styling */
     div[role="radiogroup"] > label {
-        background-color: rgba(128, 128, 128, 0.08) !important;
-        padding: 6px 18px !important;
-        border-radius: 50px !important;
-        border: 1px solid rgba(128, 128, 128, 0.1) !important;
+        background-color: #ffffff !important;
+        padding: 7px 16px !important;
+        border-radius: 10px !important;
+        border: 1px solid #e2e8f0 !important;
         display: flex !important;
         align-items: center !important;
-        height: 38px;
-        min-height: 38px !important;
-        font-weight: 500;
+        height: 40px;
+        min-height: 40px !important;
+        font-weight: 650;
+        color: #475569 !important;
         line-height: 1.1 !important;
-        transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+        box-shadow: none !important;
+        transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
     }
 
-    /* Active State - Deep Electric Blue */
+    /* Active State - Premium Soft Blue */
     div[role="radiogroup"] > label[data-checked="true"] {
-        background-color: #1E88E5 !important;
-        color: #F6F9FF !important;
-        box-shadow: 0 4px 15px rgba(30, 136, 229, 0.4);
+        background-color: #eff6ff !important;
+        color: #2563eb !important;
+        border-color: #bfdbfe !important;
+        box-shadow: inset 0 -2px 0 #2563eb !important;
     }
 
-    /* Dot Base Style - Soft Glow */
+    /* Dot Base Style - Subtle Status Dot */
     div[role="radiogroup"] > label::after {
         content: '';
-        margin-left: 12px;
-        width: 6px;
-        height: 6px;
+        margin-left: 10px;
+        width: 5px;
+        height: 5px;
         border-radius: 50%;
-        filter: blur(0.4px); /* Softens the edges */
+        opacity: 0.58;
     }
 
     /* White Dot for Active Tab */
     div[role="radiogroup"] > label[data-checked="true"]::after {
-        background-color: #F6F9FF !important;
-        box-shadow: 0 0 8px #ffffff;
+        background-color: #2563eb !important;
+        box-shadow: none !important;
+        opacity: 1;
     }
 
     /* --- UPDATED PREMIUM COLORS --- */
@@ -6966,11 +6901,11 @@ st.markdown("""
     @media (min-width: 768px) {
         div[role="radiogroup"] {
             flex-direction: row !important;
-            justify-content: center;
+            justify-content: flex-start;
         }
         div[role="radiogroup"] > label {
             flex: 0 0 auto;
-            min-width: 112px;
+            min-width: 116px;
         }
     }
 
@@ -6998,6 +6933,43 @@ st.markdown("""
         div[role="radiogroup"] > label::after {
             margin-left: 8px;
         }
+    }
+
+    /* Premium chat input and message actions */
+    [data-testid="stChatInput"] {
+        border-top: 1px solid #e2e8f0 !important;
+        padding-top: 12px !important;
+        margin-top: 12px !important;
+    }
+    [data-testid="stChatInput"] textarea {
+        border-radius: 10px !important;
+        border: 1px solid #cbd5e1 !important;
+        padding: 9px 12px !important;
+        font-size: 0.9rem !important;
+        box-shadow: none !important;
+    }
+    [data-testid="stChatInput"] button {
+        background: #2563eb !important;
+        color: #ffffff !important;
+        border: 1px solid #2563eb !important;
+        border-radius: 8px !important;
+        box-shadow: none !important;
+    }
+    [class*="st-key-regenerate_ai_"] button {
+        min-height: auto !important;
+        padding: 2px 0 !important;
+        border: 0 !important;
+        background: transparent !important;
+        color: #94a3b8 !important;
+        box-shadow: none !important;
+        font-size: 0.76rem !important;
+        font-weight: 600 !important;
+    }
+    [class*="st-key-regenerate_ai_"] button:hover {
+        color: #2563eb !important;
+        background: transparent !important;
+        transform: none !important;
+        box-shadow: none !important;
     }
 
     /* Touch-friendly buttons on mobile */
@@ -7272,18 +7244,19 @@ st.markdown("""
     }
 
     .st-key-active_main_tab div[role="radiogroup"] > label[data-checked="true"] {
-        background: linear-gradient(135deg, #dbeafe 0%, #e0f2fe 48%, #ede9fe 100%) !important;
-        border: 2px solid #60a5fa !important;
-        color: #0f172a !important;
+        background: #eff6ff !important;
+        border: 1px solid #bfdbfe !important;
+        color: #2563eb !important;
         font-weight: 800 !important;
-        transform: translateY(-1px);
-        animation: selectedPillGlow 2.2s ease-in-out infinite;
+        transform: none;
+        animation: none;
+        box-shadow: inset 0 -2px 0 #2563eb !important;
     }
 
     .st-key-active_main_tab div[role="radiogroup"] > label[data-checked="true"] p,
     .st-key-dashboard_chart_type div[role="radiogroup"] > label[data-checked="true"] p,
     .st-key-dashboard_bar_orientation div[role="radiogroup"] > label[data-checked="true"] p {
-        color: #0f172a !important;
+        color: #2563eb !important;
         font-weight: 800 !important;
     }
 
@@ -7512,6 +7485,8 @@ st.markdown(
 # -------------------------------
 # Creates the horizontal tab navigation with custom styling.
 # Each tab corresponds to a major feature area of the application.
+if st.session_state.get("active_main_tab") == "📡 CAPL":
+    st.session_state.active_main_tab = "📡 CAPL"
 main_tab_options = ["💬 Chat", "📊 Dashboard", "📂 Compare", "📡 CAPL"]
 active_main_tab = st.radio("Open Section", main_tab_options, horizontal=True, key="active_main_tab", label_visibility="collapsed")
 
@@ -7554,7 +7529,8 @@ if active_main_tab == "💬 Chat":
                 ensure_files_processed(chat_files)
             combined_text = "\n".join([st.session_state.file_texts.get(f, "") for f in chat_files])
     
-            user_input = st.chat_input("Ask something... Try: analyze, item details \"VN1630A\", pin diagram \"D-SUB9\", find \"keyword\", count \"signal\", overview")
+            regenerated_prompt = st.session_state.pop("chat_regenerate_prompt", None)
+            user_input = regenerated_prompt or st.chat_input("Type your message...")
             if user_input:
                 if user_input.strip().lower() == "clear":
                     st.session_state.messages = []
@@ -7707,10 +7683,20 @@ if active_main_tab == "💬 Chat":
                         if "⚠️" in response or "not found" in response.lower() or "please select" in response.lower() or "ai model is unavailable" in response.lower():
                             set_help_popup_state("chat", True)
 
-        for msg in st.session_state.messages:
+        for message_index, msg in enumerate(st.session_state.messages):
             role = "🧑" if msg["role"] == "user" else "🤖"
             st.markdown(f"**{role}**", unsafe_allow_html=True)
             st.markdown(msg["content"], unsafe_allow_html=True)
+            if msg["role"] == "assistant":
+                prompt_to_regenerate = None
+                for previous_msg in reversed(st.session_state.messages[:message_index]):
+                    if previous_msg.get("role") == "user":
+                        prompt_to_regenerate = previous_msg.get("content")
+                        break
+                if prompt_to_regenerate:
+                    if st.button("↻ Regenerate", key=f"regenerate_ai_{message_index}", help="Resend the previous prompt"):
+                        st.session_state.chat_regenerate_prompt = prompt_to_regenerate
+                        st.rerun()
 
         render_chat_summary_downloads()
     else:
