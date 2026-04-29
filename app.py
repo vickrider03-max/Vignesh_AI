@@ -1266,6 +1266,39 @@ def set_help_popup_state(tab_name, is_open):
 # SIMPLE HEADER - Moved higher for better visibility
 # ============================================
 if st.session_state.is_authenticated:
+    st.markdown(
+        """
+        <style>
+            div[data-testid="stHorizontalBlock"]:has(.st-key-header_brain_icon) {
+                margin-top: -0.55rem !important;
+                margin-bottom: -0.2rem !important;
+                align-items: center !important;
+            }
+            .app-header-title {
+                transform: translateY(-6px);
+                line-height: 1.1;
+            }
+            .app-header-main {
+                color: #1e293b;
+                font-size: 1.25rem;
+                font-weight: 700;
+                margin: 0;
+            }
+            .app-header-subtitle {
+                color: #64748b;
+                font-size: 0.9rem;
+                font-style: italic;
+                margin-top: 0.08rem;
+            }
+            .st-key-header_brain_icon,
+            .st-key-main_logout_btn {
+                margin-top: -0.4rem !important;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     header_col, logout_col = st.columns([7, 1.15], vertical_alignment="center")
 
     with header_col:
@@ -1282,9 +1315,13 @@ if st.session_state.is_authenticated:
                 state_key = _help_state_key(current_helper_tab)
                 st.session_state[state_key] = not st.session_state.get(state_key, False)
         with title_col:
-            st.markdown("### IntelliDoc AI")
             st.markdown(
-                "<div style='font-size:0.9rem; font-style:italic; color:#64748b; margin-top:-0.35rem;'>Smart Document Assistant</div>",
+                """
+                <div class="app-header-title">
+                    <div class="app-header-main">IntelliDoc AI</div>
+                    <div class="app-header-subtitle">Smart Document Assistant</div>
+                </div>
+                """,
                 unsafe_allow_html=True
             )
 
@@ -2392,12 +2429,22 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None, hig
 
                 nav_cols = st.columns([1, 1, 2], vertical_alignment="center")
                 with nav_cols[0]:
-                    if st.button("Previous pages", key=f"pdf_prev_{preview_key_base}", use_container_width=True):
+                    if st.button(
+                        "←",
+                        key=f"pdf_prev_{preview_key_base}",
+                        use_container_width=True,
+                        help="Previous page",
+                    ):
                         current_count = int(st.session_state.get(count_key, 1))
                         st.session_state[start_key] = max(1, int(st.session_state.get(start_key, 1)) - current_count)
                         st.rerun()
                 with nav_cols[1]:
-                    if st.button("Next pages", key=f"pdf_next_{preview_key_base}", use_container_width=True):
+                    if st.button(
+                        "→",
+                        key=f"pdf_next_{preview_key_base}",
+                        use_container_width=True,
+                        help="Next page",
+                    ):
                         current_count = int(st.session_state.get(count_key, 1))
                         next_start = int(st.session_state.get(start_key, 1)) + current_count
                         st.session_state[start_key] = min(total_pages, next_start)
