@@ -2,8 +2,9 @@
 # IMPORTS
 # -------------------------------
 # Standard library and third-party imports for the application.
-import html, re, hashlib, os, json, base64, pickle, zipfile
+import html, re, hashlib, os, json, base64, pickle, zipfile, sqlite3
 import importlib
+import math
 import uuid
 import urllib.parse
 import xml.etree.ElementTree as ET
@@ -206,53 +207,48 @@ def render_html_frame(html_content, height="content", width="stretch"):
 # Used in the sidebar and login screen for branding.
 @st.cache_data(show_spinner=False)
 def get_needle_minimalist_logo():
-    try:
-        import matplotlib.pyplot as plt
-        import numpy as np
-        from matplotlib.patches import Polygon
-    except Exception:
-        st.warning("Mercedes logo generation requires matplotlib and numpy. Install these packages to view the animated logo.")
-        return None
-
     frames = []
 
-    SILVER_GREY = '#A0A0A0'
-    STAR_LIGHT = '#DCDCDC'
-    STAR_SHADOW = '#B8B8B8'
+    silver_grey = "#A0A0A0"
+    star_light = "#DCDCDC"
+    star_shadow = "#B8B8B8"
+    canvas_size = 220
+    center = canvas_size // 2
+    radius = 86
 
     for angle_deg in range(360, 0, -15):
-        fig, ax = plt.subplots(figsize=(4, 4), facecolor='none')
-        ax.set_xlim(-1.1, 1.1)
-        ax.set_ylim(-1.1, 1.1)
-        ax.axis('off')
+        image = Image.new("RGBA", (canvas_size, canvas_size), (255, 255, 255, 0))
+        draw = ImageDraw.Draw(image)
+        raw_scale = math.cos(math.radians(angle_deg))
+        flip_scale = raw_scale if abs(raw_scale) > 0.08 else (0.08 if raw_scale >= 0 else -0.08)
 
-        raw_scale = np.cos(np.deg2rad(angle_deg))
-        flip_scale = raw_scale if abs(raw_scale) > 0.08 else (0.08 * np.sign(raw_scale + 0.001))
+        ellipse_box = [
+            center - int(radius * abs(flip_scale)),
+            center - radius,
+            center + int(radius * abs(flip_scale)),
+            center + radius,
+        ]
+        draw.ellipse(ellipse_box, outline=silver_grey, width=4)
 
-        theta = np.linspace(0, 2 * np.pi, 150)
-        ax.plot(np.cos(theta) * flip_scale, np.sin(theta),
-                color=SILVER_GREY, linewidth=3.0, zorder=1)
+        for base_angle in [90, 210, 330]:
+            angle = math.radians(base_angle)
+            tip = (
+                center + int(radius * 0.88 * math.cos(angle) * flip_scale),
+                center - int(radius * 0.88 * math.sin(angle)),
+            )
+            side_l = (
+                center + int(radius * 0.13 * math.cos(angle + 2.15) * flip_scale),
+                center - int(radius * 0.13 * math.sin(angle + 2.15)),
+            )
+            side_r = (
+                center + int(radius * 0.13 * math.cos(angle - 2.15) * flip_scale),
+                center - int(radius * 0.13 * math.sin(angle - 2.15)),
+            )
+            c_l, c_r = (star_light, star_shadow) if flip_scale > 0 else (star_shadow, star_light)
+            draw.polygon([(center, center), tip, side_l], fill=c_l)
+            draw.polygon([(center, center), tip, side_r], fill=c_r)
 
-        base_angles = np.deg2rad([90, 210, 330])
-        for angle in base_angles:
-            center = [0, 0]
-            tip = [0.88 * np.cos(angle) * flip_scale, 0.88 * np.sin(angle)]
-            side_l = [0.11 * np.cos(angle + 2.15) * flip_scale, 0.11 * np.sin(angle + 2.15)]
-            side_r = [0.11 * np.cos(angle - 2.15) * flip_scale, 0.11 * np.sin(angle - 2.15)]
-
-            if flip_scale > 0:
-                c_l, c_r = STAR_LIGHT, STAR_SHADOW
-            else:
-                c_l, c_r = STAR_SHADOW, STAR_LIGHT
-
-            ax.add_patch(Polygon([center, tip, side_l], facecolor=c_l, zorder=2))
-            ax.add_patch(Polygon([center, tip, side_r], facecolor=c_r, zorder=2))
-
-        buf = BytesIO()
-        plt.savefig(buf, transparent=True, format='png', bbox_inches='tight', pad_inches=0)
-        buf.seek(0)
-        frames.append(Image.open(buf))
-        plt.close(fig)
+        frames.append(image)
 
     gif_buf = BytesIO()
     if frames:
@@ -1650,6 +1646,27 @@ if "start_time" not in st.session_state:
     st.session_state.start_time = None
 if "active_main_tab" not in st.session_state:
     st.session_state.active_main_tab = "💬 Chat"
+if "workspace_memory" not in st.session_state:
+    st.session_state.workspace_memory = {
+        "chat": [],
+        "agent_runs": [],
+        "indexed_files": [],
+        "memory_events": [],
+        "summary": {},
+        "metadata": {},
+    }
+if "workspace_memory_loaded" not in st.session_state:
+    st.session_state.workspace_memory_loaded = False
+if "capl_autonomous_goal" not in st.session_state:
+    st.session_state.capl_autonomous_goal = ""
+if "capl_agent_result" not in st.session_state:
+    st.session_state.capl_agent_result = ""
+if "agent_run_history" not in st.session_state:
+    st.session_state.agent_run_history = []
+if "last_streamed_assistant_index" not in st.session_state:
+    st.session_state.last_streamed_assistant_index = None
+if "compare_semantic_summary" not in st.session_state:
+    st.session_state.compare_semantic_summary = None
 
 # -------------------------------
 # DOCUMENT PREVIEW FUNCTION
@@ -3975,6 +3992,18 @@ with st.sidebar:
                         st.session_state.uploaded_files.append({"name": file.name, "bytes": file_bytes})
                         uploaded_new_file = True
                 if uploaded_new_file:
+                    new_file_names = [file.name for file in new_files if file.name not in existing_names]
+                    ensure_files_processed(new_file_names)
+                    st.session_state.workspace_memory["indexed_files"] = sorted(set(st.session_state.workspace_memory.get("indexed_files", []) + new_file_names))
+                    record_workspace_memory_event(
+                        "upload",
+                        "Documents indexed into shared memory",
+                        "Uploaded and indexed: " + ", ".join(new_file_names),
+                        source="Upload",
+                    )
+                    get_unified_workspace_vector_store(new_file_names)
+                    save_workspace_memory()
+                    save_memory_log("upload", f"Uploaded {len(new_file_names)} new file(s)", {"files": new_file_names})
                     st.session_state.messages = []
                     st.session_state.chat_summary_downloads = {"images": [], "tables": [], "csv": [], "diagrams": []}
                     st.session_state.chat_file_selection = []
@@ -4156,6 +4185,612 @@ def ensure_files_processed(file_names):
 def process_selected_files():
     """Fully extract all currently selected files so every tab uses the same data."""
     ensure_files_processed(st.session_state.selected_files)
+
+
+WORKSPACE_DB_FILE = os.path.join(APP_DIR, "workspace_memory.db")
+WORKSPACE_MEMORY_KEY = "workspace_memory"
+
+
+def init_workspace_db():
+    """Initialize persistent workspace storage for memory and logs."""
+    os.makedirs(APP_DIR, exist_ok=True)
+    conn = sqlite3.connect(WORKSPACE_DB_FILE, check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS workspace_meta (
+            meta_key TEXT PRIMARY KEY,
+            meta_value TEXT
+        )
+        """
+    )
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS workspace_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT,
+            log_type TEXT,
+            message TEXT,
+            details TEXT
+        )
+        """
+    )
+    conn.commit()
+    conn.close()
+
+
+def default_workspace_memory():
+    return {
+        "chat": [],
+        "agent_runs": [],
+        "indexed_files": [],
+        "memory_events": [],
+        "summary": {},
+        "metadata": {},
+    }
+
+
+def normalize_workspace_memory(memory):
+    """Keep older saved memory compatible with the autonomous workspace schema."""
+    normalized = default_workspace_memory()
+    if isinstance(memory, dict):
+        for key, value in memory.items():
+            normalized[key] = value
+    for list_key in ["chat", "agent_runs", "indexed_files", "memory_events"]:
+        if not isinstance(normalized.get(list_key), list):
+            normalized[list_key] = []
+    for dict_key in ["summary", "metadata"]:
+        if not isinstance(normalized.get(dict_key), dict):
+            normalized[dict_key] = {}
+    return normalized
+
+
+def load_workspace_memory():
+    init_workspace_db()
+    conn = sqlite3.connect(WORKSPACE_DB_FILE, check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT meta_value FROM workspace_meta WHERE meta_key = ?",
+        (WORKSPACE_MEMORY_KEY,)
+    )
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        try:
+            return normalize_workspace_memory(json.loads(row[0]))
+        except Exception:
+            pass
+    return default_workspace_memory()
+
+
+def save_workspace_memory():
+    init_workspace_db()
+    conn = sqlite3.connect(WORKSPACE_DB_FILE, check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT OR REPLACE INTO workspace_meta (meta_key, meta_value) VALUES (?, ?)",
+        (WORKSPACE_MEMORY_KEY, json.dumps(st.session_state.workspace_memory, default=str))
+    )
+    conn.commit()
+    conn.close()
+
+
+def save_memory_log(log_type, message, details=None):
+    init_workspace_db()
+    conn = sqlite3.connect(WORKSPACE_DB_FILE, check_same_thread=False)
+    cursor = conn.cursor()
+    details_json = json.dumps(details, default=str) if details is not None else None
+    cursor.execute(
+        "INSERT INTO workspace_logs (timestamp, log_type, message, details) VALUES (?, ?, ?, ?)",
+        (datetime.now().isoformat(), log_type, message, details_json)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_memory_logs(limit=50):
+    init_workspace_db()
+    conn = sqlite3.connect(WORKSPACE_DB_FILE, check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT timestamp, log_type, message, details FROM workspace_logs ORDER BY id DESC LIMIT ?",
+        (limit,)
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    results = []
+    for timestamp, log_type, message, details in rows:
+        try:
+            details = json.loads(details) if details else None
+        except Exception:
+            details = details
+        results.append({
+            "timestamp": timestamp,
+            "type": log_type,
+            "message": message,
+            "details": details,
+        })
+    return results
+
+
+def record_workspace_memory_event(event_type, title, content, source=None):
+    """Append a compact memory event that every module can retrieve later."""
+    event = {
+        "type": event_type,
+        "title": title,
+        "content": str(content or "")[:4000],
+        "source": source or "workspace",
+        "timestamp": datetime.now().isoformat(),
+    }
+    st.session_state.workspace_memory = normalize_workspace_memory(st.session_state.workspace_memory)
+    st.session_state.workspace_memory["memory_events"].append(event)
+    st.session_state.workspace_memory["memory_events"] = st.session_state.workspace_memory["memory_events"][-200:]
+    return event
+
+
+def append_chat_to_workspace_memory(user_input, assistant_response, file_names):
+    """Store chat as durable workspace memory instead of isolated chat history."""
+    chat_entry = {
+        "user": user_input,
+        "assistant": assistant_response,
+        "files": list(file_names or []),
+        "timestamp": datetime.now().isoformat(),
+    }
+    st.session_state.workspace_memory = normalize_workspace_memory(st.session_state.workspace_memory)
+    st.session_state.workspace_memory["chat"].append(chat_entry)
+    st.session_state.workspace_memory["chat"] = st.session_state.workspace_memory["chat"][-200:]
+    record_workspace_memory_event(
+        "chat",
+        "Conversation memory",
+        f"User: {user_input}\nAssistant: {assistant_response}",
+        source=", ".join(file_names or []) or "chat",
+    )
+    return chat_entry
+
+
+def build_unified_memory_text(file_names=None, include_chat=True, include_agents=True, max_chars=MAX_VECTOR_TEXT_CHARS):
+    """Compose documents, conversations, and agent runs into one AI brain text."""
+    st.session_state.workspace_memory = normalize_workspace_memory(st.session_state.workspace_memory)
+    sections = []
+
+    candidate_files = file_names if file_names is not None else [f["name"] for f in st.session_state.get("uploaded_files", [])]
+    candidate_files = [file_name for file_name in candidate_files if file_name in st.session_state.file_texts]
+    for file_name in candidate_files:
+        text = str(st.session_state.file_texts.get(file_name, "")).strip()
+        if text:
+            sections.append(f"[DOCUMENT: {file_name}]\n{text[:60000]}")
+
+    if include_chat:
+        for entry in st.session_state.workspace_memory.get("chat", [])[-80:]:
+            sections.append(
+                "[CHAT MEMORY]\n"
+                f"User: {entry.get('user', '')}\n"
+                f"Assistant: {entry.get('assistant', '')}\n"
+                f"Files: {', '.join(entry.get('files', []) or [])}"
+            )
+
+    for event in st.session_state.workspace_memory.get("memory_events", [])[-100:]:
+        sections.append(
+            "[MEMORY EVENT]\n"
+            f"Type: {event.get('type', '')}\n"
+            f"Title: {event.get('title', '')}\n"
+            f"Source: {event.get('source', '')}\n"
+            f"{event.get('content', '')}"
+        )
+
+    if include_agents:
+        for run in st.session_state.workspace_memory.get("agent_runs", [])[-40:]:
+            sections.append(
+                "[CAPL AGENT RUN]\n"
+                f"Goal: {run.get('goal', '')}\n"
+                f"Plan: {', '.join(run.get('plan', []) or [])}\n"
+                f"Final: {run.get('final_response', '')[:2500]}"
+            )
+
+    memory_text = "\n\n".join(sections).strip()
+    return memory_text[:max_chars]
+
+
+def get_unified_workspace_vector_store(file_names=None):
+    memory_text = build_unified_memory_text(file_names=file_names)
+    if not memory_text.strip():
+        return None
+
+    digest = hashlib.md5(memory_text.encode("utf-8", errors="ignore")).hexdigest()
+    selection_key = f"unified_memory::{digest}"
+    cached_vs = VECTOR_STORE_CACHE.get(selection_key)
+    if cached_vs is not None:
+        st.session_state.vector_stores[selection_key] = cached_vs
+        return cached_vs
+
+    try:
+        vs = create_vector_store(memory_text)
+        st.session_state.vector_stores[selection_key] = vs
+        VECTOR_STORE_CACHE.set(selection_key, vs)
+        return vs
+    except Exception:
+        return None
+
+
+def get_workspace_vector_store(file_names=None):
+    return get_unified_workspace_vector_store(file_names)
+
+
+def search_workspace_memory(query, limit=4):
+    vector_store = get_workspace_vector_store()
+    if vector_store is None:
+        return []
+    try:
+        docs = vector_store.similarity_search(query, k=limit)
+        return [getattr(doc, "page_content", str(doc)) for doc in docs]
+    except Exception:
+        return []
+
+
+def extract_risk_signals(text, limit=12):
+    risk_terms = [
+        "risk", "failure", "hazard", "issue", "problem", "danger", "alert",
+        "warning", "fault", "breach", "leak", "vulnerability", "impact",
+        "delay", "downtime", "non-compliance",
+    ]
+    lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
+    results = []
+    for line in lines:
+        lower_line = line.lower()
+        if any(term in lower_line for term in risk_terms):
+            results.append(line)
+        if len(results) >= limit:
+            break
+    return results or ["No explicit risk signals were found in the selected documents."]
+
+
+def extract_entities(text, limit=20):
+    raw_text = str(text or "")
+    candidates = re.findall(r"\b[A-Z][A-Za-z0-9]{2,}(?: [A-Z][A-Za-z0-9]{2,})*\b", raw_text)
+    counts = Counter(candidates)
+    return [entity for entity, _ in counts.most_common(limit)]
+
+
+def extract_key_themes(text, limit=8):
+    words = re.findall(r"[A-Za-z][A-Za-z0-9_+\-/]{3,}", str(text or ""))
+    counts = Counter(
+        word.lower()
+        for word in words
+        if word.lower() not in SUMMARY_STOPWORDS and not word.isdigit()
+    )
+    return [word.title() for word, _ in counts.most_common(limit)]
+
+
+def build_workspace_intelligence_summary(file_names=None):
+    """Produce the live AI Insight Engine view from shared memory."""
+    if file_names is None:
+        file_names = st.session_state.get("selected_files", []) or [
+            f["name"] for f in st.session_state.get("uploaded_files", [])
+        ]
+    ensure_files_processed(file_names)
+    memory_text = build_unified_memory_text(file_names=file_names, max_chars=180000)
+    chat_count = len(st.session_state.workspace_memory.get("chat", []))
+    agent_count = len(st.session_state.workspace_memory.get("agent_runs", []))
+    indexed_files = sorted(set(st.session_state.workspace_memory.get("indexed_files", []) + list(file_names or [])))
+
+    themes = extract_key_themes(memory_text, limit=10)
+    entities = extract_entities(memory_text, limit=16)
+    risks = extract_risk_signals(memory_text, limit=8)
+    recent_logs = get_memory_logs(limit=6)
+
+    insights = []
+    if themes:
+        insights.append(f"Dominant knowledge themes: {', '.join(themes[:5])}.")
+    if chat_count:
+        insights.append(f"Conversation memory is active with {chat_count} stored exchange(s).")
+    if indexed_files:
+        insights.append(f"{len(indexed_files)} document(s) are connected to the shared AI memory.")
+    if agent_count:
+        insights.append(f"CAPL agents have completed {agent_count} autonomous run(s).")
+    if not insights:
+        insights.append("Upload documents or start a conversation to grow the workspace memory.")
+
+    return {
+        "themes": themes,
+        "insights": insights,
+        "entities": entities,
+        "risks": risks,
+        "state": {
+            "indexed_files": len(indexed_files),
+            "chat_entries": chat_count,
+            "agent_runs": agent_count,
+            "memory_events": len(st.session_state.workspace_memory.get("memory_events", [])),
+            "memory_chars": len(memory_text),
+        },
+        "logs": recent_logs,
+    }
+
+
+def render_workspace_intelligence_panel(file_names=None):
+    summary = build_workspace_intelligence_summary(file_names=file_names)
+    state = summary["state"]
+
+    st.markdown("### AI Insight Engine")
+    metric_cols = st.columns(4)
+    metric_cols[0].metric("Indexed Files", state["indexed_files"])
+    metric_cols[1].metric("Chat Memory", state["chat_entries"])
+    metric_cols[2].metric("CAPL Runs", state["agent_runs"])
+    metric_cols[3].metric("Memory Events", state["memory_events"])
+
+    cols = st.columns(2)
+    with cols[0]:
+        st.markdown("#### Key Themes")
+        st.markdown(", ".join(summary["themes"]) if summary["themes"] else "No themes detected yet.")
+        st.markdown("#### Entities")
+        st.markdown(", ".join(summary["entities"][:12]) if summary["entities"] else "No entities detected yet.")
+    with cols[1]:
+        st.markdown("#### Insights")
+        for item in summary["insights"]:
+            st.markdown(f"- {html.escape(item)}")
+        st.markdown("#### Risks / Signals")
+        for item in summary["risks"][:6]:
+            st.markdown(f"- {html.escape(str(item)[:240])}")
+
+    if summary["logs"]:
+        with st.expander("Live Memory Loop", expanded=False):
+            for log in summary["logs"]:
+                st.markdown(f"**{html.escape(log.get('type', 'log'))}** - {html.escape(log.get('message', ''))}")
+
+
+def plan_autonomous_task(goal):
+    lower_goal = str(goal or "").lower()
+    tasks = ["retrieve_relevant_memory"]
+    if any(term in lower_goal for term in ["compare", "difference", "diff", "semantic diff"]):
+        tasks.append("compare_documents")
+    if any(term in lower_goal for term in ["risk", "issue", "signal", "warning", "hazard"]):
+        tasks.append("extract_risks")
+    if any(term in lower_goal for term in ["entity", "entities", "extract entities", "parts", "components"]):
+        tasks.append("extract_entities")
+    if any(term in lower_goal for term in ["summarize", "summary", "overview", "insight", "analyze"]):
+        tasks.append("summarize_findings")
+    if any(term in lower_goal for term in ["analyze", "review", "inspect"]) and "summarize_findings" not in tasks:
+        tasks.append("analyze_documents")
+    if "summarize_findings" not in tasks and "analyze_documents" not in tasks:
+        tasks.append("summarize_findings")
+    return list(dict.fromkeys(tasks))
+
+
+def planning_agent(goal):
+    steps = plan_autonomous_task(goal)
+    return {
+        "agent": "Planning Agent",
+        "role": "Brain / Orchestrator",
+        "strategy": "Break the goal into memory retrieval, tool execution, reasoning, and coordination steps.",
+        "steps": steps,
+    }
+
+
+def retrieve_autonomous_context(goal, file_names):
+    if not goal:
+        return []
+    vector_store = get_workspace_vector_store(file_names)
+    if vector_store is None:
+        return []
+    try:
+        docs = vector_store.similarity_search(goal, k=4)
+        return [getattr(doc, "page_content", str(doc)) for doc in docs]
+    except Exception:
+        return []
+
+
+def retrieval_agent(goal, file_names):
+    context = retrieve_autonomous_context(goal, file_names)
+    return {
+        "agent": "Retrieval Agent",
+        "role": "Memory Brain",
+        "context": context,
+        "summary": f"Retrieved {len(context)} relevant memory fragment(s) from shared FAISS memory.",
+    }
+
+
+def execute_autonomous_tool(task, file_names, context):
+    file_names = file_names or [f["name"] for f in st.session_state.uploaded_files]
+    if task == "retrieve_relevant_memory":
+        return {"context": context}
+    if task == "analyze_documents":
+        results = []
+        for file_name in file_names:
+            file_text = st.session_state.file_texts.get(file_name, "")
+            file_entry = get_uploaded_file_entry(file_name)
+            if file_text.strip() and file_entry is not None:
+                results.append(build_detailed_document_summary(file_name, file_entry["bytes"], file_text))
+        return {"analysis": results or ["No document content available for analysis."]}
+    if task == "summarize_findings":
+        context_text = "\n\n".join(context[:3]) if context else "No relevant memory context found."
+        return {"summary": context_text}
+    if task == "extract_risks":
+        results = {}
+        for file_name in file_names:
+            file_text = st.session_state.file_texts.get(file_name, "")
+            if file_text.strip():
+                results[file_name] = extract_risk_signals(file_text)
+        return {"risks": results or {"message": "No risk-related content found."}}
+    if task == "extract_entities":
+        results = {}
+        for file_name in file_names:
+            file_text = st.session_state.file_texts.get(file_name, "")
+            if file_text.strip():
+                results[file_name] = extract_entities(file_text)
+        return {"entities": results or {"message": "No entities could be extracted."}}
+    if task == "compare_documents":
+        if len(file_names) < 2:
+            return {"compare": "At least two files are required for document comparison."}
+        file_texts = {f: st.session_state.file_texts.get(f, "") for f in file_names}
+        return {"compare": highlight_multi_file_differences(file_texts)}
+    return {"result": f"No tool implementation exists for '{task}'."}
+
+
+def execution_agent(steps, file_names, context):
+    outputs = {}
+    for task in steps:
+        if task == "retrieve_relevant_memory":
+            outputs[task] = {"context": context}
+        else:
+            outputs[task] = execute_autonomous_tool(task, file_names, context)
+    return {
+        "agent": "Execution Agent",
+        "role": "Tool Runner",
+        "outputs": outputs,
+        "summary": f"Executed {len(outputs)} autonomous tool step(s).",
+    }
+
+
+def reason_over_results(agent_outputs):
+    summary_parts = []
+    for step, output in agent_outputs.items():
+        if isinstance(output, dict):
+            if "summary" in output:
+                summary_parts.append(f"**{step.replace('_', ' ').title()}:** {output['summary']}")
+            elif "context" in output:
+                summary_parts.append(f"**{step.replace('_', ' ').title()}:** Retrieved {len(output['context'])} memory fragments.")
+            elif "risks" in output:
+                risk_lines = sum(len(v) for v in output['risks'].values() if isinstance(v, list))
+                summary_parts.append(f"**{step.replace('_', ' ').title()}:** Extracted {risk_lines} risk lines.")
+            elif "entities" in output:
+                entity_count = sum(len(v) for v in output['entities'].values() if isinstance(v, list))
+                summary_parts.append(f"**{step.replace('_', ' ').title()}:** Extracted {entity_count} entities.")
+            elif "compare" in output:
+                summary_parts.append(f"**{step.replace('_', ' ').title()}:** Comparison results are available in the agent output." )
+            elif "analysis" in output:
+                summary_parts.append(f"**{step.replace('_', ' ').title()}:** Document analysis completed for {len(output['analysis'])} files.")
+            else:
+                summary_parts.append(f"**{step.replace('_', ' ').title()}:** Output produced.")
+        else:
+            summary_parts.append(f"**{step.replace('_', ' ').title()}:** {str(output)[:200]}")
+    return "\n\n".join(summary_parts)
+
+
+def reasoning_agent(goal, file_names, context, tool_outputs):
+    memory_text = build_unified_memory_text(file_names=file_names, max_chars=80000)
+    combined_reasoning_text = "\n\n".join(context or []) + "\n\n" + memory_text[:40000]
+    themes = extract_key_themes(combined_reasoning_text, limit=8)
+    entities = extract_entities(combined_reasoning_text, limit=12)
+    risks = extract_risk_signals(combined_reasoning_text, limit=8)
+    interpretation = [
+        f"Goal interpreted as: {goal}",
+        f"Key themes: {', '.join(themes) if themes else 'None detected'}",
+        f"Important entities: {', '.join(entities[:8]) if entities else 'None detected'}",
+        f"Risk/signal count: {len(risks)}",
+        reason_over_results(tool_outputs),
+    ]
+    return {
+        "agent": "Reasoning Agent",
+        "role": "Analyst",
+        "themes": themes,
+        "entities": entities,
+        "risks": risks,
+        "interpretation": "\n\n".join(interpretation),
+    }
+
+
+def coordinate_agents(goal, steps, outputs):
+    sections = [f"### Autonomous CAPL Agent Result\n**Goal:** {html.escape(goal)}\n"]
+    sections.append(reason_over_results(outputs))
+    for step in steps:
+        output = outputs.get(step)
+        if isinstance(output, dict) and step == "compare_documents":
+            sections.append("### Comparison Output")
+            sections.append(output.get("compare", "No comparison result."))
+        elif isinstance(output, dict) and step == "analyze_documents":
+            analysis = output.get("analysis", [])
+            sections.append("### Analysis Output")
+            sections.extend(analysis[:2] if isinstance(analysis, list) else [str(analysis)])
+    return "\n\n".join(sections)
+
+
+def coordination_agent(goal, planning, retrieval, execution, reasoning):
+    tool_outputs = execution.get("outputs", {})
+    sections = [
+        "### Autonomous CAPL Agent Result",
+        f"**Goal:** {html.escape(goal)}",
+        "#### Agent Trace",
+        f"- **Planning Agent:** {html.escape(planning.get('strategy', ''))}",
+        f"- **Retrieval Agent:** {html.escape(retrieval.get('summary', ''))}",
+        f"- **Execution Agent:** {html.escape(execution.get('summary', ''))}",
+        "- **Reasoning Agent:** Interpreted tool outputs against shared memory.",
+        "- **Coordination Agent:** Merged agent outputs into this final response.",
+        "#### Execution Plan",
+    ]
+    sections.extend(f"- {html.escape(step.replace('_', ' ').title())}" for step in planning.get("steps", []))
+    sections.extend(["#### Reasoned Findings", reasoning.get("interpretation", "")])
+
+    if reasoning.get("risks"):
+        sections.append("#### Risks / Signals")
+        sections.extend(f"- {html.escape(str(item)[:240])}" for item in reasoning.get("risks", [])[:8])
+
+    for step in planning.get("steps", []):
+        output = tool_outputs.get(step)
+        if isinstance(output, dict) and step == "compare_documents":
+            sections.append("#### Comparison Output")
+            sections.append(output.get("compare", "No comparison result."))
+        elif isinstance(output, dict) and step == "analyze_documents":
+            analysis = output.get("analysis", [])
+            sections.append("#### Analysis Output")
+            sections.extend(analysis[:2] if isinstance(analysis, list) else [str(analysis)])
+
+    return "\n\n".join(sections)
+
+
+def run_capl_agent(goal, file_names):
+    if not goal or not str(goal).strip():
+        return "Provide a goal for the autonomous CAPL agents."
+    target_files = file_names or [f["name"] for f in st.session_state.uploaded_files]
+    target_files = [f for f in target_files if get_uploaded_file_entry(f)]
+    if not target_files:
+        return "No processed files are available. Upload files and allow the system to extract them first."
+
+    ensure_files_processed(target_files)
+    planning = planning_agent(goal)
+    plan = planning["steps"]
+    retrieval = retrieval_agent(goal, target_files)
+    execution = execution_agent(plan, target_files, retrieval.get("context", []))
+    reasoning = reasoning_agent(goal, target_files, retrieval.get("context", []), execution.get("outputs", {}))
+    outputs = {
+        "planning": planning,
+        "retrieval": retrieval,
+        "execution": execution,
+        "reasoning": reasoning,
+    }
+    final_response = coordination_agent(goal, planning, retrieval, execution, reasoning)
+
+    run_entry = {
+        "goal": goal,
+        "files": target_files,
+        "plan": plan,
+        "outputs": outputs,
+        "final_response": final_response,
+        "timestamp": datetime.now().isoformat(),
+    }
+    st.session_state.agent_run_history.append(run_entry)
+    st.session_state.workspace_memory["agent_runs"].append(run_entry)
+    record_workspace_memory_event("capl_agent", f"Autonomous goal: {goal}", final_response, source="CAPL")
+    st.session_state.workspace_memory["indexed_files"] = sorted(set(st.session_state.workspace_memory.get("indexed_files", []) + target_files))
+    save_workspace_memory()
+    save_memory_log("capl_agent", f"Ran autonomous CAPL goal: {goal}", {"files": target_files, "plan": plan})
+
+    return final_response
+
+
+def update_workspace_memory_selection(file_names):
+    file_names = sorted(set(file_names or []))
+    st.session_state.workspace_memory["indexed_files"] = file_names
+    save_workspace_memory()
+
+
+def ensure_workspace_memory_loaded():
+    if not st.session_state.workspace_memory_loaded:
+        st.session_state.workspace_memory = normalize_workspace_memory(load_workspace_memory())
+        st.session_state.workspace_memory_loaded = True
+    else:
+        st.session_state.workspace_memory = normalize_workspace_memory(st.session_state.workspace_memory)
+
+
+ensure_workspace_memory_loaded()
 
 
 def get_selection_signature(file_names):
@@ -6276,6 +6911,50 @@ def highlight_multi_file_differences(file_texts, comparison_mode="Exact inline w
     )
 
 
+def build_semantic_diff_explanation(file_texts):
+    """Explain meaning-level changes beside the visual word/line diff."""
+    if not file_texts or len(file_texts) < 2:
+        return "Select at least two files to generate a semantic difference explanation."
+
+    file_names = list(file_texts.keys())
+    per_file = {}
+    for file_name, text in file_texts.items():
+        text = str(text or "")
+        per_file[file_name] = {
+            "themes": set(extract_key_themes(text, limit=14)),
+            "entities": set(extract_entities(text, limit=20)),
+            "risks": set(extract_risk_signals(text, limit=10)),
+            "length": len(text),
+        }
+
+    baseline = file_names[0]
+    base = per_file[baseline]
+    sections = [f"### Semantic Diff Explanation\nBaseline: **{html.escape(baseline)}**"]
+    for file_name in file_names[1:]:
+        current = per_file[file_name]
+        added_themes = sorted(current["themes"] - base["themes"])[:8]
+        removed_themes = sorted(base["themes"] - current["themes"])[:8]
+        added_entities = sorted(current["entities"] - base["entities"])[:8]
+        removed_entities = sorted(base["entities"] - current["entities"])[:8]
+        added_risks = sorted(current["risks"] - base["risks"])[:5]
+        delta = current["length"] - base["length"]
+        delta_label = "expanded" if delta > 0 else "contracted" if delta < 0 else "unchanged in size"
+
+        sections.append(f"#### {html.escape(file_name)}")
+        sections.append(f"- Structural signal: content {delta_label} by {abs(delta):,} extracted characters.")
+        sections.append(f"- New themes: {html.escape(', '.join(added_themes) if added_themes else 'None detected')}.")
+        sections.append(f"- Missing themes: {html.escape(', '.join(removed_themes) if removed_themes else 'None detected')}.")
+        sections.append(f"- New entities: {html.escape(', '.join(added_entities) if added_entities else 'None detected')}.")
+        sections.append(f"- Missing entities: {html.escape(', '.join(removed_entities) if removed_entities else 'None detected')}.")
+        if added_risks:
+            sections.append("- Risk/signals introduced:")
+            sections.extend(f"  - {html.escape(str(risk)[:220])}" for risk in added_risks)
+        else:
+            sections.append("- Risk/signals introduced: None detected.")
+
+    return "\n".join(sections)
+
+
 # -------------------------------
 # COMPARE EXCEL HIGHLIGHT
 # -------------------------------
@@ -6627,6 +7306,37 @@ def render_file_context_card(title, available_files, active_files=None):
 
 
 # Floating icon function removed - helper is now triggered by header 🧠 icon
+
+
+def render_autonomous_workspace_shell():
+    """Render the connected AI operating system layer above module controls."""
+    memory = normalize_workspace_memory(st.session_state.workspace_memory)
+    indexed_count = len(memory.get("indexed_files", []))
+    chat_count = len(memory.get("chat", []))
+    agent_count = len(memory.get("agent_runs", []))
+    event_count = len(memory.get("memory_events", []))
+    st.markdown(
+        f"""
+        <div class="ai-os-shell">
+            <div class="ai-os-kicker">Autonomous AI Operating System</div>
+            <div class="ai-os-title">One shared AI brain across Chat, Upload, Dashboard, Compare, and CAPL.</div>
+            <div class="ai-os-loop">
+                <span>Chat -> Memory</span>
+                <span>Upload -> FAISS</span>
+                <span>Dashboard -> Insights</span>
+                <span>Compare -> Semantic Diff</span>
+                <span>CAPL -> Agents</span>
+            </div>
+            <div class="ai-os-metrics">
+                <span>{indexed_count} indexed files</span>
+                <span>{chat_count} chat memories</span>
+                <span>{agent_count} agent runs</span>
+                <span>{event_count} memory events</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 # Define keywords for each tab
@@ -7537,6 +8247,65 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+st.markdown(
+    """
+    <style>
+    .ai-os-shell {
+        margin: 10px 0 14px;
+        padding: 16px 18px;
+        border: 1px solid rgba(148, 163, 184, 0.24);
+        border-radius: 18px;
+        background: rgba(248, 251, 255, 0.72);
+        box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+        backdrop-filter: blur(14px);
+        animation: aiOsRise 0.45s ease-out both;
+    }
+    .ai-os-kicker {
+        color: #2563eb;
+        font-size: 0.78rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+    }
+    .ai-os-title {
+        margin-top: 4px;
+        color: #0f172a;
+        font-size: 1.08rem;
+        font-weight: 800;
+    }
+    .ai-os-loop,
+    .ai-os-metrics {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+    }
+    .ai-os-loop span,
+    .ai-os-metrics span {
+        padding: 6px 10px;
+        border: 1px solid rgba(147, 197, 253, 0.45);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.62);
+        color: #173152;
+        font-size: 0.84rem;
+        transition: transform 0.18s ease, background-color 0.18s ease;
+    }
+    .ai-os-loop span:hover,
+    .ai-os-metrics span:hover {
+        transform: translateY(-1px) scale(1.01);
+        background: rgba(239, 246, 255, 0.92);
+    }
+    @keyframes aiOsRise {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+render_autonomous_workspace_shell()
+
 
 # -------------------------------
 # MAIN TAB NAVIGATION
@@ -7714,18 +8483,18 @@ if active_main_tab == "💬 Chat":
                             else:
                                 response = "⚠️ Please select at least 2 files to compare documents."
                         else:
-                            combined_vs = get_combined_vector_store(chat_files)
+                            combined_vs = get_workspace_vector_store(chat_files) or get_combined_vector_store(chat_files)
                             retriever = combined_vs.as_retriever(search_kwargs={"k": 3})
                             llm = load_llm()
                             prompt = ChatPromptTemplate.from_messages([
                                 ("system",
-                                 "You are an intelligent document assistant. Answer ONLY using context from the provided documents.\nIf information is not found in the documents, say 'This information is not available in the uploaded documents.'\nContext:\n{context}"),
+                                 "You are the conversational engine inside a unified AI workspace. Use uploaded document context, prior chat memory, agent memory, and workspace logs when relevant.\nIf information is not found in shared memory, say 'This information is not available in the uploaded documents or workspace memory.'\nContext:\n{context}"),
                                 ("human", "{question}")
                             ])
                             chain = None
                             if llm is not None:
                                 try:
-                                    chain = ({"context": retriever | (lambda x: '\n'.join(x)),
+                                    chain = ({"context": retriever | (lambda docs: '\n'.join(getattr(doc, "page_content", str(doc)) for doc in docs)),
                                               "question": RunnablePassthrough()} | prompt | llm)
                                 except Exception as e:
                                     st.warning(f"Could not create LLM chain: {e}")
@@ -7734,15 +8503,40 @@ if active_main_tab == "💬 Chat":
                             if chain is not None:
                                 response = str(chain.invoke(user_input))
                             else:
-                                response = "⚠️ AI model is unavailable. Use direct extraction questions such as 'count(\"keyword\")', 'find(\"phrase\")', 'summarize', or 'overview'."
+                                memory_hits = search_workspace_memory(user_input, limit=4)
+                                if memory_hits:
+                                    response = "AI model is unavailable, so I retrieved the closest workspace memory:\n\n" + "\n\n---\n\n".join(memory_hits)
+                                else:
+                                    response = "⚠️ AI model is unavailable. Use direct extraction questions such as 'count(\"keyword\")', 'find(\"phrase\")', 'summarize', or 'overview'."
                         st.session_state.messages.append({"role": "assistant", "content": response})
+                        st.session_state.last_streamed_assistant_index = len(st.session_state.messages) - 1
+                        append_chat_to_workspace_memory(user_input, response, chat_files)
+                        save_workspace_memory()
+                        save_memory_log("chat", "Chat interaction stored in workspace memory.", {
+                            "user": user_input,
+                            "files": chat_files,
+                            "assistant_preview": response[:300],
+                        })
                         if "⚠️" in response or "not found" in response.lower() or "please select" in response.lower() or "ai model is unavailable" in response.lower():
                             set_help_popup_state("chat", True)
 
-        for msg in st.session_state.messages:
+        for msg_index, msg in enumerate(st.session_state.messages):
             role = "🧑" if msg["role"] == "user" else "🤖"
             st.markdown(f"**{role}**", unsafe_allow_html=True)
-            st.markdown(msg["content"], unsafe_allow_html=True)
+            if msg["role"] == "assistant" and msg_index == st.session_state.get("last_streamed_assistant_index"):
+                placeholder = st.empty()
+                content = str(msg["content"])
+                tokens = re.split(r"(\s+)", content)
+                streamed = ""
+                for token_index, token in enumerate(tokens):
+                    streamed += token
+                    if token_index < 240:
+                        placeholder.markdown(streamed + "▌", unsafe_allow_html=True)
+                        time.sleep(0.006)
+                placeholder.markdown(content, unsafe_allow_html=True)
+                st.session_state.last_streamed_assistant_index = None
+            else:
+                st.markdown(msg["content"], unsafe_allow_html=True)
 
         render_chat_summary_downloads()
     else:
@@ -7773,6 +8567,12 @@ if active_main_tab == "📊 Dashboard":
         f for f in st.session_state.selected_files
         if f.lower().endswith((".html", ".htm", ".xlsx"))
     ])
+
+    st.markdown("### Workspace Memory Snapshot")
+    st.markdown(f"- Indexed files: **{len(st.session_state.workspace_memory.get('indexed_files', []))}**")
+    st.markdown(f"- Chat history entries: **{len(st.session_state.workspace_memory.get('chat', []))}**")
+    st.markdown(f"- Autonomous CAPL runs: **{len(st.session_state.workspace_memory.get('agent_runs', []))}**")
+    render_workspace_intelligence_panel(st.session_state.selected_files)
 
     # Filter selected files for dashboard-compatible formats
     dashboard_files = [
@@ -8331,6 +9131,7 @@ if active_main_tab == "📂 Compare":
             st.session_state.compare_result_html = None
             st.session_state.compare_result_excel_bytes = None
             st.session_state.compare_result_files = []
+            st.session_state.compare_semantic_summary = None
             st.rerun()
 
     st.info("Select files in the sidebar to make them available here, then choose only the files you want to compare in this tab.")
@@ -8390,16 +9191,30 @@ if active_main_tab == "📂 Compare":
                     reference_file=reference_file
                 )
                 excel_io = generate_word_level_comparison_excel(selected_texts)
+                semantic_summary = build_semantic_diff_explanation(selected_texts)
 
             st.session_state.compare_result_html = html_diff
             st.session_state.compare_result_excel_bytes = excel_io.getvalue()
             st.session_state.compare_result_files = selected_files_for_comparison.copy()
+            st.session_state.compare_semantic_summary = semantic_summary
+            record_workspace_memory_event(
+                "compare",
+                "Semantic comparison completed",
+                semantic_summary,
+                source=", ".join(selected_files_for_comparison),
+            )
+            save_workspace_memory()
+            save_memory_log("compare", "Semantic comparison stored in workspace memory.", {
+                "files": selected_files_for_comparison,
+            })
         else:
             st.warning("Select at least two files to compare.")
 
     if st.session_state.compare_result_html and st.session_state.compare_result_files:
         st.info("Compared files: " + ", ".join(st.session_state.compare_result_files))
         st.markdown(f"### Comparison Results ({len(st.session_state.compare_result_files)} files)")
+        if st.session_state.get("compare_semantic_summary"):
+            st.markdown(st.session_state.compare_semantic_summary, unsafe_allow_html=True)
         render_html_frame(st.session_state.compare_result_html, height=800)
 
         st.markdown("### Download Excel Comparison")
@@ -8436,6 +9251,41 @@ if active_main_tab == "📡 CAPL":
         "Use sidebar selection to make CAPL source files available here. Then choose the CAPL file you want only in this tab.")
     show_current_sidebar_selection()
     show_help_popup('capl', [f for f in st.session_state.selected_files if f.lower().endswith((".can", ".txt"))])
+
+    st.markdown("### Autonomous CAPL Agent Workspace")
+    st.info("Use the CAPL agent system to run goal-driven workflows across uploaded documents, shared memory, and CAPL analysis.")
+    agent_cols = st.columns(5)
+    agent_defs = [
+        ("Planning", "Breaks goals into steps"),
+        ("Retrieval", "Queries FAISS memory"),
+        ("Execution", "Runs tools/actions"),
+        ("Reasoning", "Builds insights"),
+        ("Coordination", "Merges final output"),
+    ]
+    for index, (agent_name, agent_role) in enumerate(agent_defs):
+        with agent_cols[index]:
+            st.markdown(f"**{agent_name} Agent**")
+            st.caption(agent_role)
+    st.text_input("Autonomous CAPL Goal", key="capl_autonomous_goal", placeholder="Analyze uploaded documents and give insights about risks")
+    if st.button("🚀 Run Autonomous CAPL Agents", key="run_capl_agents"):
+        with st.spinner("Running autonomous CAPL agents..."):
+            st.session_state.capl_agent_result = run_capl_agent(
+                st.session_state.capl_autonomous_goal,
+                st.session_state.selected_files
+            )
+        st.success("Autonomous CAPL task completed.")
+
+    if st.session_state.capl_agent_result:
+        st.markdown("### Agent Output")
+        st.markdown(st.session_state.capl_agent_result, unsafe_allow_html=True)
+
+    if st.session_state.agent_run_history:
+        with st.expander("Autonomous CAPL run history", expanded=False):
+            for run in st.session_state.agent_run_history[-5:][::-1]:
+                st.markdown(f"**{run['timestamp']}** — {html.escape(run['goal'])}")
+                if run.get('plan'):
+                    st.markdown(f"- Plan: {html.escape(', '.join(run['plan']))}")
+                st.markdown("---")
 
     # Filter selected files for CAPL analysis
     capl_selectable_files = [f for f in st.session_state.selected_files if f.lower().endswith((".can", ".txt"))]
