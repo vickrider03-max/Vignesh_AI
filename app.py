@@ -7735,124 +7735,193 @@ def show_help_popup(tab_name, selected_files):
 
     helper_def = helper_defs.get(tab_name, helper_defs["chat"])
     suggestions = get_dynamic_suggestions(tab_name, skill_level)[:4]
-    suggestion_tags = "".join(f"<span>{html.escape(s)}</span>" for s in suggestions)
     next_action = get_next_best_action(tab_name, skill_level)
+    modal_key = f"helper_modal_{tab_name}"
     helper_close_key = f"helper_close_{tab_name}"
 
     st.markdown(
         f"""
         <style>
-        .st-key-{helper_close_key} {{
-            position: fixed !important;
-            right: 30px !important;
-            bottom: calc(18px + min(72vh, 420px) - 46px) !important;
-            z-index: 100000 !important;
-            width: 34px !important;
-        }}
-        .st-key-{helper_close_key} button {{
-            width: 34px !important;
-            height: 34px !important;
-            min-height: 34px !important;
-            padding: 0 !important;
-            border: none !important;
-            border-radius: 50% !important;
-            background: rgba(255, 255, 255, 0.95) !important;
-            color: #7a4f3a !important;
-            font-size: 1rem !important;
-            line-height: 1 !important;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08) !important;
-        }}
-        .st-key-{helper_close_key} button:hover {{
-            background: #fee7d0 !important;
-        }}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-    if st.button("×", key=helper_close_key, help="Close helper"):
-        set_help_popup_state(tab_name, False)
-        st.rerun()
-
-    st.markdown(
-        f"""
-        <style>
-        .helper-popup-overlay {{
+        .helper-modal-backdrop {{
             position: fixed;
-            bottom: 18px;
-            right: 18px;
-            top: auto;
-            width: min(380px, 88vw);
-            max-height: 72vh;
-            padding: 18px 20px;
-            background: rgba(255, 250, 245, 0.98);
-            border: 1px solid #ffd5c5;
-            border-radius: 22px;
-            box-shadow: 0 28px 60px rgba(0, 0, 0, 0.14);
-            overflow-y: auto;
-            z-index: 99999;
-            color: #2f2a26;
-            font-family: system-ui, sans-serif;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.18);
+            backdrop-filter: blur(2px);
+            z-index: 99998;
         }}
-        .helper-popup-overlay h3 {{
-            margin: 0 0 10px;
-            font-size: 1.05rem;
-            color: #3c2e2a;
+        .st-key-{modal_key} {{
+            position: fixed !important;
+            top: 50% !important;
+            left: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            width: min(560px, 92vw) !important;
+            max-height: 78vh !important;
+            overflow-y: auto !important;
+            z-index: 99999 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            border: 1px solid rgba(15, 23, 42, 0.10) !important;
+            border-radius: 14px !important;
+            box-shadow: 0 24px 70px rgba(15, 23, 42, 0.18) !important;
         }}
-        .helper-popup-overlay .helper-meta {{
-            margin-bottom: 12px;
-            color: #5f3a31;
-            font-size: 0.92rem;
+        .st-key-{modal_key} > div {{
+            padding: 0 !important;
         }}
-        .helper-popup-overlay p {{ margin: 10px 0; line-height: 1.55; }}
-        .helper-popup-overlay .helper-hint {{
-            margin-top: 10px;
-            color: #5e3b33;
-            font-size: 0.93rem;
+        .st-key-{modal_key} [data-testid="stHorizontalBlock"]:first-of-type {{
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 1 !important;
+            align-items: center !important;
+            padding: 16px 18px 12px !important;
+            background: rgba(255, 255, 255, 0.96) !important;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.08) !important;
+            backdrop-filter: blur(10px);
         }}
-        .helper-popup-overlay .helper-next-action {{
-            margin-top: 10px;
-            padding: 10px 12px;
-            border-radius: 12px;
-            background: #fff4eb;
-            border: 1px solid rgba(161, 106, 85, 0.22);
-            color: #4a2f28;
-            font-size: 0.92rem;
-            line-height: 1.45;
+        .st-key-{modal_key} h3 {{
+            margin: 0 !important;
+            color: #111827 !important;
+            font-size: 1.08rem !important;
+            letter-spacing: 0 !important;
         }}
-        .helper-popup-overlay .helper-pill {{
+        .st-key-{modal_key} h4 {{
+            margin: 14px 0 6px !important;
+            color: #1f2937 !important;
+            font-size: 0.94rem !important;
+        }}
+        .st-key-{modal_key} p,
+        .st-key-{modal_key} li {{
+            color: #4b5563 !important;
+            font-size: 0.92rem !important;
+            line-height: 1.45 !important;
+        }}
+        .st-key-{modal_key} .helper-modal-body {{
+            padding: 14px 18px 18px;
+        }}
+        .st-key-{modal_key} .helper-info-row {{
             display: flex;
             flex-wrap: wrap;
             gap: 8px;
-            margin-top: 10px;
+            margin: 4px 0 10px;
         }}
-        .helper-popup-overlay .helper-pill span {{
-            background: #ffe7d6;
-            color: #8a3f1b;
+        .st-key-{modal_key} .helper-chip {{
+            display: inline-flex;
+            align-items: center;
             border-radius: 999px;
-            padding: 6px 10px;
-            font-size: 0.84rem;
-            line-height: 1.4;
+            padding: 5px 9px;
+            background: #f3f4f6;
+            color: #374151;
+            border: 1px solid rgba(15, 23, 42, 0.06);
+            font-size: 0.78rem;
+            font-weight: 650;
         }}
-        .helper-popup-overlay .helper-footer {{
-            margin-top: 14px;
-            padding-top: 12px;
-            border-top: 1px solid rgba(161, 106, 85, 0.18);
-            color: #5f3d34;
+        .st-key-{modal_key} .helper-callout {{
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: #f8fbff;
+            border: 1px solid #dbeafe;
+            color: #1f3b57;
+            font-size: 0.9rem;
+            line-height: 1.45;
+            margin: 8px 0 12px;
+        }}
+        .st-key-{modal_key} .helper-shortcut {{
+            display: grid;
+            grid-template-columns: 88px 1fr;
+            gap: 8px;
+            padding: 7px 0;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+            color: #4b5563;
             font-size: 0.9rem;
         }}
+        .st-key-{modal_key} .helper-shortcut code {{
+            color: #111827;
+            background: #f3f4f6;
+            border-radius: 6px;
+            padding: 2px 6px;
+            font-size: 0.82rem;
+        }}
+        .st-key-{modal_key} .helper-suggestions {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        }}
+        .st-key-{modal_key} .helper-suggestions span {{
+            background: #fff7ed;
+            color: #9a3412;
+            border: 1px solid #fed7aa;
+            border-radius: 999px;
+            padding: 6px 10px;
+            font-size: 0.82rem;
+            line-height: 1.3;
+        }}
+        .st-key-{helper_close_key} {{
+            display: flex !important;
+            justify-content: flex-end !important;
+        }}
+        .st-key-{helper_close_key} button {{
+            width: 36px !important;
+            height: 36px !important;
+            min-height: 36px !important;
+            padding: 0 !important;
+            border: 1px solid rgba(15, 23, 42, 0.08) !important;
+            border-radius: 50% !important;
+            background: #f9fafb !important;
+            color: #374151 !important;
+            font-size: 1rem !important;
+            line-height: 1 !important;
+            box-shadow: none !important;
+        }}
+        .st-key-{helper_close_key} button:hover {{
+            background: #eef2ff !important;
+            color: #1d4ed8 !important;
+        }}
         </style>
-        <div class="helper-popup-overlay">
-            <h3>{html.escape(helper_def['title'])}</h3>
-            <div class="helper-meta">Skill: <strong>{skill_level.title()}</strong> · Queries: <strong>{tracker.get('queries', 0)}</strong></div>
-            <p>{html.escape(helper_def['text'])}</p>
-            <p class="helper-hint">{html.escape(helper_def['hint'])}</p>
-            <div class="helper-next-action">{html.escape(next_action)}</div>
-            <div class="helper-pill">{suggestion_tags}</div>
-            <div class="helper-footer">Selected file types: <strong>{html.escape(selected_types_text)}</strong><br>Use the close button to hide this helper.</div>
-        </div>
+        <div class="helper-modal-backdrop"></div>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
+
+    with st.container(key=modal_key):
+        header_col, close_col = st.columns([8, 1], vertical_alignment="center")
+        with header_col:
+            st.markdown(f"### 🧠 {html.escape(helper_def['title'])}")
+        with close_col:
+            if st.button("✕", key=helper_close_key, help="Close helper"):
+                set_help_popup_state(tab_name, False)
+                st.rerun()
+
+        suggestion_tags = "".join(f"<span>{html.escape(s)}</span>" for s in suggestions)
+        st.markdown(
+            f"""
+            <div class="helper-modal-body">
+                <div class="helper-info-row">
+                    <span class="helper-chip">Skill: {html.escape(skill_level.title())}</span>
+                    <span class="helper-chip">Queries: {tracker.get('queries', 0)}</span>
+                    <span class="helper-chip">Files: {html.escape(selected_types_text)}</span>
+                </div>
+
+                <h4>💡 Quick Guide</h4>
+                <div class="helper-callout">{html.escape(helper_def['text'])}</div>
+
+                <h4>⚡ Shortcuts</h4>
+                <div class="helper-shortcut"><code>/analyze</code><span>Run focused analysis on selected files.</span></div>
+                <div class="helper-shortcut"><code>/compare</code><span>Compare selected documents and review differences.</span></div>
+                <div class="helper-shortcut"><code>/find</code><span>Search uploaded content and workspace memory.</span></div>
+
+                <h4>📌 Tips</h4>
+                <ul>
+                    <li>{html.escape(helper_def['hint'])}</li>
+                    <li>{html.escape(next_action)}</li>
+                    <li>Click suggestions for faster input when available.</li>
+                </ul>
+
+                <h4>Suggestions</h4>
+                <div class="helper-suggestions">{suggestion_tags}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 # -------------------------------
