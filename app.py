@@ -44,6 +44,8 @@ PREVIEW_STORE = {}   # token -> file_dict
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 PREVIEW_DATA_FILE = os.path.join(APP_DIR, "preview_data.pkl")
+WORKSPACE_DB_FILE = os.path.join(APP_DIR, "workspace_memory.db")
+WORKSPACE_MEMORY_KEY = "workspace_memory"
 PDF_PREVIEW_RESOLUTION = 100
 PDF_PREVIEW_WINDOW = 25
 PDF_ASSET_SCAN_PAGE_LIMIT = 10
@@ -1767,6 +1769,28 @@ def optimize_tab_rendering():
     active_tab = st.session_state.get("active_main_tab", "💬 Chat")
     return active_tab
 
+
+@st.cache_data(show_spinner=False)
+def extract_excel_data(file_name, file_bytes):
+    data = []
+    bio = BytesIO(file_bytes)
+    file_name_lower = file_name.lower()
+    try:
+        if file_name_lower.endswith(".xlsx"):
+            wb = openpyxl.load_workbook(bio, data_only=True)
+            for sheet in wb:
+                headers = None
+                for i, row in enumerate(sheet.iter_rows(values_only=True)):
+                    if i == 0:
+                        headers = list(row)
+                    else:
+                        if row and any(cell is not None for cell in row):
+                            data.append(dict(zip(headers, row)))
+    except Exception:
+        data = []
+    return data
+
+
 def ensure_file_processed(file_name):
     """Process file with caching to avoid redundant extraction"""
     file_info = get_uploaded_file_entry(file_name)
@@ -1799,6 +1823,173 @@ def ensure_file_processed(file_name):
         excel_data = extract_excel_data(file_name, file_bytes)
         st.session_state.excel_data_by_file[file_name] = excel_data
         EXCEL_DATA_CACHE.set(file_name, excel_data)
+
+
+def ensure_files_processed(file_names):
+    for file_name in file_names or []:
+        ensure_file_processed(file_name)
+
+
+@st.cache_data(show_spinner=False)
+def create_vector_store(text):
+    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
+    chunks = splitter.split_text(str(text or "")[:MAX_VECTOR_TEXT_CHARS])
+    emb = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    return FAISS.from_texts(chunks, emb)
+
+
+def default_workspace_memory():
+    return {
+        "chat": [],
+        "agent_runs": [],
+        "indexed_files": [],
+        "memory_events": [],
+        "summary": {},
+        "metadata": {},
+    }
+
+
+def normalize_workspace_memory(memory):
+    normalized = default_workspace_memory()
+    if isinstance(memory, dict):
+        for key, value in memory.items():
+            normalized[key] = value
+    for list_key in ["chat", "agent_runs", "indexed_files", "memory_events"]:
+        if not isinstance(normalized.get(list_key), list):
+            normalized[list_key] = []
+    for dict_key in ["summary", "metadata"]:
+        if not isinstance(normalized.get(dict_key), dict):
+            normalized[dict_key] = {}
+    return normalized
+
+
+def init_workspace_db():
+    os.makedirs(APP_DIR, exist_ok=True)
+    conn = sqlite3.connect(WORKSPACE_DB_FILE, check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS workspace_meta (
+            meta_key TEXT PRIMARY KEY,
+            meta_value TEXT
+        )
+        """
+    )
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS workspace_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT,
+            log_type TEXT,
+            message TEXT,
+            details TEXT
+        )
+        """
+    )
+    conn.commit()
+    conn.close()
+
+
+def save_workspace_memory():
+    init_workspace_db()
+    st.session_state.workspace_memory = normalize_workspace_memory(st.session_state.workspace_memory)
+    conn = sqlite3.connect(WORKSPACE_DB_FILE, check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT OR REPLACE INTO workspace_meta (meta_key, meta_value) VALUES (?, ?)",
+        (WORKSPACE_MEMORY_KEY, json.dumps(st.session_state.workspace_memory, default=str))
+    )
+    conn.commit()
+    conn.close()
+
+
+def save_memory_log(log_type, message, details=None):
+    init_workspace_db()
+    conn = sqlite3.connect(WORKSPACE_DB_FILE, check_same_thread=False)
+    cursor = conn.cursor()
+    details_json = json.dumps(details, default=str) if details is not None else None
+    cursor.execute(
+        "INSERT INTO workspace_logs (timestamp, log_type, message, details) VALUES (?, ?, ?, ?)",
+        (datetime.now().isoformat(), log_type, message, details_json)
+    )
+    conn.commit()
+    conn.close()
+
+
+def record_workspace_memory_event(event_type, title, content, source=None):
+    event = {
+        "type": event_type,
+        "title": title,
+        "content": str(content or "")[:4000],
+        "source": source or "workspace",
+        "timestamp": datetime.now().isoformat(),
+    }
+    st.session_state.workspace_memory = normalize_workspace_memory(st.session_state.workspace_memory)
+    st.session_state.workspace_memory["memory_events"].append(event)
+    st.session_state.workspace_memory["memory_events"] = st.session_state.workspace_memory["memory_events"][-200:]
+    return event
+
+
+def build_unified_memory_text(file_names=None, include_chat=True, include_agents=True, max_chars=MAX_VECTOR_TEXT_CHARS):
+    st.session_state.workspace_memory = normalize_workspace_memory(st.session_state.workspace_memory)
+    sections = []
+
+    candidate_files = file_names if file_names is not None else [f["name"] for f in st.session_state.get("uploaded_files", [])]
+    candidate_files = [file_name for file_name in candidate_files if file_name in st.session_state.file_texts]
+    for file_name in candidate_files:
+        text = str(st.session_state.file_texts.get(file_name, "")).strip()
+        if text:
+            sections.append(f"[DOCUMENT: {file_name}]\n{text[:60000]}")
+
+    if include_chat:
+        for entry in st.session_state.workspace_memory.get("chat", [])[-80:]:
+            sections.append(
+                "[CHAT MEMORY]\n"
+                f"User: {entry.get('user', '')}\n"
+                f"Assistant: {entry.get('assistant', '')}\n"
+                f"Files: {', '.join(entry.get('files', []) or [])}"
+            )
+
+    for event in st.session_state.workspace_memory.get("memory_events", [])[-100:]:
+        sections.append(
+            "[MEMORY EVENT]\n"
+            f"Type: {event.get('type', '')}\n"
+            f"Title: {event.get('title', '')}\n"
+            f"Source: {event.get('source', '')}\n"
+            f"{event.get('content', '')}"
+        )
+
+    if include_agents:
+        for run in st.session_state.workspace_memory.get("agent_runs", [])[-40:]:
+            sections.append(
+                "[CAPL AGENT RUN]\n"
+                f"Goal: {run.get('goal', '')}\n"
+                f"Plan: {', '.join(run.get('plan', []) or [])}\n"
+                f"Final: {run.get('final_response', '')[:2500]}"
+            )
+
+    return "\n\n".join(sections).strip()[:max_chars]
+
+
+def get_unified_workspace_vector_store(file_names=None):
+    memory_text = build_unified_memory_text(file_names=file_names)
+    if not memory_text.strip():
+        return None
+
+    digest = hashlib.md5(memory_text.encode("utf-8", errors="ignore")).hexdigest()
+    selection_key = f"unified_memory::{digest}"
+    cached_vs = VECTOR_STORE_CACHE.get(selection_key)
+    if cached_vs is not None:
+        st.session_state.vector_stores[selection_key] = cached_vs
+        return cached_vs
+
+    try:
+        vs = create_vector_store(memory_text)
+        st.session_state.vector_stores[selection_key] = vs
+        VECTOR_STORE_CACHE.set(selection_key, vs)
+        return vs
+    except Exception:
+        return None
 
 
 def extract_text(file_name, file_bytes):
