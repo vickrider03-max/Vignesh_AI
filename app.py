@@ -1,32 +1,38 @@
 # -------------------------------
 # IMPORTS
 # -------------------------------
-# Standard library and third-party imports for the application.
-import html, re, hashlib, os, json, base64, pickle, zipfile
+import base64
+import hashlib
+import html
 import importlib
-import uuid
+import json
+import os
+import pickle
+import re
+import time
 import urllib.parse
+import uuid
 import xml.etree.ElementTree as ET
-from collections import Counter, defaultdict
+import zipfile
+from collections import Counter, OrderedDict, defaultdict
 from datetime import datetime, timedelta
 from difflib import SequenceMatcher
 from io import BytesIO
-from pytz import timezone
-import time
-from functools import lru_cache
-from collections import OrderedDict
 
-import docx, openpyxl, pdfplumber, streamlit as st
-import streamlit.components.v1 as components
-from docx.text.paragraph import Paragraph
-from docx.table import Table
+import docx
+import openpyxl
 import pandas as pd
-from openpyxl.styles import PatternFill
-from pptx import Presentation
-from bs4 import BeautifulSoup
-from PIL import Image, ImageDraw, ImageFont
+import pdfplumber
 import plotly.express as px
-import plotly.graph_objects as go
+import streamlit as st
+import streamlit.components.v1 as components
+from bs4 import BeautifulSoup
+from docx.table import Table
+from docx.text.paragraph import Paragraph
+from openpyxl.styles import PatternFill
+from PIL import Image, ImageDraw, ImageFont
+from pptx import Presentation
+from pytz import timezone
 
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.llms import HuggingFacePipeline
@@ -94,7 +100,6 @@ class CacheManager:
 FILE_TEXT_CACHE = CacheManager(max_size=100)
 VECTOR_STORE_CACHE = CacheManager(max_size=20)
 EXCEL_DATA_CACHE = CacheManager(max_size=50)
-EMBEDDINGS_CACHE = CacheManager(max_size=200)
 
 # Cache for file hashes to detect modifications
 FILE_HASH_CACHE = {}
@@ -105,14 +110,6 @@ FILE_HASH_CACHE = {}
 def get_file_hash(file_bytes):
     """Generate SHA256 hash of file contents for change detection"""
     return hashlib.sha256(file_bytes).hexdigest()
-
-def file_has_changed(file_name, file_bytes):
-    """Check if file has been modified since last processing"""
-    new_hash = get_file_hash(file_bytes)
-    cache_key = f"{file_name}_hash"
-    old_hash = FILE_HASH_CACHE.get(cache_key)
-    FILE_HASH_CACHE[cache_key] = new_hash
-    return old_hash != new_hash
 
 # ===============================================
 # PREVIEW PERSISTENCE HELPERS
@@ -930,30 +927,13 @@ st.markdown(
         hideStreamlitFooter();
         setInterval(hideStreamlitFooter, 1000);
 
-        const applyLightButtonStyles = () => {
-            const selectors = [
-                'button',
-                'input[type="button"]',
-                'input[type="submit"]',
-                '[role="button"]',
-                '.stButton > button',
-                'div[data-testid="stBaseButton"] button'
-            ];
-            document.querySelectorAll(selectors.join(',')).forEach(el => {
-                el.style.setProperty('background-color', '#e8f6ff', 'important');
-                el.style.setProperty('color', '#1e293b', 'important');
-                el.style.setProperty('border-color', '#c0dff0', 'important');
-                el.style.setProperty('border-style', 'solid', 'important');
-                el.style.setProperty('border-width', '2px', 'important');
-                el.style.setProperty('box-shadow', '0 2px 4px rgba(200, 230, 250, 0.2)', 'important');
-            });
+        const markPremiumWorkspace = () => {
+            document.body.classList.add('premium-ai-workspace');
         };
 
-        const buttonObserver = new MutationObserver(() => {
-            applyLightButtonStyles();
-        });
-        buttonObserver.observe(document.body, { childList: true, subtree: true });
-        applyLightButtonStyles();
+        const workspaceObserver = new MutationObserver(markPremiumWorkspace);
+        workspaceObserver.observe(document.body, { childList: true, subtree: true });
+        markPremiumWorkspace();
     </script>
     """,
     unsafe_allow_html=True
@@ -1087,26 +1067,7 @@ def render_status_strip():
         }}
     </style>
     <script>
-        // Dynamically override button colors on page load and mutations
-        function applyButtonColors() {{
-            const buttons = document.querySelectorAll('button, [role="button"]');
-            buttons.forEach(btn => {{
-                btn.style.backgroundColor = '#e8f6ff !important';
-                btn.style.color = '#1e293b !important';
-                btn.style.borderColor = '#c0dff0 !important';
-                btn.style.border = '2px solid #c0dff0 !important';
-            }});
-        }}
-        
-        // Apply on page load
-        document.addEventListener('DOMContentLoaded', applyButtonColors);
-        
-        // Apply on mutation (when new buttons are added)
-        const observer = new MutationObserver(applyButtonColors);
-        observer.observe(document.body, {{ childList: true, subtree: true }});
-        
-        // Apply immediately
-        applyButtonColors();
+        document.body.classList.add('premium-status-strip');
     </script>
     {live_timer_js}
     <div class="context-strip" title="Current session context">
@@ -1254,13 +1215,12 @@ if st.session_state.is_authenticated:
         with brain_col:
             if st.button("🧠", key="header_brain_icon", help="Click to show/hide helper tips"):
                 helper_tab_map = {
-                    "💬 Chat": "chat",
-                    "📊 Dashboard": "dashboard",
-                    "📂 Compare": "compare",
-                    "📡 CAPL": "capl"
-                    
+                    "Chat": "chat",
+                    "Dashboard": "dashboard",
+                    "Compare": "compare",
+                    "CAPL": "capl",
                 }
-                current_helper_tab = helper_tab_map.get(st.session_state.get("active_main_tab", "💬 Chat"), "chat")
+                current_helper_tab = helper_tab_map.get(st.session_state.get("active_main_tab", "Chat"), "chat")
                 state_key = _help_state_key(current_helper_tab)
                 st.session_state[state_key] = not st.session_state.get(state_key, False)
         with title_col:
@@ -1581,7 +1541,7 @@ if "user_session_start_time" not in st.session_state:
 if "start_time" not in st.session_state:
     st.session_state.start_time = None
 if "active_main_tab" not in st.session_state:
-    st.session_state.active_main_tab = "💬 Chat"
+    st.session_state.active_main_tab = "Chat"
 
 # -------------------------------
 # DOCUMENT PREVIEW FUNCTION
@@ -1592,22 +1552,6 @@ if "active_main_tab" not in st.session_state:
 # ===============================================
 # LAZY LOADING & PERFORMANCE OPTIMIZATION
 # ===============================================
-
-def lazy_load_file_section(file_name, section_id, loader_func):
-    """Lazily load file sections on demand to reduce initial load time"""
-    cache_key = f"{file_name}_{section_id}"
-    cached_result = FILE_TEXT_CACHE.get(cache_key, ttl_seconds=7200)
-    if cached_result is not None:
-        return cached_result
-    
-    result = loader_func()
-    FILE_TEXT_CACHE.set(cache_key, result)
-    return result
-
-def optimize_tab_rendering():
-    """Optimize rendering by deferring non-active tab loading"""
-    active_tab = st.session_state.get("active_main_tab", "💬 Chat")
-    return active_tab
 
 def ensure_file_processed(file_name):
     """Process file with caching to avoid redundant extraction"""
@@ -2278,18 +2222,6 @@ def create_heading_anchor(text):
     return f"heading-{anchor_text}"
 
 
-def highlight_for_preview(text, highlight_term=None):
-    if not highlight_term:
-        return html.escape(text)
-    escaped = html.escape(text)
-    pattern = re.compile(re.escape(highlight_term), re.IGNORECASE)
-    highlighted = pattern.sub(
-        lambda m: f"<mark style='background:#fff3a3; padding:0 2px;'>{html.escape(m.group(0))}</mark>",
-        escaped
-    )
-    return highlighted
-
-
 def render_text_block(text, highlight_term=None, anchor_id=None):
     if not highlight_term:
         return None
@@ -2353,10 +2285,9 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None, hig
                 st.markdown(f"**PDF Pages: {total_pages}**")
                 
                 # Determine which page to show
-                selected_page_index = None
                 if highlight_page is not None:
                     if 1 <= highlight_page <= total_pages:
-                        selected_page_index = highlight_page - 1
+                        pass
                     else:
                         st.warning(f"⚠️ Page {highlight_page} not found. Showing all pages.")
                 else:
@@ -2428,7 +2359,6 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None, hig
                 st.caption(f"Showing page {int(page_start)} to {page_end} of {total_pages}. Change the start page to preview any page.")
 
                 # Render pages
-                highlight_found = False
                 for i in pages_to_show:
                     page = pdf.pages[i]
                     
@@ -2439,7 +2369,6 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None, hig
                         
                         if highlight_term and highlight_term.lower() in page_text.lower():
                             page_anchor_id = create_heading_anchor(highlight_term)
-                            highlight_found = True
                             if page_anchor_id:
                                 st.markdown(f"<div id='{page_anchor_id}'></div>", unsafe_allow_html=True)
                         
@@ -3791,14 +3720,6 @@ with st.sidebar:
             st.session_state.mobile_sidebar_visible = False
             st.rerun()
 
-        creator_timestamp = None
-        if st.session_state.user_role == "creator" and st.session_state.login_history:
-            creator_entries = [
-                entry for entry in st.session_state.login_history
-                if entry.get("username") == st.session_state.logged_in_username and entry.get("role") == "creator" and entry.get("action") == "login"
-            ]
-            if creator_entries:
-                creator_timestamp = creator_entries[-1].get("timestamp")
 
         st.markdown(
             """
@@ -4087,11 +4008,6 @@ def ensure_files_processed(file_names):
         ensure_file_processed(file_name)
 
 
-def process_selected_files():
-    """Fully extract all currently selected files so every tab uses the same data."""
-    ensure_files_processed(st.session_state.selected_files)
-
-
 def get_selection_signature(file_names):
     digest = hashlib.md5()
     for file_name in sorted(file_names):
@@ -4202,215 +4118,6 @@ def render_chat_summary_downloads():
                     mime=item["mime"],
                     key=f"chat_summary_diagram_{index}_{item['file_name']}"
                 )
-
-
-def build_adaptive_document_analysis(file_name, file_bytes, text):
-    raw_text = str(text or "")
-    lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
-    words = re.findall(r"\w+", raw_text)
-    title_match = re.search(r"Title:\s*(.+)", raw_text)
-    title = title_match.group(1).strip() if title_match and title_match.group(1).strip() else file_name
-
-    keyword_counts = Counter(
-        word.lower()
-        for word in words
-        if len(word) > 3 and word.lower() not in SUMMARY_STOPWORDS and not word.isdigit()
-    )
-    keywords = [word.title() for word, _ in keyword_counts.most_common(8)]
-    keyword_text = ", ".join(keywords) if keywords else "Not available"
-    page_count, image_count, table_count = get_document_asset_counts(file_name, file_bytes, raw_text)
-
-    ignored_prefixes = (
-        "pdf metadata:", "document metadata:", "meta tags:", "total pages:", "total slides:",
-        "workbook contains", "error:", "[image:", "[embedded_image:", "table:"
-    )
-    metadata_prefixes = (
-        "producer:", "creationdate:", "moddate:", "author:", "creator:", "title:",
-        "subject:", "keywords:", "trapped:", "pdfversion:"
-    )
-
-    def prettify_extracted_text(value):
-        value = str(value or "").strip()
-        if not value:
-            return value
-        value = re.sub(r"([a-z])([A-Z])", r"\1 \2", value)
-        value = re.sub(r"([A-Za-z])(\d)", r"\1 \2", value)
-        value = re.sub(r"(\d)([A-Za-z])", r"\1 \2", value)
-        value = re.sub(r"\s+", " ", value)
-        value = value.replace("e. g.", "e.g.").replace("i. e.", "i.e.")
-        return value.strip()
-
-    keywords = [prettify_extracted_text(keyword) for keyword in keywords]
-    keyword_text = ", ".join(keywords) if keywords else "Not available"
-
-    def clean_content_lines(max_items=12):
-        cleaned = []
-        seen = set()
-        for line in lines:
-            line_lower = line.lower()
-            if line_lower.startswith(ignored_prefixes):
-                continue
-            if line_lower.startswith(metadata_prefixes):
-                continue
-            if len(line) < 8 or len(line) > 240:
-                continue
-            if re.fullmatch(r"[\W_]+", line):
-                continue
-            line = prettify_extracted_text(line)
-            line_lower = line.lower()
-            if line in seen:
-                continue
-            seen.add(line)
-            cleaned.append(line)
-            if len(cleaned) >= max_items:
-                break
-        return cleaned
-
-    key_lines = clean_content_lines(12)
-    headings = extract_document_headings(raw_text)
-    toc_entries = extract_toc_with_page_numbers(raw_text)
-    lower_text = raw_text.lower()
-    file_name_lower = file_name.lower()
-    type_scores = {
-        "technical": sum(1 for term in [
-            "architecture", "system", "module", "component", "workflow", "api", "interface",
-            "configuration", "requirement", "software", "hardware", "capl", "diagnostic", "test"
-        ] if term in lower_text),
-        "business": sum(1 for term in [
-            "strategy", "market", "customer", "revenue", "business", "goal", "objective",
-            "stakeholder", "risk", "cost", "benefit", "performance", "operation"
-        ] if term in lower_text),
-        "research": sum(1 for term in [
-            "abstract", "methodology", "experiment", "hypothesis", "dataset", "findings",
-            "results", "conclusion", "references", "study", "analysis"
-        ] if term in lower_text),
-    }
-    if file_name_lower.endswith((".can", ".capl")):
-        type_scores["technical"] += 4
-    if file_name_lower.endswith((".xlsx", ".html", ".htm")):
-        type_scores["business"] += 1
-    document_type = max(type_scores, key=type_scores.get) if max(type_scores.values() or [0]) > 0 else "general"
-
-    def pick_lines(patterns, limit=5):
-        selected = []
-        seen = set()
-        for line in key_lines + lines:
-            line = prettify_extracted_text(line)
-            if len(line) < 8 or len(line) > 260:
-                continue
-            line_lower = line.lower()
-            if line_lower.startswith(ignored_prefixes) or line_lower.startswith(metadata_prefixes):
-                continue
-            if any(pattern in line_lower for pattern in patterns) and line not in seen:
-                selected.append(line)
-                seen.add(line)
-            if len(selected) >= limit:
-                break
-        return selected
-
-    feature_lines = pick_lines(["feature", "component", "module", "function", "capability", "system", "interface", "configuration"])
-    workflow_lines = pick_lines(["step", "process", "workflow", "flow", "first", "then", "after", "before", "execute", "upload", "select"])
-    use_case_lines = pick_lines(["use case", "application", "used for", "used to", "can be used", "supports", "helps", "enables"])
-    important_note_lines = pick_lines(["warning", "caution", "note", "limit", "constraint", "assumption", "must", "shall", "required", "error"])
-
-    context_bits = []
-    if page_count:
-        context_bits.append(f"{page_count} pages/sections")
-    if image_count:
-        context_bits.append(f"{image_count} images")
-    if table_count:
-        context_bits.append(f"{table_count} tables")
-    context_text = ", ".join(context_bits) if context_bits else f"{len(lines)} content lines"
-
-    def bullet_list(items, fallback):
-        usable_items = [item for item in items if item] or fallback
-        return "<ul>" + "".join(f"<li>{html.escape(str(item))}</li>" for item in usable_items) + "</ul>"
-
-    def section(title_text, body_html):
-        if not body_html:
-            return ""
-        return f"<h4 style='margin:16px 0 6px 0; color:#173152;'>{html.escape(title_text)}</h4>{body_html}"
-
-    structure_items = []
-    if toc_entries:
-        structure_items = [
-            f"{num + ' ' if num else ''}{prettify_extracted_text(heading)}" + (f" - page {page_num}" if page_num else "")
-            for num, heading, page_num in toc_entries[:6]
-        ]
-    elif headings:
-        structure_items = [f"{num + ' ' if num else ''}{prettify_extracted_text(heading)}" for num, heading in headings[:6]]
-    else:
-        structure_items = [
-            "Content is presented as extracted text rather than clearly labeled sections.",
-            f"Detected document assets: {context_text}.",
-        ]
-
-    purpose_by_type = {
-        "technical": "to describe a system, process, implementation, test, or technical capability",
-        "business": "to communicate objectives, operational context, metrics, or decision-oriented information",
-        "research": "to explain a problem, method, evidence, findings, and conclusions",
-        "general": "to present information in a readable and referenceable form",
-    }
-    summary_focus = ", ".join(keywords[:4]) if keywords else "the extracted document content"
-    key_point_items = key_lines[:5] or ["No detailed content lines could be extracted, but document metadata was detected."]
-    insight_items = [
-        f"The document appears to focus on {summary_focus}.",
-        f"It should be read as a {document_type} document.",
-    ]
-    if image_count or table_count:
-        insight_items.append("Visual or tabular assets may contain supporting details that complement the extracted text.")
-    if important_note_lines:
-        insight_items.append("Several lines contain requirements, constraints, warnings, or operational notes.")
-
-    simplified_items = [
-        f"In simple terms, this document is about {summary_focus}.",
-        "It collects the main information a reader needs to understand the topic, context, and next actions.",
-    ]
-    takeaway_items = []
-    if keywords:
-        takeaway_items.append(f"Primary themes: {', '.join(keywords[:5])}.")
-    takeaway_items.extend(key_point_items[:4])
-    takeaway_items = takeaway_items[:5]
-
-    summary_html = (
-        "<div>"
-        f"<div><b>What the document is about:</b> {html.escape(title)}</div>"
-        f"<div><b>Main purpose:</b> {html.escape(purpose_by_type[document_type])}.</div>"
-        f"<div><b>Key context:</b> {html.escape(context_text)}. Detected type: {html.escape(document_type.title())}.</div>"
-        f"<div><b>Important themes:</b> {html.escape(keyword_text)}</div>"
-        "</div>"
-    )
-
-    optional_sections = ""
-    if feature_lines or document_type == "technical":
-        optional_sections += section("Features / Concepts / Components", bullet_list(
-            feature_lines,
-            [f"Relevant concepts include {keyword_text}.", "No explicit feature list was detected in the extracted text."]
-        ))
-    if workflow_lines or document_type == "technical":
-        optional_sections += section("Workflow / Process", bullet_list(
-            workflow_lines,
-            ["No clear step-by-step workflow was detected in the extracted text."]
-        ))
-    if use_case_lines or document_type in ("technical", "business"):
-        optional_sections += section("Use Cases / Applications", bullet_list(
-            use_case_lines,
-            ["Use this document as a reference for understanding the topic, validating details, or planning related work."]
-        ))
-    if important_note_lines:
-        optional_sections += section("Important Notes", bullet_list(important_note_lines, []))
-
-    analysis_sections = [
-        f"<h3 style='margin:0 0 10px 0; color:#173152;'>Document Analysis: {html.escape(file_name)}</h3>",
-        section("Summary", summary_html),
-        section("Key Points", bullet_list(key_point_items, [])),
-        section("Structure Breakdown", bullet_list(structure_items, [])),
-        section("Key Insights / Core Insights", bullet_list(insight_items, [])),
-        optional_sections,
-        section("Simplified Explanation", bullet_list(simplified_items, [])),
-        section("Key Takeaways", bullet_list(takeaway_items, [])),
-    ]
-    return "<div style='margin-bottom:18px; line-height:1.5;'>" + "".join(analysis_sections) + "</div>"
 
 
 def build_product_documentation_analysis(file_name, file_bytes, text):
@@ -4963,17 +4670,6 @@ def build_item_visual_response(file_name, text, item_name):
 # Document structure helpers:
 # Used by the Chat "overview" flow and preview links to identify headings,
 # table-of-contents entries, and likely page numbers inside uploaded documents.
-def extract_page_text(text, page_number=1):
-    text = str(text)
-    pattern = rf"Page {page_number}\s+Text:\s*(.*?)(?=Page \d+\s+Text:|\Z)"
-    match = re.search(pattern, text, re.S | re.IGNORECASE)
-    if match:
-        return match.group(1).strip()
-
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    return "\n".join(lines[:80])
-
-
 def find_heading_page_number(text, heading):
     text = str(text)
     lines = [line for line in text.splitlines()]
@@ -5087,50 +4783,6 @@ def extract_toc_with_page_numbers(text):
                         break
             toc_entries.append((num, title, page_num))
     return toc_entries
-
-
-def build_file_overview(file_name, text):
-    text = str(text)
-    toc_entries = extract_toc_with_page_numbers(text)
-    all_headings = extract_document_headings(text)
-
-    overview_parts = [f"📄 **{file_name}**"]
-    
-    # Table of Contents section
-    overview_parts.append("### Table of Contents")
-    if toc_entries:
-        overview_parts.append("| Contents | Page No |")
-        overview_parts.append("|----------|---------|")
-        for num, title, page_num in toc_entries:
-            content_str = f"{num} {title}" if num else title
-            display_text = f"{content_str} (Page {page_num})" if page_num else content_str
-            preview_link = create_preview_link(file_name, highlight_term=title, page_num=page_num)
-            anchor_id = create_heading_anchor(title)
-            if preview_link:
-                page_display = page_num if page_num else "-"
-                overview_parts.append(f"| <a href='{preview_link}#{anchor_id}' target='_blank'>{html.escape(display_text)}</a> | {page_display} |")
-            else:
-                page_display = page_num if page_num else "-"
-                overview_parts.append(f"| {html.escape(display_text)} | {page_display} |")
-    else:
-        overview_parts.append("- No table of contents found with page numbers.")
-
-    # Document Headings section
-    overview_parts.append("### Document Headings")
-    if all_headings:
-        for num, title in all_headings:
-            content_str = f"{num} {title}" if num else title
-            anchor_id = create_heading_anchor(title)
-            page_num = resolve_heading_page_number(text, title, toc_entries)
-            preview_link = create_preview_link(file_name, highlight_term=title, page_num=page_num)
-            if preview_link:
-                overview_parts.append(f"- <a href='{preview_link}#{anchor_id}' target='_blank'>{html.escape(content_str)}</a>")
-            else:
-                overview_parts.append(f"- {content_str}")
-    else:
-        overview_parts.append("- No document headings were detected.")
-
-    return "\n".join(overview_parts)
 
 
 @st.cache_data(show_spinner=False)
@@ -6560,16 +6212,6 @@ def render_file_context_card(title, available_files, active_files=None):
 
 
 
-# Floating icon function removed - helper is now triggered by header 🧠 icon
-
-
-# Define keywords for each tab
-tab_keywords = {
-    "chat": ["overview", "summary", "count", "find", "analyze", "explain", "details", "questions"],
-    "dashboard": ["statistics", "trends", "charts", "metrics", "data", "visualize", "insights"],
-    "compare": ["differences", "compare", "changes", "merge", "diff", "side-by-side", "inline"],
-    "capl": ["syntax", "variables", "functions", "errors", "debug", "code", "fix", "suggestions"]
-}
 
 
 def track_user_behavior(tab_name):
@@ -7615,14 +7257,409 @@ st.markdown(
 )
 
 
+st.markdown(
+    """
+    <style>
+    /* Premium AI workspace skin: applied after the legacy dashboard styles. */
+    :root {
+        --workspace-bg: #fbfcfe;
+        --workspace-surface: rgba(255, 255, 255, 0.78);
+        --workspace-text: #111827;
+        --workspace-muted: #6b7280;
+        --workspace-line: rgba(17, 24, 39, 0.07);
+        --workspace-blue: #2563eb;
+        --workspace-blue-soft: rgba(37, 99, 235, 0.12);
+    }
+
+    html,
+    body,
+    .stApp,
+    div[data-testid="stAppViewContainer"] {
+        background:
+            radial-gradient(circle at 48% -18%, rgba(96, 165, 250, 0.12), transparent 34rem),
+            linear-gradient(180deg, #ffffff 0%, var(--workspace-bg) 52%, #f8fafc 100%) !important;
+        color: var(--workspace-text) !important;
+    }
+
+    section.main .block-container,
+    .main .block-container,
+    div[data-testid="stMain"] .block-container {
+        max-width: 1180px !important;
+        margin: 0 auto !important;
+        padding: 0.65rem clamp(1rem, 3vw, 2.4rem) 3rem !important;
+    }
+
+    [data-testid="stSidebar"],
+    .stSidebar {
+        background: rgba(248, 250, 252, 0.64) !important;
+        border-right: 0 !important;
+        box-shadow: none !important;
+        backdrop-filter: blur(16px) saturate(1.08);
+    }
+
+    [data-testid="stSidebar"] > div {
+        background: transparent !important;
+        border-right: 1px solid rgba(15, 23, 42, 0.045) !important;
+        box-shadow: none !important;
+    }
+
+    [data-testid="stSidebar"] hr,
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] hr {
+        border: 0 !important;
+        border-top: 1px solid rgba(15, 23, 42, 0.06) !important;
+        margin: 1.05rem 0 !important;
+    }
+
+    [data-testid="stSidebar"] h1,
+    [data-testid="stSidebar"] h2,
+    [data-testid="stSidebar"] h3,
+    [data-testid="stSidebar"] .stMarkdown {
+        color: #475569 !important;
+    }
+
+    [data-testid="stSidebar"] .stAlert {
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+        color: #64748b !important;
+        padding: 0.45rem 0 !important;
+    }
+
+    .app-card,
+    .metric-card,
+    .file-box,
+    .helper-next-action,
+    div[data-testid="stExpander"],
+    [data-testid="stMetric"] {
+        border-color: rgba(15, 23, 42, 0.06) !important;
+        box-shadow: none !important;
+    }
+
+    .app-card,
+    .metric-card {
+        background: transparent !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        padding: 1rem 0 !important;
+    }
+
+    div[data-testid="stExpander"] {
+        background: rgba(255, 255, 255, 0.54) !important;
+        border-radius: 8px !important;
+    }
+
+    .stAlert {
+        border: 0 !important;
+        border-left: 1px solid rgba(37, 99, 235, 0.16) !important;
+        border-radius: 0 !important;
+        background: rgba(255, 255, 255, 0.58) !important;
+        box-shadow: none !important;
+    }
+
+    .stButton > button,
+    div.stButton > button,
+    button[kind="secondary"],
+    button[kind="tertiary"] {
+        border: 0 !important;
+        border-radius: 8px !important;
+        background: transparent !important;
+        color: #334155 !important;
+        box-shadow: none !important;
+        transition:
+            transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
+            color 220ms ease,
+            background-color 220ms ease !important;
+    }
+
+    .stButton > button:hover,
+    div.stButton > button:hover,
+    button[kind="secondary"]:hover,
+    button[kind="tertiary"]:hover {
+        transform: translateY(-1px) scale(1.03) !important;
+        color: var(--workspace-blue) !important;
+        background: rgba(37, 99, 235, 0.055) !important;
+        box-shadow: none !important;
+    }
+
+    button[kind="primary"],
+    .stButton > button[kind="primary"] {
+        border: 0 !important;
+        background: rgba(37, 99, 235, 0.09) !important;
+        color: #1d4ed8 !important;
+        box-shadow: none !important;
+    }
+
+    div[role="radiogroup"] {
+        gap: 1.15rem !important;
+        border: 0 !important;
+        background: transparent !important;
+    }
+
+    div[role="radiogroup"] > label {
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        color: #64748b !important;
+        min-height: 30px !important;
+        height: auto !important;
+        padding: 0 !important;
+        transition:
+            color 240ms cubic-bezier(0.22, 1, 0.36, 1),
+            transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+    }
+
+    div[role="radiogroup"] > label::after {
+        display: none !important;
+        content: none !important;
+    }
+
+    div[role="radiogroup"] > label:hover {
+        transform: translateY(-1px) scale(1.03) !important;
+        color: var(--workspace-blue) !important;
+        background: transparent !important;
+    }
+
+    div[role="radiogroup"] > label[data-checked="true"] {
+        border: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        color: var(--workspace-blue) !important;
+    }
+
+    div[role="radiogroup"] > label[data-checked="true"] p {
+        color: var(--workspace-blue) !important;
+        font-weight: 700 !important;
+    }
+
+    [data-testid="stSidebar"] [class*="st-key-select_file_"] button[kind="primary"],
+    [data-testid="stSidebar"] [class*="st-key-select_file_"] button[kind="secondary"] {
+        background: transparent !important;
+        border: 0 !important;
+        border-radius: 8px !important;
+        color: #475569 !important;
+        min-height: 58px !important;
+        box-shadow: none !important;
+    }
+
+    [data-testid="stSidebar"] [class*="st-key-select_file_"] button[kind="primary"] {
+        color: #1d4ed8 !important;
+        background: rgba(37, 99, 235, 0.06) !important;
+    }
+
+    [data-testid="stSidebar"] div[data-testid="stLinkButton"] a {
+        border: 0 !important;
+        background: transparent !important;
+        color: #64748b !important;
+        box-shadow: none !important;
+    }
+
+    [data-testid="stSidebar"] div[data-testid="stLinkButton"] a:hover {
+        background: rgba(37, 99, 235, 0.055) !important;
+        color: #1d4ed8 !important;
+    }
+
+    .compact-header-divider {
+        background: rgba(15, 23, 42, 0.055) !important;
+        margin: 0 0 12px !important;
+    }
+
+    .app-header-main {
+        color: #111827 !important;
+        letter-spacing: 0 !important;
+    }
+
+    .app-header-subtitle {
+        color: #6b7280 !important;
+    }
+
+    /* Text-only glass motion navigation. */
+    .st-key-active_main_tab {
+        margin: 0.45rem 0 1.3rem !important;
+        position: relative !important;
+    }
+
+    .st-key-active_main_tab div[role="radiogroup"] {
+        position: relative !important;
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+        gap: clamp(1.25rem, 4vw, 3rem) !important;
+        width: 100% !important;
+        padding: 0 0 0.9rem !important;
+        margin: 0 !important;
+        border: 0 !important;
+        border-bottom: 1px solid var(--workspace-line) !important;
+        background: transparent !important;
+        overflow: visible !important;
+    }
+
+    .st-key-active_main_tab div[role="radiogroup"] > label {
+        position: relative !important;
+        z-index: 2 !important;
+        flex: 0 0 auto !important;
+        min-width: auto !important;
+        width: auto !important;
+        min-height: 30px !important;
+        height: auto !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        color: #737b8c !important;
+        box-shadow: none !important;
+        font-size: 0.95rem !important;
+        font-weight: 620 !important;
+        letter-spacing: 0 !important;
+        line-height: 1.2 !important;
+        cursor: pointer !important;
+        transform: translateY(0) scale(1) !important;
+        transition:
+            color 260ms cubic-bezier(0.22, 1, 0.36, 1),
+            transform 360ms cubic-bezier(0.34, 1.56, 0.64, 1),
+            text-shadow 280ms ease !important;
+    }
+
+    .st-key-active_main_tab div[role="radiogroup"] > label > div:first-child,
+    .st-key-active_main_tab div[role="radiogroup"] > label::before,
+    .st-key-active_main_tab div[role="radiogroup"] > label::after {
+        display: none !important;
+        content: none !important;
+    }
+
+    .st-key-active_main_tab div[role="radiogroup"] > label:hover {
+        color: var(--workspace-blue) !important;
+        transform: translateY(-1px) scale(1.04) !important;
+        text-shadow: 0 8px 24px rgba(37, 99, 235, 0.14) !important;
+    }
+
+    .st-key-active_main_tab div[role="radiogroup"] > label[data-checked="true"] {
+        background: transparent !important;
+        border: 0 !important;
+        color: var(--workspace-blue) !important;
+        box-shadow: none !important;
+        transform: translateY(-1px) scale(1.025) !important;
+        text-shadow: 0 8px 24px rgba(37, 99, 235, 0.22) !important;
+        animation: activeTabBreath 3s ease-in-out infinite !important;
+    }
+
+    .st-key-active_main_tab div[role="radiogroup"] > label p {
+        color: inherit !important;
+        font-weight: inherit !important;
+        margin: 0 !important;
+        transition: inherit !important;
+    }
+
+    .st-key-active_main_tab .tab-glass-indicator {
+        position: absolute !important;
+        z-index: 1 !important;
+        left: 0 !important;
+        bottom: -1px !important;
+        width: 44px;
+        height: 3px;
+        border-radius: 999px;
+        pointer-events: none;
+        background: linear-gradient(90deg, rgba(147, 197, 253, 0.12), rgba(37, 99, 235, 0.95), rgba(147, 197, 253, 0.14)) !important;
+        box-shadow: 0 0 20px rgba(37, 99, 235, 0.48), 0 0 42px rgba(37, 99, 235, 0.25) !important;
+        transform: translate3d(var(--tab-glow-x, 0px), 0, 0);
+        transition:
+            transform 620ms cubic-bezier(0.34, 1.56, 0.64, 1),
+            width 620ms cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+        animation: tabGlowBreath 2.8s ease-in-out infinite !important;
+    }
+
+    .st-key-active_main_tab .tab-glass-indicator::before {
+        content: "";
+        position: absolute;
+        left: -14px;
+        right: -14px;
+        top: -9px;
+        bottom: -10px;
+        border-radius: 999px;
+        background: rgba(37, 99, 235, 0.26);
+        filter: blur(9px);
+        opacity: 0.88;
+    }
+
+    .st-key-active_main_tab .tab-glass-indicator::after {
+        content: "";
+        position: absolute;
+        left: 12%;
+        right: 12%;
+        top: 0;
+        height: 1px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.78);
+    }
+
+    @keyframes activeTabBreath {
+        0%, 100% { text-shadow: 0 8px 24px rgba(37, 99, 235, 0.18); }
+        50% { text-shadow: 0 10px 30px rgba(37, 99, 235, 0.32); }
+    }
+
+    @keyframes premiumViewIn {
+        from {
+            opacity: 0;
+            transform: translateY(8px);
+            filter: blur(2px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+            filter: blur(0);
+        }
+    }
+
+    .premium-view-swap section.main .block-container > div[data-testid="stVerticalBlock"] {
+        animation: premiumViewIn 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    @media (max-width: 767px) {
+        .st-key-active_main_tab div[role="radiogroup"] {
+            gap: 1rem !important;
+            flex-wrap: wrap !important;
+            justify-content: flex-start !important;
+        }
+        .st-key-active_main_tab div[role="radiogroup"] > label {
+            flex: 0 0 auto !important;
+            min-width: auto !important;
+            font-size: 0.92rem !important;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .st-key-active_main_tab .tab-glass-indicator,
+        .st-key-active_main_tab div[role="radiogroup"] > label,
+        .premium-view-swap section.main .block-container > div[data-testid="stVerticalBlock"] {
+            animation: none !important;
+            transition-duration: 0.01ms !important;
+        }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
 # -------------------------------
 # MAIN TAB NAVIGATION
 # -------------------------------
 # Creates the horizontal tab navigation with custom styling.
 # Each tab corresponds to a major feature area of the application.
-if st.session_state.get("active_main_tab") == "📡 CAPL":
-    st.session_state.active_main_tab = "📡 CAPL"
-main_tab_options = ["💬 Chat", "📊 Dashboard", "📂 Compare", "📡 CAPL"]
+main_tab_options = ["Chat", "Dashboard", "Compare", "CAPL"]
+legacy_tab_label_map = {
+    "💬 Chat": "Chat",
+    "📊 Dashboard": "Dashboard",
+    "📂 Compare": "Compare",
+    "📡 CAPL": "CAPL",
+}
+st.session_state.active_main_tab = legacy_tab_label_map.get(
+    st.session_state.get("active_main_tab", "Chat"),
+    st.session_state.get("active_main_tab", "Chat"),
+)
+if st.session_state.active_main_tab not in main_tab_options:
+    st.session_state.active_main_tab = "Chat"
 active_main_tab = st.radio("Open Section", main_tab_options, horizontal=True, key="active_main_tab", label_visibility="collapsed")
 render_html_frame(
     """
@@ -7650,6 +7687,14 @@ render_html_frame(
 
         indicator.style.width = `${lineWidth}px`;
         indicator.style.setProperty('--tab-glow-x', `${x}px`);
+
+        const activeLabel = (checked.innerText || checked.textContent || '').trim();
+        if (root.body && root.body.dataset.activeWorkspaceTab !== activeLabel) {
+            root.body.dataset.activeWorkspaceTab = activeLabel;
+            root.body.classList.remove('premium-view-swap');
+            void root.body.offsetWidth;
+            root.body.classList.add('premium-view-swap');
+        }
     };
 
     const scheduleGlassTabs = () => {
@@ -7680,7 +7725,7 @@ render_html_frame(
 # Chat tab:
 # Handles per-tab file selection, direct commands like summarize/find/count,
 # semantic Q&A via vector search, and chat-specific download assets.
-if active_main_tab == "💬 Chat":
+if active_main_tab == "Chat":
     chat_header_col, chat_reset_col = st.columns([8, 1])
     with chat_header_col:
         st.subheader("Chat with Selected Documents")
@@ -7892,7 +7937,7 @@ if active_main_tab == "💬 Chat":
 # Dashboard tab:
 # Focused on structured HTML/XLSX analysis, charts, login/stat extraction, and
 # grouped test fixture reporting for uploaded report files.
-if active_main_tab == "📊 Dashboard":
+if active_main_tab == "Dashboard":
     dashboard_header_col, dashboard_reset_col = st.columns([8, 1])
     with dashboard_header_col:
         st.subheader("Dashboard")
@@ -8453,7 +8498,7 @@ if active_main_tab == "📊 Dashboard":
 # Compare tab:
 # Lets users pick 2+ selected files, generate inline word-level differences,
 # and download the comparison results as an Excel file.
-if active_main_tab == "📂 Compare":
+if active_main_tab == "Compare":
     compare_header_col, compare_reset_col = st.columns([8, 1])
     with compare_header_col:
         st.subheader("Compare Files")
@@ -8550,7 +8595,7 @@ if active_main_tab == "📂 Compare":
 # CAPL tab:
 # Dedicated to CAPL file selection, live editing, compile/analyze checks, issue
 # reporting, and optional AI-assisted fix generation for CAPL scripts.
-if active_main_tab == "📡 CAPL":
+if active_main_tab == "CAPL":
     capl_header_col, capl_reset_col = st.columns([8, 1])
     with capl_header_col:
         st.subheader("⚙️ CAPL Compiler & Analyzer")
