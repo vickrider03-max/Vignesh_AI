@@ -7658,161 +7658,266 @@ def show_help_popup(tab_name, selected_files):
 # feature, start in the matching tab block and then follow the helper comments above.
 
 # Session-backed main navigation:
-# 1. Premium "Soft-Glow" Navigation CSS
+# Premium glass navigation with one shared indicator/glow state.
 st.markdown("""
     <style>
     .st-key-active_main_tab {
         margin-top: 16px !important;
         margin-bottom: 8px !important;
         position: relative;
+        --ai-nav-accent: var(--accent, #3b82f6);
+        --ai-nav-accent-rgb: 59, 130, 246;
+        --ai-nav-muted: #64748b;
+        --ai-nav-text: #0f172a;
+        --ai-nav-indicator-x: 0px;
+        --ai-nav-indicator-width: 56px;
     }
 
-    /* Text-only tabs with glass sliding indicator */
-    div[role="radiogroup"] > label > div:first-child { display: none !important; }
-    div[role="radiogroup"] {
-        gap: 24px;
-        display: flex;
-        margin: 0 !important;
-        padding: 0 !important;
-        position: relative;
-        justify-content: center;
-        border-bottom: 1px solid rgba(59, 130, 246, 0.1);
-        padding-bottom: 8px;
-    }
-
-    /* Text-only tab styling */
-    div[role="radiogroup"] > label {
-        background: none !important;
-        border: none !important;
-        padding: 8px 16px !important;
-        border-radius: 0 !important;
-        display: flex !important;
-        align-items: center !important;
-        height: auto;
-        min-height: auto !important;
-        font-weight: 500;
-        line-height: 1.2 !important;
-        transition: all 0.3s ease;
-        position: relative;
-        cursor: pointer;
-        color: #64748b;
-    }
-
-    /* Active tab text color */
-    div[role="radiogroup"] > label[data-checked="true"] {
-        color: #3b82f6 !important;
-        background: none !important;
-        box-shadow: none !important;
-    }
-
-    /* Hover effects */
-    div[role="radiogroup"] > label:hover {
-        color: #3b82f6 !important;
-        transform: translateY(-1px);
-    }
-
-    /* Glass sliding indicator under active tab */
-    div[role="radiogroup"] > label[data-checked="true"]::after {
-        content: '';
-        position: absolute;
-        bottom: -8px;
-        left: 50%;
-        width: 60px;
-        height: 2px;
-        background: linear-gradient(90deg, rgba(59, 130, 246, 0.3), rgba(59, 130, 246, 0.6), rgba(59, 130, 246, 0.3));
-        border-radius: 1px;
-        transform: translateX(-50%);
-        box-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
-        animation: indicatorBreath 3s ease-in-out infinite;
-    }
-
-    /* Breathing animation for indicator */
-    @keyframes indicatorBreath {
-        0%, 100% { opacity: 0.6; transform: translateX(-50%) scaleY(1); }
-        50% { opacity: 1; transform: translateX(-50%) scaleY(1.2); }
-    }
-
-    /* Remove old styling */
-    div[role="radiogroup"] > label::after {
+    .st-key-active_main_tab div[role="radiogroup"] > label > div:first-child {
         display: none !important;
     }
 
-    /* --- RESPONSIVE DESIGN --- */
-    /* Mobile First: Base styles are mobile-friendly */
+    .st-key-active_main_tab div[role="radiogroup"] {
+        align-items: center;
+        border-bottom: 1px solid rgba(var(--ai-nav-accent-rgb), 0.10);
+        display: flex;
+        gap: clamp(18px, 4vw, 36px);
+        justify-content: center;
+        margin: 0 !important;
+        overflow: visible;
+        padding: 0 4px 12px !important;
+        position: relative;
+    }
 
-    /* Tablet and up */
-    @media (min-width: 768px) {
-        div[role="radiogroup"] {
-            flex-direction: row !important;
-            justify-content: center;
+    .st-key-active_main_tab div[role="radiogroup"] > label {
+        align-items: center !important;
+        background: transparent !important;
+        border: none !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        color: var(--ai-nav-muted) !important;
+        cursor: pointer;
+        display: inline-flex !important;
+        font-weight: 650;
+        gap: 7px;
+        height: auto;
+        isolation: isolate;
+        line-height: 1.2 !important;
+        min-height: auto !important;
+        overflow: visible;
+        padding: 9px 18px !important;
+        position: relative;
+        transform: translateZ(0);
+        transition:
+            color 320ms cubic-bezier(0.22, 1, 0.36, 1),
+            transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
+            opacity 320ms cubic-bezier(0.22, 1, 0.36, 1);
+        white-space: nowrap;
+        z-index: 2;
+    }
+
+    .st-key-active_main_tab div[role="radiogroup"] > label::before {
+        background:
+            radial-gradient(circle,
+                rgba(var(--ai-nav-accent-rgb), 0.24) 0%,
+                rgba(var(--ai-nav-accent-rgb), 0.16) 34%,
+                rgba(var(--ai-nav-accent-rgb), 0.06) 58%,
+                rgba(var(--ai-nav-accent-rgb), 0) 74%);
+        border-radius: 999px;
+        content: "";
+        filter: blur(7px);
+        height: 34px;
+        left: 9px;
+        opacity: 0;
+        pointer-events: none;
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%) scale(0.92);
+        transition: opacity 360ms cubic-bezier(0.22, 1, 0.36, 1);
+        width: 34px;
+        z-index: -1;
+    }
+
+    .st-key-active_main_tab div[role="radiogroup"] > label:hover {
+        color: #334155 !important;
+        transform: scale(1.035);
+    }
+
+    .st-key-active_main_tab div[role="radiogroup"] > label[data-checked="true"],
+    .st-key-active_main_tab div[role="radiogroup"] > label.ai-nav-active {
+        background: transparent !important;
+        border-radius: 0 !important;
+        border: none !important;
+        box-shadow: none !important;
+        color: var(--ai-nav-text) !important;
+        font-weight: 800;
+    }
+
+    .st-key-active_main_tab div[role="radiogroup"] > label[data-checked="true"]::before,
+    .st-key-active_main_tab div[role="radiogroup"] > label.ai-nav-active::before {
+        animation: aiNavGlowBreath 4.6s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+        opacity: 0.55;
+    }
+
+    .st-key-active_main_tab div[role="radiogroup"] > label p {
+        color: inherit !important;
+        font: inherit !important;
+        line-height: inherit !important;
+        margin: 0 !important;
+        position: relative;
+        z-index: 1;
+    }
+
+    .st-key-active_main_tab div[role="radiogroup"] > label::after {
+        display: none !important;
+    }
+
+    .st-key-active_main_tab .ai-nav-indicator {
+        background:
+            linear-gradient(90deg,
+                rgba(var(--ai-nav-accent-rgb), 0.08),
+                rgba(var(--ai-nav-accent-rgb), 0.62) 36%,
+                rgba(255, 255, 255, 0.88) 50%,
+                rgba(var(--ai-nav-accent-rgb), 0.62) 64%,
+                rgba(var(--ai-nav-accent-rgb), 0.08));
+        border-radius: 999px;
+        bottom: -1px;
+        box-shadow:
+            0 0 9px rgba(var(--ai-nav-accent-rgb), 0.34),
+            0 0 18px rgba(var(--ai-nav-accent-rgb), 0.18);
+        content: "";
+        display: block;
+        filter: blur(0.25px);
+        height: 3px;
+        left: 0;
+        opacity: 0.96;
+        pointer-events: none;
+        position: absolute;
+        transform: translate3d(var(--ai-nav-indicator-x), 0, 0);
+        transition:
+            transform 480ms cubic-bezier(0.2, 1.18, 0.32, 1),
+            width 480ms cubic-bezier(0.2, 1.18, 0.32, 1),
+            opacity 240ms ease;
+        width: var(--ai-nav-indicator-width);
+        z-index: 1;
+    }
+
+    .st-key-active_main_tab .ai-nav-indicator::after {
+        background: inherit;
+        border-radius: inherit;
+        content: "";
+        filter: blur(7px);
+        inset: -5px -9px;
+        opacity: 0.58;
+        position: absolute;
+    }
+
+    @keyframes aiNavGlowBreath {
+        0%, 100% {
+            opacity: 0.40;
+            transform: translateY(-50%) scale(0.92);
         }
-        div[role="radiogroup"] > label {
+        50% {
+            opacity: 0.85;
+            transform: translateY(-50%) scale(1.08);
+        }
+    }
+
+    @media (min-width: 768px) {
+        .st-key-active_main_tab div[role="radiogroup"] {
+            flex-direction: row !important;
+            justify-content: center !important;
+        }
+        .st-key-active_main_tab div[role="radiogroup"] > label {
             flex: 0 0 auto;
         }
     }
 
-    /* Desktop */
     @media (min-width: 1024px) {
-        div[role="radiogroup"] > label {
+        .st-key-active_main_tab div[role="radiogroup"] > label {
             padding: 8px 20px !important;
         }
     }
 
-    /* Mobile: Stack tabs vertically */
     @media (max-width: 767px) {
-        div[role="radiogroup"] {
-            flex-direction: column !important;
-            gap: 16px;
+        .st-key-active_main_tab div[role="radiogroup"] {
             align-items: center;
+            flex-direction: column !important;
+            gap: 12px;
             padding-bottom: 16px;
         }
-        div[role="radiogroup"] > label {
-            width: auto !important;
+        .st-key-active_main_tab div[role="radiogroup"] > label {
+            font-size: 16px !important; /* Prevent zoom on iOS */
             min-height: auto;
             padding: 12px 16px !important;
-            font-size: 16px !important; /* Prevent zoom on iOS */
             text-align: center;
+            width: auto !important;
         }
-        div[role="radiogroup"] > label[data-checked="true"]::after {
-            width: 40px;
-            bottom: -12px;
+        .st-key-active_main_tab div[role="radiogroup"] > label::before {
+            left: 10px;
         }
     }
 
-    /* Scroll-sync navigation */
     </style>
     <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const sections = ['chat-section', 'dashboard-section', 'compare-section', 'capl-section'];
-        const tabLabels = document.querySelectorAll('div[role="radiogroup"] > label');
-        
-        const observerOptions = {
-            root: null,
-            rootMargin: '-50% 0px -50% 0px',
-            threshold: 0
-        };
-        
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    const sectionId = entry.target.id;
-                    const tabIndex = sections.indexOf(sectionId);
-                    if (tabIndex !== -1 && tabLabels[tabIndex]) {
-                        // Remove active state from all tabs
-                        tabLabels.forEach(label => label.removeAttribute('data-checked'));
-                        // Add active state to current tab
-                        tabLabels[tabIndex].setAttribute('data-checked', 'true');
-                    }
-                }
+    (() => {
+        const setupGlassNav = () => {
+            const root = document;
+            const navHost = root.querySelector('.st-key-active_main_tab');
+            if (!navHost) return;
+
+            const group = navHost.querySelector('div[role="radiogroup"]');
+            if (!group) return;
+
+            let indicator = group.querySelector(':scope > .ai-nav-indicator');
+            if (!indicator) {
+                indicator = root.createElement('span');
+                indicator.className = 'ai-nav-indicator';
+                indicator.setAttribute('aria-hidden', 'true');
+                group.appendChild(indicator);
+            }
+
+            const labels = Array.from(group.querySelectorAll(':scope > label'));
+            if (!labels.length) return;
+
+            const activeLabel = labels.find(label =>
+                label.getAttribute('data-checked') === 'true' ||
+                label.getAttribute('aria-checked') === 'true' ||
+                label.querySelector('input:checked')
+            ) || labels[0];
+
+            labels.forEach(label => {
+                label.classList.toggle('ai-nav-active', label === activeLabel);
             });
-        }, observerOptions);
-        
-        // Observe sections
-        sections.forEach(sectionId => {
-            const section = document.getElementById(sectionId);
-            if (section) observer.observe(section);
-        });
-    });
+
+            const groupRect = group.getBoundingClientRect();
+            const activeRect = activeLabel.getBoundingClientRect();
+            if (!groupRect.width || !activeRect.width) return;
+
+            const indicatorWidth = Math.min(Math.max(activeRect.width * 0.72, 46), 112);
+            const indicatorX = activeRect.left - groupRect.left + ((activeRect.width - indicatorWidth) / 2);
+
+            group.style.setProperty('--ai-nav-indicator-width', `${indicatorWidth}px`);
+            group.style.setProperty('--ai-nav-indicator-x', `${indicatorX}px`);
+        };
+
+        const scheduleGlassNav = () => window.requestAnimationFrame(setupGlassNav);
+
+        if (!window.__intellidocGlassNavObserver) {
+            window.__intellidocGlassNavObserver = new MutationObserver(scheduleGlassNav);
+            window.__intellidocGlassNavObserver.observe(document.body, {
+                subtree: true,
+                childList: true,
+                attributes: true,
+                attributeFilter: ['data-checked', 'aria-checked', 'checked', 'class']
+            });
+            window.addEventListener('resize', scheduleGlassNav, { passive: true });
+        }
+
+        scheduleGlassNav();
+        window.setTimeout(scheduleGlassNav, 120);
+        window.setTimeout(scheduleGlassNav, 420);
+    })();
     </script>
     <style>
     @media (max-width: 767px) {
@@ -8086,15 +8191,20 @@ st.markdown("""
     }
 
     .st-key-active_main_tab div[role="radiogroup"] > label[data-checked="true"] {
-        background: linear-gradient(135deg, #dbeafe 0%, #e0f2fe 48%, #ede9fe 100%) !important;
-        border: 2px solid #60a5fa !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
         color: #0f172a !important;
         font-weight: 800 !important;
-        transform: translateY(-1px);
-        animation: selectedPillGlow 2.2s ease-in-out infinite;
+        transform: translateZ(0);
+        animation: none;
     }
 
-    .st-key-active_main_tab div[role="radiogroup"] > label[data-checked="true"] p,
+    .st-key-active_main_tab div[role="radiogroup"] > label[data-checked="true"]:hover,
+    .st-key-active_main_tab div[role="radiogroup"] > label.ai-nav-active:hover {
+        transform: scale(1.035);
+    }
+
     .st-key-dashboard_chart_type div[role="radiogroup"] > label[data-checked="true"] p,
     .st-key-dashboard_bar_orientation div[role="radiogroup"] > label[data-checked="true"] p {
         color: #0f172a !important;
@@ -8394,6 +8504,162 @@ active_main_tab = st.radio("Open Section", main_tab_options, horizontal=True, ke
 # semantic Q&A via vector search, and chat-specific download assets.
 if active_main_tab == "💬 Chat":
     st.markdown('<div id="chat-section">', unsafe_allow_html=True)
+    st.markdown(
+        """
+        <style>
+        [class*="st-key-chat_sugg_"] button,
+        [class*="st-key-ai_sugg_"] button {
+            min-height: 38px !important;
+            border-radius: 999px !important;
+            border: 1px solid rgba(147, 197, 253, 0.52) !important;
+            background: rgba(248, 251, 255, 0.88) !important;
+            color: #173152 !important;
+            box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06) !important;
+            font-size: 0.88rem !important;
+            font-weight: 700 !important;
+            padding: 0.42rem 0.75rem !important;
+            transition: transform 0.18s ease, border-color 0.18s ease, background-color 0.18s ease !important;
+            white-space: nowrap !important;
+        }
+        [class*="st-key-chat_sugg_"] button:hover,
+        [class*="st-key-ai_sugg_"] button:hover {
+            background: rgba(239, 246, 255, 0.98) !important;
+            border-color: rgba(59, 130, 246, 0.55) !important;
+            transform: translateY(-1px) scale(1.015) !important;
+        }
+        .chat-ghost-hint {
+            color: #2563eb;
+            font-size: 0.86rem;
+            margin: 0.1rem 0 0.45rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if "input_prefill" not in st.session_state:
+        st.session_state.input_prefill = ""
+    if "chat_next_suggestions" not in st.session_state:
+        st.session_state.chat_next_suggestions = []
+    if "chat_next_suggestions_for" not in st.session_state:
+        st.session_state.chat_next_suggestions_for = None
+
+    def get_chat_hint(text):
+        text = str(text or "").lower()
+        if "vn1630a" in text:
+            return "-> fetching component details"
+        if "d-sub9" in text:
+            return "-> generating pin diagram"
+        if "count" in text:
+            return "-> analyzing signals"
+        if "find" in text or "search" in text or "locate" in text:
+            return "-> searching knowledge base"
+        return ""
+
+    def extract_chat_entity(text):
+        quoted = extract_quoted_item_name(text)
+        if quoted:
+            return quoted
+        match = re.search(r"\b[A-Z]{2,}[A-Z0-9_-]{2,}\b", str(text or ""))
+        return match.group(0) if match else ""
+
+    def normalize_chat_quick_action(text):
+        clean_text = str(text or "").strip()
+        lower_text = clean_text.lower()
+        if lower_text == "analyze data":
+            return "analyze"
+        if lower_text == "overview":
+            return "overview"
+        if lower_text == "find keyword":
+            return 'find "keyword"'
+        if lower_text == "count signals":
+            return 'count "signal"'
+        if lower_text.startswith("item details:"):
+            item = clean_text.split(":", 1)[1].strip()
+            return f'item details "{item}"' if item else clean_text
+        if lower_text.startswith("pin diagram:"):
+            item = clean_text.split(":", 1)[1].strip()
+            return f'pin diagram "{item}"' if item else clean_text
+        return clean_text
+
+    def normalize_chat_slash_command(text):
+        clean_text = normalize_chat_quick_action(text)
+        if not clean_text.startswith("/"):
+            return clean_text
+        command, _, remainder = clean_text.partition(" ")
+        command = command.lower().strip()
+        remainder = remainder.strip()
+        if command == "/analyze":
+            return f"analyze {remainder}".strip()
+        if command == "/compare":
+            return f"compare {remainder}".strip()
+        if command == "/overview":
+            return f"overview {remainder}".strip()
+        if command == "/find":
+            if remainder and not re.search(r"'(.*?)'|\"(.*?)\"", remainder):
+                return f'find "{remainder}"'
+            return f"find {remainder}".strip()
+        return clean_text
+
+    def generate_chat_reasoning(user_input, context):
+        text = str(user_input or "")
+        combined = f"{text}\n{str(context or '')[:6000]}".lower()
+        reasoning = [
+            "Identify entity",
+            "Retrieve memory context",
+            "Analyze intent",
+            "Detect missing information",
+            "Find next actions",
+        ]
+        if any(term in combined for term in ["diagram", "pin", "d-sub", "connector"]):
+            reasoning.append("Diagram requested or available")
+        if any(term in combined for term in ["compare", "difference", "diff"]):
+            reasoning.append("Compare related context")
+        if any(term in combined for term in ["signal", "signals", "count"]):
+            reasoning.append("Signal analysis needed")
+        return list(dict.fromkeys(reasoning))
+
+    def reasoning_to_suggestions(reasoning):
+        suggestions = []
+        for item in reasoning:
+            item = str(item or "").lower()
+            if "entity" in item:
+                suggestions.append("Show item details")
+            if "diagram" in item:
+                suggestions.append("Show pin diagram")
+            if "compare" in item:
+                suggestions.append("Compare with similar items")
+            if "signal" in item:
+                suggestions.append("List all signals")
+            if "missing" in item:
+                suggestions.append("Generate overview")
+        return list(dict.fromkeys(suggestions))[:4]
+
+    def build_chat_next_suggestions(user_input, context):
+        suggestions = reasoning_to_suggestions(generate_chat_reasoning(user_input, context))
+        memory_hits = search_workspace_memory(user_input, limit=3)
+        for memory_item in memory_hits:
+            memory_text = str(memory_item or "").lower()
+            if "diagram" in memory_text:
+                suggestions.append("Show pin diagram")
+            if "signal" in memory_text:
+                suggestions.append("Count signals")
+            if "compare" in memory_text or "difference" in memory_text:
+                suggestions.append("Compare with similar items")
+
+        entity = extract_chat_entity(user_input)
+        enhanced_suggestions = []
+        for suggestion in suggestions:
+            if entity and suggestion == "Show item details":
+                enhanced_suggestions.append(f"Item details: {entity}")
+            elif entity and suggestion == "Show pin diagram":
+                enhanced_suggestions.append(f"Pin diagram: {entity}")
+            elif suggestion == "List all signals":
+                enhanced_suggestions.append("Count signals")
+            else:
+                enhanced_suggestions.append(suggestion)
+        return list(dict.fromkeys(enhanced_suggestions))[:4]
+
     chat_header_col, chat_reset_col = st.columns([8, 1])
     with chat_header_col:
         st.subheader("Chat with Selected Documents")
@@ -8402,6 +8668,9 @@ if active_main_tab == "💬 Chat":
             st.session_state.chat_file_selection = []
             st.session_state.chat_summary_downloads = empty_chat_summary_downloads()
             st.session_state.messages = []
+            st.session_state.input_prefill = ""
+            st.session_state.chat_next_suggestions = []
+            st.session_state.chat_next_suggestions_for = None
             st.success("✅ Chat reset!")
             st.rerun()
 
@@ -8426,20 +8695,52 @@ if active_main_tab == "💬 Chat":
                 ensure_files_processed(chat_files)
             combined_text = "\n".join([st.session_state.file_texts.get(f, "") for f in chat_files])
     
-            user_input = st.chat_input("Ask something... Try: analyze, item details \"VN1630A\", pin diagram \"D-SUB9\", find \"keyword\", count \"signal\", overview")
+            empty_state_suggestions = [
+                "Analyze data",
+                "Item details: VN1630A",
+                "Pin diagram: D-SUB9",
+                "Find keyword",
+                "Count signals",
+                "Overview",
+            ]
+            if not st.session_state.messages and not st.session_state.get("input_prefill"):
+                suggestion_cols = st.columns(len(empty_state_suggestions))
+                for suggestion_index, suggestion_text in enumerate(empty_state_suggestions):
+                    if suggestion_cols[suggestion_index].button(
+                        suggestion_text,
+                        key=f"chat_sugg_{suggestion_index}",
+                        use_container_width=True,
+                    ):
+                        st.session_state.input_prefill = suggestion_text
+                        st.rerun()
+
+            st.caption('Try: analyze • item details "VN1630A" • pin diagram "D-SUB9" • find keyword • count signal • overview')
+
+            user_input = st.chat_input("Ask anything")
+            if st.session_state.get("input_prefill"):
+                user_input = st.session_state.input_prefill
+                st.session_state.input_prefill = ""
             if user_input:
-                if user_input.strip().lower() == "clear":
+                submitted_input = user_input
+                processing_input = normalize_chat_slash_command(user_input)
+                hint = get_chat_hint(processing_input or submitted_input)
+                if hint:
+                    st.markdown(f"<div class='chat-ghost-hint'>{html.escape(hint)}</div>", unsafe_allow_html=True)
+
+                if submitted_input.strip().lower() == "clear":
                     st.session_state.messages = []
                     st.session_state.chat_summary_downloads = empty_chat_summary_downloads()
+                    st.session_state.chat_next_suggestions = []
+                    st.session_state.chat_next_suggestions_for = None
                     st.success("✅ Chat cleared!")
                 else:
-                    st.session_state.messages.append({"role": "user", "content": user_input})
+                    st.session_state.messages.append({"role": "user", "content": submitted_input})
                     with st.spinner("Processing your request..."):
                         st.session_state.chat_summary_downloads = empty_chat_summary_downloads()
-                        user_input_lower = user_input.lower()
+                        user_input_lower = processing_input.lower()
                         # Word count queries
                         if any(t in user_input_lower for t in ["how many", "count", "number of", "occurrences"]):
-                            match = re.search(r"'(.*?)'|\"(.*?)\"", user_input)
+                            match = re.search(r"'(.*?)'|\"(.*?)\"", processing_input)
                             if match:
                                 word = match.group(1) or match.group(2)
                                 count = len(
@@ -8448,7 +8749,7 @@ if active_main_tab == "💬 Chat":
                             else:
                                 response = "⚠️ Specify the word/phrase in quotes. Example: count('keyword') or count(\"keyword\")"
                         elif any(term in user_input_lower for term in ["find", "search", "locate"]) or "highlight" in user_input_lower:
-                            match = re.search(r"'(.*?)'|\"(.*?)\"", user_input)
+                            match = re.search(r"'(.*?)'|\"(.*?)\"", processing_input)
                             if match:
                                 query = match.group(1) or match.group(2)
                                 response_blocks = []
@@ -8484,7 +8785,7 @@ if active_main_tab == "💬 Chat":
                                     response_lines.append(f"📄 **{f}**\n\nNo readable content found in this document.")
                             response = "\n\n".join(response_lines)
                         elif any(term in user_input_lower for term in ["pin diagram", "pin table", "pin configuration", "visual reference", "visual and structural", "connector details", "technical tables"]):
-                            item_name = extract_quoted_item_name(user_input)
+                            item_name = extract_quoted_item_name(processing_input)
                             if not item_name:
                                 response = "⚠️ Specify the item name in quotes. Example: pin diagram \"D-SUB9\" or visual reference \"VN1640A\""
                             else:
@@ -8508,7 +8809,7 @@ if active_main_tab == "💬 Chat":
                                 }
                                 response = "\n\n---\n\n".join(response_blocks)
                         elif any(term in user_input_lower for term in ["item details", "item information", "extract item", "about item", "information about", "details about"]):
-                            item_name = extract_quoted_item_name(user_input)
+                            item_name = extract_quoted_item_name(processing_input)
                             if not item_name:
                                 response = "⚠️ Specify the item name in quotes. Example: item details \"VN1630A\" or information about \"D-SUB9\""
                             else:
@@ -8572,19 +8873,21 @@ if active_main_tab == "💬 Chat":
                                     chain = None
 
                             if chain is not None:
-                                response = str(chain.invoke(user_input))
+                                response = str(chain.invoke(processing_input))
                             else:
-                                memory_hits = search_workspace_memory(user_input, limit=4)
+                                memory_hits = search_workspace_memory(processing_input, limit=4)
                                 if memory_hits:
                                     response = "AI model is unavailable, so I retrieved the closest workspace memory:\n\n" + "\n\n---\n\n".join(memory_hits)
                                 else:
                                     response = "⚠️ AI model is unavailable. Use direct extraction questions such as 'count(\"keyword\")', 'find(\"phrase\")', 'summarize', or 'overview'."
                         st.session_state.messages.append({"role": "assistant", "content": response})
                         st.session_state.last_streamed_assistant_index = len(st.session_state.messages) - 1
-                        append_chat_to_workspace_memory(user_input, response, chat_files)
+                        st.session_state.chat_next_suggestions = build_chat_next_suggestions(processing_input, combined_text)
+                        st.session_state.chat_next_suggestions_for = len(st.session_state.messages) - 1
+                        append_chat_to_workspace_memory(submitted_input, response, chat_files)
                         save_workspace_memory()
                         save_memory_log("chat", "Chat interaction stored in workspace memory.", {
-                            "user": user_input,
+                            "user": submitted_input,
                             "files": chat_files,
                             "assistant_preview": response[:300],
                         })
@@ -8608,6 +8911,23 @@ if active_main_tab == "💬 Chat":
                 st.session_state.last_streamed_assistant_index = None
             else:
                 st.markdown(msg["content"], unsafe_allow_html=True)
+
+            if (
+                msg["role"] == "assistant"
+                and msg_index == st.session_state.get("chat_next_suggestions_for")
+                and st.session_state.get("chat_next_suggestions")
+            ):
+                st.caption("Suggested next steps")
+                next_suggestions = list(dict.fromkeys(st.session_state.get("chat_next_suggestions", [])))[:4]
+                suggestion_cols = st.columns(len(next_suggestions))
+                for suggestion_index, suggestion_text in enumerate(next_suggestions):
+                    if suggestion_cols[suggestion_index].button(
+                        suggestion_text,
+                        key=f"ai_sugg_{msg_index}_{suggestion_index}",
+                        use_container_width=True,
+                    ):
+                        st.session_state.input_prefill = suggestion_text
+                        st.rerun()
 
         render_chat_summary_downloads()
     else:
