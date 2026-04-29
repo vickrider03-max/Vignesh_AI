@@ -7295,6 +7295,141 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+st.markdown("""
+    <style>
+    /* Premium glass sliding navigation: main tabs only */
+    .st-key-active_main_tab {
+        margin-top: 6px !important;
+        margin-bottom: 16px !important;
+    }
+    .st-key-active_main_tab div[role="radiogroup"] {
+        position: relative !important;
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+        gap: 28px !important;
+        width: 100% !important;
+        padding: 4px 0 12px !important;
+        margin: 0 !important;
+        border-bottom: 1px solid #e5e7eb !important;
+        background: transparent !important;
+        overflow: visible !important;
+    }
+    .st-key-active_main_tab div[role="radiogroup"] > label {
+        position: relative !important;
+        z-index: 2 !important;
+        min-width: auto !important;
+        width: auto !important;
+        height: auto !important;
+        min-height: 32px !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        color: #6b7280 !important;
+        box-shadow: none !important;
+        font-size: 0.94rem !important;
+        font-weight: 650 !important;
+        line-height: 1.2 !important;
+        cursor: pointer !important;
+        transform: translateY(0) scale(1) !important;
+        transition:
+            color 220ms cubic-bezier(0.22, 1, 0.36, 1),
+            transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
+            text-shadow 260ms ease !important;
+    }
+    .st-key-active_main_tab div[role="radiogroup"] > label::before,
+    .st-key-active_main_tab div[role="radiogroup"] > label::after {
+        display: none !important;
+        content: none !important;
+    }
+    .st-key-active_main_tab div[role="radiogroup"] > label:hover {
+        color: #2563eb !important;
+        transform: translateY(-1px) scale(1.06) !important;
+        text-shadow: 0 8px 20px rgba(59, 130, 246, 0.18) !important;
+    }
+    .st-key-active_main_tab div[role="radiogroup"] > label[data-checked="true"] {
+        color: #2563eb !important;
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+        transform: translateY(-1px) scale(1.03) !important;
+        text-shadow: 0 8px 22px rgba(59, 130, 246, 0.26) !important;
+        animation: none !important;
+    }
+    .st-key-active_main_tab div[role="radiogroup"] > label p {
+        color: inherit !important;
+        font-weight: inherit !important;
+        margin: 0 !important;
+        transition: inherit !important;
+    }
+    .st-key-active_main_tab .tab-glass-indicator {
+        position: absolute;
+        z-index: 1;
+        left: 0;
+        bottom: -1px;
+        width: 48px;
+        height: 3px;
+        border-radius: 999px;
+        pointer-events: none;
+        background: linear-gradient(90deg, rgba(147, 197, 253, 0.14), rgba(59, 130, 246, 0.92), rgba(147, 197, 253, 0.16));
+        box-shadow:
+            0 0 18px rgba(59, 130, 246, 0.56),
+            0 0 36px rgba(59, 130, 246, 0.34);
+        transform: translate3d(var(--tab-glow-x, 0px), 0, 0);
+        transition:
+            transform 480ms cubic-bezier(0.34, 1.56, 0.64, 1),
+            width 480ms cubic-bezier(0.34, 1.56, 0.64, 1);
+        animation: tabGlowBreath 2.8s ease-in-out infinite;
+    }
+    .st-key-active_main_tab .tab-glass-indicator::before {
+        content: "";
+        position: absolute;
+        left: -10px;
+        right: -10px;
+        top: -7px;
+        bottom: -9px;
+        border-radius: 999px;
+        background: rgba(59, 130, 246, 0.28);
+        filter: blur(8px);
+        opacity: 0.85;
+    }
+    .st-key-active_main_tab .tab-glass-indicator::after {
+        content: "";
+        position: absolute;
+        left: 10%;
+        right: 10%;
+        top: 0;
+        height: 1px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.72);
+        filter: blur(0.2px);
+    }
+    @keyframes tabGlowBreath {
+        0%, 100% {
+            opacity: 0.78;
+            filter: saturate(1);
+        }
+        50% {
+            opacity: 1;
+            filter: saturate(1.18);
+        }
+    }
+    @media (max-width: 767px) {
+        .st-key-active_main_tab div[role="radiogroup"] {
+            gap: 16px !important;
+            flex-wrap: wrap !important;
+            padding-bottom: 12px !important;
+        }
+        .st-key-active_main_tab div[role="radiogroup"] > label {
+            font-size: 0.9rem !important;
+            min-height: 30px !important;
+        }
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 
 st.markdown(
     """
@@ -7489,6 +7624,55 @@ if st.session_state.get("active_main_tab") == "📡 CAPL":
     st.session_state.active_main_tab = "📡 CAPL"
 main_tab_options = ["💬 Chat", "📊 Dashboard", "📂 Compare", "📡 CAPL"]
 active_main_tab = st.radio("Open Section", main_tab_options, horizontal=True, key="active_main_tab", label_visibility="collapsed")
+render_html_frame(
+    """
+    <script>
+    const installGlassTabIndicator = () => {
+        const root = window.parent ? window.parent.document : document;
+        const wrapper = root.querySelector('.st-key-active_main_tab');
+        const group = wrapper ? wrapper.querySelector('div[role="radiogroup"]') : null;
+        if (!wrapper || !group) return;
+
+        let indicator = wrapper.querySelector('.tab-glass-indicator');
+        if (!indicator) {
+            indicator = root.createElement('div');
+            indicator.className = 'tab-glass-indicator';
+            group.appendChild(indicator);
+        }
+
+        const checked = group.querySelector('label[data-checked="true"]') || group.querySelector('label');
+        if (!checked) return;
+
+        const groupRect = group.getBoundingClientRect();
+        const tabRect = checked.getBoundingClientRect();
+        const lineWidth = Math.max(28, tabRect.width * 0.72);
+        const x = tabRect.left - groupRect.left + (tabRect.width - lineWidth) / 2;
+
+        indicator.style.width = `${lineWidth}px`;
+        indicator.style.setProperty('--tab-glow-x', `${x}px`);
+    };
+
+    const scheduleGlassTabs = () => {
+        requestAnimationFrame(installGlassTabIndicator);
+        setTimeout(installGlassTabIndicator, 120);
+        setTimeout(installGlassTabIndicator, 360);
+    };
+
+    scheduleGlassTabs();
+    if (window.parent && window.parent.document) {
+        const observer = new MutationObserver(scheduleGlassTabs);
+        observer.observe(window.parent.document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['data-checked', 'class', 'style']
+        });
+        window.parent.addEventListener('resize', scheduleGlassTabs);
+    }
+    </script>
+    """,
+    height=0,
+)
 
 # -------------------------------
 # TAB 1: CHAT
