@@ -1368,17 +1368,90 @@ if st.session_state.is_authenticated:
                 with open(active_file, "w") as f:
                     json.dump(active_users, f)
             goodbye_user = st.session_state.logged_in_username or "User"
+
+            # Clear all user workspace state so the next login starts fresh.
             st.session_state.is_authenticated = False
             st.session_state.logged_in_username = ""
             st.session_state.user_role = None
             st.session_state.user_session_start_time = None
+            st.session_state.start_time = None
+            st.session_state.uploaded_files = []
             st.session_state.selected_files = []
             st.session_state.file_texts = {}
+            st.session_state.excel_data_by_file = {}
             st.session_state.vector_stores = {}
+            st.session_state.ask_messages = []
+            st.session_state.extracted_images = {}
             st.session_state.chat_file_selection = []
             st.session_state.chat_summary_downloads = {"images": [], "tables": [], "csv": [], "diagrams": []}
+            st.session_state.chat_item_downloads = {"csv": [], "diagrams": []}
             st.session_state.messages = []
+            st.session_state.compare_file_selection = []
+            st.session_state.compare_result_html = None
+            st.session_state.compare_result_excel_bytes = None
+            st.session_state.compare_result_files = []
+            st.session_state.compare_semantic_summary = None
+            st.session_state.file_dropdown = "--Select File--"
+            st.session_state.dashboard_chart_type = "Pie Chart"
+            st.session_state.dashboard_bar_orientation = "Vertical"
+            st.session_state.selected_capl_file = "--Select CAPL file--"
+            st.session_state.capl_last_analyzed_file = None
+            st.session_state.capl_last_issues = None
+            st.session_state.capl_editor_ai_fix = ""
+            st.session_state.capl_autonomous_goal = ""
+            st.session_state.capl_agent_result = ""
+            st.session_state.agent_run_history = []
+            st.session_state.last_streamed_assistant_index = None
+            st.session_state.mobile_sidebar_visible = False
+            st.session_state.llm_task = None
             st.session_state.welcome_shown = False
+            st.session_state.behavior_tracker = {
+                "chat": {"queries": 0, "actions": []},
+                "dashboard": {"queries": 0, "actions": []},
+                "compare": {"queries": 0, "actions": []},
+                "capl": {"queries": 0, "actions": []}
+            }
+            for helper_tab in ["chat", "dashboard", "compare", "capl"]:
+                st.session_state[_help_state_key(helper_tab)] = False
+            st.session_state.workspace_memory = {
+                "chat": [],
+                "agent_runs": [],
+                "indexed_files": [],
+                "memory_events": [],
+                "summary": {},
+                "metadata": {},
+            }
+            st.session_state.workspace_memory_loaded = True
+            st.session_state.file_uploader_key = int(st.session_state.get("file_uploader_key", 0)) + 1
+
+            try:
+                workspace_db_file = os.path.join(APP_DIR, "workspace_memory.db")
+                conn = sqlite3.connect(workspace_db_file, check_same_thread=False)
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS workspace_meta (
+                        meta_key TEXT PRIMARY KEY,
+                        meta_value TEXT
+                    )
+                    """
+                )
+                cursor.execute(
+                    "INSERT OR REPLACE INTO workspace_meta (meta_key, meta_value) VALUES (?, ?)",
+                    ("workspace_memory", json.dumps(st.session_state.workspace_memory, default=str))
+                )
+                conn.commit()
+                conn.close()
+            except Exception:
+                pass
+
+            for cache in [FILE_TEXT_CACHE, VECTOR_STORE_CACHE, EXCEL_DATA_CACHE, EMBEDDINGS_CACHE]:
+                cache.clear()
+            FILE_HASH_CACHE.clear()
+            PREVIEW_TOKENS.clear()
+            PREVIEW_STORE.clear()
+            save_preview_data()
+
             st.success(f"Goodbye, {goodbye_user}! You have been logged out.")
             st.rerun()
 
@@ -7341,10 +7414,10 @@ def render_autonomous_workspace_shell():
 
 # Define keywords for each tab
 tab_keywords = {
-    "chat": ["overview", "summary", "count", "find", "analyze", "explain", "details", "questions"],
-    "dashboard": ["statistics", "trends", "charts", "metrics", "data", "visualize", "insights"],
-    "compare": ["differences", "compare", "changes", "merge", "diff", "side-by-side", "inline"],
-    "capl": ["syntax", "variables", "functions", "errors", "debug", "code", "fix", "suggestions"]
+    "chat": ["memory", "overview", "summary", "count", "find", "analyze", "details", "downloads"],
+    "dashboard": ["insights", "memory", "themes", "entities", "risks", "charts", "metrics", "reports"],
+    "compare": ["semantic", "differences", "compare", "changes", "diff", "side-by-side", "inline", "excel"],
+    "capl": ["agents", "syntax", "variables", "errors", "debug", "code", "fix", "run history"]
 }
 
 
@@ -7385,24 +7458,24 @@ def get_dynamic_suggestions(tab_name, skill_level):
     """Returns context-aware suggestions based on skill level."""
     suggestions_by_skill = {
         "chat": {
-            "beginner": ["Analyze this document", "Item details \"VN1630A\"", "Pin diagram \"D-SUB9\""],
-            "intermediate": ["Extract item features", "Build pin CSV", "Find connector details"],
-            "advanced": ["Visual reference for item", "Compare sections", "Generate engineering reference", "Extract workflow"]
+            "beginner": ["Summarize selected files", "Find a keyword", "Count a phrase"],
+            "intermediate": ["Ask from workspace memory", "Extract item details", "Build summary downloads"],
+            "advanced": ["Compare answers across files", "Generate engineering reference", "Use chat memory as context", "Extract workflow"]
         },
         "dashboard": {
-            "beginner": ["Show me all metrics", "What are the totals?", "Create a basic chart"],
-            "intermediate": ["Analyze by category", "Show trends over time", "Create filtered reports"],
-            "advanced": ["Multi-source analysis", "Correlation detection", "Predictive metrics", "Custom dashboards"]
+            "beginner": ["Review memory snapshot", "Show key themes", "Check indexed files"],
+            "intermediate": ["Review entities and risks", "Analyze report metrics", "Create charts from reports"],
+            "advanced": ["Cross-file insight review", "Memory log inspection", "Risk/theme triage", "Structured report analysis"]
         },
         "compare": {
-            "beginner": ["Show differences", "Side-by-side view", "Basic comparison"],
-            "intermediate": ["Detailed change log", "Merge documents", "Track modifications"],
-            "advanced": ["Multi-file comparison", "Change impact analysis", "Conflict resolution", "Advanced merging"]
+            "beginner": ["Exact inline diff", "Side-by-side line diff", "Select two files"],
+            "intermediate": ["Word presence summary", "Download Excel diff", "Review semantic summary"],
+            "advanced": ["Multi-file comparison", "Change impact analysis", "Store comparison memory", "Validate changed sections"]
         },
         "capl": {
-            "beginner": ["Check syntax errors", "What does this code do?", "Basic debugging"],
-            "intermediate": ["Refactor code", "Find unused variables", "Code optimization"],
-            "advanced": ["Complex debugging", "Performance tuning", "Architecture review", "Code generation"]
+            "beginner": ["Analyze CAPL syntax", "Review issue table", "Select a .can file"],
+            "intermediate": ["Generate AI fix", "Run CAPL agents", "Inspect unused variables"],
+            "advanced": ["Goal-driven agent run", "Retrieve FAISS memory", "Review agent history", "Coordinate final output"]
         }
     }
     
@@ -7413,28 +7486,28 @@ def get_next_best_action(tab_name, skill_level):
     """Intelligently recommends the next workflow step."""
     workflow_paths = {
         "chat": {
-            "beginner": "Pro Tip: Start with 'analyze this document', then ask item details like item \"VN1630A\".",
-            "intermediate": "Next: Ask pin diagram \"D-SUB9\" or visual reference \"VN1640A\" to get pin tables, connector details, CSV, and ASCII diagrams.",
-            "advanced": "Next: Combine item extraction with find, count, overview, or compare to validate details across selected files."
+            "beginner": "Pro Tip: Select files, then ask 'summarize', 'overview', 'find keyword', or 'count phrase'.",
+            "intermediate": "Next: Ask targeted questions that use both selected documents and stored chat memory.",
+            "advanced": "Next: Combine item extraction, direct commands, and prior chat context to validate details across files."
         },
         "dashboard": {
-            "beginner": "🎯 Pro Tip: Select a file to see basic statistics, then explore the visualizations.",
-            "intermediate": "🎯 Next: Use filters and date ranges to dive deeper into trends and patterns.",
-            "advanced": "🎯 Next: Combine multiple files for cross-source analysis and insights."
+            "beginner": "Pro Tip: Start with the workspace memory snapshot to confirm what the app has indexed.",
+            "intermediate": "Next: Review themes, entities, risks, and report charts together for faster triage.",
+            "advanced": "Next: Use the dashboard as a cross-module intelligence view over uploads, chat, compare, and CAPL runs."
         },
         "compare": {
-            "beginner": "🎯 Pro Tip: Select two similar files and choose a comparison method to see differences.",
-            "intermediate": "🎯 Next: Try detailed change tracking and document merge features.",
-            "advanced": "🎯 Next: Leverage multi-file comparison for complex document workflows."
+            "beginner": "Pro Tip: Select at least two files, then start with exact inline word diff.",
+            "intermediate": "Next: Switch modes to line diff or word presence summary, then export the Excel workbook.",
+            "advanced": "Next: Use the semantic summary to capture comparison findings into shared memory."
         },
         "capl": {
-            "beginner": "🎯 Pro Tip: Paste your code and ask about errors or what specific lines do.",
-            "intermediate": "🎯 Next: Request code optimization and variable analysis for cleaner code.",
-            "advanced": "🎯 Next: Use architectural reviews and advanced debugging techniques."
+            "beginner": "Pro Tip: Select a CAPL file, run analysis, and review line-level issues first.",
+            "intermediate": "Next: Use AI fix suggestions or run a focused autonomous CAPL goal.",
+            "advanced": "Next: Let the planning, retrieval, execution, reasoning, and coordination agents work across selected files."
         }
     }
     
-    return workflow_paths.get(tab_name, {}).get(skill_level, "🎯 Keep exploring the features available!")
+    return workflow_paths.get(tab_name, {}).get(skill_level, "Keep exploring the features available.")
 
 
 def show_help_popup(tab_name, selected_files):
@@ -7451,23 +7524,23 @@ def show_help_popup(tab_name, selected_files):
     helper_defs = {
         "chat": {
             "title": "Chat Helper",
-            "text": "Chat with selected documents, analyze whole documents, or extract item-specific engineering references with pin tables and connector details.",
-            "hint": "Examples: analyze this document, item details \"VN1630A\", visual reference \"VN1640A\", pin diagram \"D-SUB9\", find \"keyword\", count \"signal\", overview, compare."
+            "text": "Chat uses selected uploads plus shared workspace memory. It can summarize, answer questions, retrieve prior context, and create downloadable extracted assets.",
+            "hint": "Try: summarize, overview, find \"keyword\", count \"signal\", item details \"VN1630A\", visual reference \"VN1640A\", or compare."
         },
         "dashboard": {
             "title": "Dashboard Helper",
-            "text": "Analyze HTML and Excel report files to surface metrics, totals, trends, grouped insights, and visual summaries.",
-            "hint": "Use this tab for structured data analysis. Select report files and ask for metrics, trends, or comparisons."
+            "text": "Dashboard shows the hidden shared AI brain as useful insights: indexed files, chat memory, agent runs, themes, entities, risks, logs, and report charts.",
+            "hint": "Use this tab to inspect workspace intelligence, then open structured HTML/XLSX reports for metrics, verdicts, fixtures, and visual summaries."
         },
         "compare": {
             "title": "Compare Helper",
-            "text": "Compare files side-by-side or inline to find differences, changed values, and summary of document deltas.",
-            "hint": "Select two or more files and use this tab to compare content, track changes, and export comparisons."
+            "text": "Compare supports exact inline word diff, side-by-side line diff, word presence summaries, semantic explanations, and Excel export.",
+            "hint": "Select two or more files, choose a comparison mode, run the comparison, then review the semantic summary and download workbook."
         },
         "capl": {
             "title": "CAPL Helper",
-            "text": "Detect CAPL script issues, review problem details, and get AI-guided fix suggestions for your .can or .txt CAPL files.",
-            "hint": "Use this tab to inspect CAPL source, compile/analyze, and fix code with AI assistance. Select one CAPL file first."
+            "text": "CAPL combines code analysis with autonomous agents. It checks syntax, reports issues, suggests fixes, and can run goal-driven workflows over shared memory.",
+            "hint": "Select a .can or .txt file for direct analysis, or enter an autonomous goal to run the planning, retrieval, execution, reasoning, and coordination agents."
         }
     }
 
@@ -8303,8 +8376,6 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-
-render_autonomous_workspace_shell()
 
 
 # -------------------------------
