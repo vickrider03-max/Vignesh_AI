@@ -2328,14 +2328,17 @@ def render_text_block(text, highlight_term=None, anchor_id=None):
 def render_document_preview(file_name, file_entry=None, highlight_term=None, highlight_page=None):
     """Render document preview with caching and error handling"""
     st.markdown(f"**Preview: {file_name}**")
+    file_name_lower = file_name.lower()
     
     # Ensure file entry exists
     if file_entry is None:
-        ensure_file_processed(file_name)
+        if not file_name_lower.endswith(".pdf"):
+            ensure_file_processed(file_name)
         file_entry = get_uploaded_file_entry(file_name)
     else:
-        # Even if file_entry is provided, ensure text is extracted and cached
-        if file_name not in st.session_state.file_texts:
+        # Keep PDF rendering lazy. Full PDF text extraction happens only when an
+        # analysis panel explicitly asks for it.
+        if file_name not in st.session_state.file_texts and not file_name_lower.endswith(".pdf"):
             extracted = extract_text(file_name, file_entry["bytes"])
             st.session_state.file_texts[file_name] = extracted
             FILE_TEXT_CACHE.set(file_name, extracted)
@@ -2348,7 +2351,6 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None, hig
         st.error("❌ File preview unavailable - file could not be loaded.")
         return
 
-    file_name_lower = file_name.lower()
     image_download_items = []
     table_download_items = []
 
@@ -3496,6 +3498,20 @@ def render_universal_document_viewer(file_name, file_entry, extracted_text, high
         st.error(f"Could not render universal document viewer: {e}")
 
 
+def get_preview_extracted_text(file_name, file_bytes):
+    """Extract full text only when an analysis panel actually needs it."""
+    try:
+        if file_name not in st.session_state.file_texts:
+            with st.spinner("Extracting full document text for this analysis panel..."):
+                extracted = extract_text(file_name, file_bytes)
+                st.session_state.file_texts[file_name] = extracted
+                FILE_TEXT_CACHE.set(file_name, extracted)
+        return st.session_state.file_texts.get(file_name, "")
+    except Exception as e:
+        st.warning(f"Could not extract full document text: {e}")
+        return ""
+
+
 def render_professional_document_preview(file_name, file_entry=None, highlight_term=None, highlight_page=None):
     """Render a professional multi-tab document intelligence preview."""
     global PDF_PREVIEW_RESOLUTION
@@ -3512,9 +3528,6 @@ def render_professional_document_preview(file_name, file_entry=None, highlight_t
         reliable_formats = (".pdf", ".docx", ".pptx", ".xlsx", ".csv", ".odt", ".rtf", ".txt", ".md", ".html", ".htm", ".png", ".jpg", ".jpeg", ".webp")
         best_effort_formats = (".doc", ".ppt", ".xls", ".pages")
 
-        if file_name not in st.session_state.file_texts:
-            with st.spinner("Extracting document text for analysis..."):
-                st.session_state.file_texts[file_name] = extract_text(file_name, file_bytes)
         extracted_text = st.session_state.file_texts.get(file_name, "")
 
         metadata = get_preview_metadata(file_name, file_bytes, extracted_text)
@@ -3555,19 +3568,28 @@ def render_professional_document_preview(file_name, file_entry=None, highlight_t
         elif not file_name_lower.endswith(reliable_formats):
             st.warning("This file type is not fully supported. The app will attempt best-effort extraction.")
 
-        tabs = st.tabs(["Viewer", "Summary", "Search", "Q&A", "Tables", "Images", "Downloads"])
+        active_preview_panel = st.radio(
+            "Preview panel",
+            ["Viewer", "Summary", "Search", "Q&A", "Tables", "Images", "Downloads"],
+            horizontal=True,
+            key=f"preview_panel_{hashlib.md5(file_name.encode('utf-8')).hexdigest()[:12]}",
+        )
 
-        with tabs[0]:
+        if active_preview_panel == "Viewer":
             st.markdown("<div class='preview-note'>Viewer mode supports full-document navigation. PDFs, slides, sheets, and long text documents are rendered on demand instead of silently truncating content.</div>", unsafe_allow_html=True)
+            viewer_text = extracted_text
+            if file_name_lower.endswith((".doc", ".docx", ".odt", ".rtf", ".txt", ".md", ".html", ".htm", ".pages", ".ppt")):
+                viewer_text = get_preview_extracted_text(file_name, file_bytes)
             render_universal_document_viewer(
                 file_name,
                 file_entry,
-                extracted_text,
+                viewer_text,
                 highlight_term=quick_search or highlight_term,
                 highlight_page=highlight_page,
             )
 
-        with tabs[1]:
+        elif active_preview_panel == "Summary":
+            extracted_text = get_preview_extracted_text(file_name, file_bytes)
             summary_md = build_preview_summary_markdown(file_name, file_bytes, extracted_text)
             st.markdown(summary_md)
             st.download_button(
@@ -3585,7 +3607,8 @@ def render_professional_document_preview(file_name, file_entry=None, highlight_t
                 key=f"preview_summary_txt_{file_name}",
             )
 
-        with tabs[2]:
+        elif active_preview_panel == "Search":
+            extracted_text = get_preview_extracted_text(file_name, file_bytes)
             search_query = st.text_input("Search extracted text", value=quick_search, key=f"preview_search_{file_name}")
             if search_query:
                 chunks = keyword_search_preview_chunks(extracted_text, search_query, limit=20)
@@ -3596,7 +3619,8 @@ def render_professional_document_preview(file_name, file_entry=None, highlight_t
             else:
                 st.info("Enter a search term to search extracted text chunks.")
 
-        with tabs[3]:
+        elif active_preview_panel == "Q&A":
+            extracted_text = get_preview_extracted_text(file_name, file_bytes)
             question = st.text_input("Ask a question about this document", key=f"preview_qa_{file_name}")
             if question:
                 answer = build_preview_answer(file_name, extracted_text, question)
@@ -3612,7 +3636,9 @@ def render_professional_document_preview(file_name, file_entry=None, highlight_t
             else:
                 st.info("Ask a focused question. The app retrieves only relevant chunks before answering.")
 
-        with tabs[4]:
+        elif active_preview_panel == "Tables":
+            if not file_name_lower.endswith((".csv", ".xlsx", ".xls")):
+                extracted_text = get_preview_extracted_text(file_name, file_bytes)
             tables = extract_preview_tables(file_name, file_bytes, extracted_text)
             if not tables:
                 st.info("No tables were detected. For scanned PDFs, enable page-level table detection in the Viewer tab.")
@@ -3634,14 +3660,15 @@ def render_professional_document_preview(file_name, file_entry=None, highlight_t
                         key=f"preview_table_xlsx_{file_name}_{index}",
                     )
 
-        with tabs[5]:
+        elif active_preview_panel == "Images":
             if file_name_lower.endswith((".png", ".jpg", ".jpeg", ".webp")):
                 st.image(file_bytes, caption=file_name, use_container_width=True)
                 if st.checkbox("Run OCR if available", key=f"preview_ocr_{file_name}"):
                     st.text_area("OCR text", value=ocr_image_best_effort(file_bytes), height=220)
             render_extracted_assets_preview(file_name, file_entry)
 
-        with tabs[6]:
+        elif active_preview_panel == "Downloads":
+            extracted_text = get_preview_extracted_text(file_name, file_bytes)
             summary_md = build_preview_summary_markdown(file_name, file_bytes, extracted_text)
             st.download_button(
                 "Summary - Markdown",
