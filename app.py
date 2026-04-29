@@ -7262,6 +7262,7 @@ st.markdown(
     <style>
     /* Premium AI workspace skin: applied after the legacy dashboard styles. */
     :root {
+        color-scheme: light;
         --workspace-bg: #fbfcfe;
         --workspace-surface: rgba(255, 255, 255, 0.78);
         --workspace-text: #111827;
@@ -7275,6 +7276,7 @@ st.markdown(
     body,
     .stApp,
     div[data-testid="stAppViewContainer"] {
+        color-scheme: light !important;
         background:
             radial-gradient(circle at 48% -18%, rgba(96, 165, 250, 0.12), transparent 34rem),
             linear-gradient(180deg, #ffffff 0%, var(--workspace-bg) 52%, #f8fafc 100%) !important;
@@ -7287,6 +7289,20 @@ st.markdown(
         max-width: 1180px !important;
         margin: 0 auto !important;
         padding: 0.65rem clamp(1rem, 3vw, 2.4rem) 3rem !important;
+    }
+
+    .premium-ai-workspace section.main .block-container > div[data-testid="stVerticalBlock"],
+    .premium-ai-workspace div[data-testid="stMain"] .block-container > div[data-testid="stVerticalBlock"] {
+        position: relative !important;
+        isolation: isolate !important;
+    }
+
+    .workspace-state-anchor {
+        display: block;
+        height: 0;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
     }
 
     [data-testid="stSidebar"],
@@ -7387,6 +7403,17 @@ st.markdown(
         background: rgba(37, 99, 235, 0.09) !important;
         color: #1d4ed8 !important;
         box-shadow: none !important;
+    }
+
+    button:focus-visible,
+    a:focus-visible,
+    input:focus-visible,
+    textarea:focus-visible,
+    select:focus-visible,
+    [role="button"]:focus-visible,
+    div[role="radiogroup"] > label:focus-within {
+        outline: 0 !important;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14) !important;
     }
 
     div[role="radiogroup"] {
@@ -7563,9 +7590,10 @@ st.markdown(
         background: linear-gradient(90deg, rgba(147, 197, 253, 0.12), rgba(37, 99, 235, 0.95), rgba(147, 197, 253, 0.14)) !important;
         box-shadow: 0 0 20px rgba(37, 99, 235, 0.48), 0 0 42px rgba(37, 99, 235, 0.25) !important;
         transform: translate3d(var(--tab-glow-x, 0px), 0, 0);
+        will-change: transform, width, opacity, filter;
         transition:
-            transform 620ms cubic-bezier(0.34, 1.56, 0.64, 1),
-            width 620ms cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+            opacity 180ms ease,
+            filter 180ms ease !important;
         animation: tabGlowBreath 2.8s ease-in-out infinite !important;
     }
 
@@ -7601,7 +7629,7 @@ st.markdown(
     @keyframes premiumViewIn {
         from {
             opacity: 0;
-            transform: translateY(8px);
+            transform: translateY(6px);
             filter: blur(2px);
         }
         to {
@@ -7612,7 +7640,7 @@ st.markdown(
     }
 
     .premium-view-swap section.main .block-container > div[data-testid="stVerticalBlock"] {
-        animation: premiumViewIn 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+        animation: premiumViewIn 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
     }
 
     @media (max-width: 767px) {
@@ -7643,10 +7671,10 @@ st.markdown(
 
 
 # -------------------------------
-# MAIN TAB NAVIGATION
+# WORKSPACE STATE CONTROLLER
 # -------------------------------
-# Creates the horizontal tab navigation with custom styling.
-# Each tab corresponds to a major feature area of the application.
+# Chat, Dashboard, Compare, and CAPL remain in one Streamlit workspace.
+# This control changes active view state; it does not create routes or pages.
 main_tab_options = ["Chat", "Dashboard", "Compare", "CAPL"]
 legacy_tab_label_map = {
     "💬 Chat": "Chat",
@@ -7661,9 +7689,87 @@ st.session_state.active_main_tab = legacy_tab_label_map.get(
 if st.session_state.active_main_tab not in main_tab_options:
     st.session_state.active_main_tab = "Chat"
 active_main_tab = st.radio("Open Section", main_tab_options, horizontal=True, key="active_main_tab", label_visibility="collapsed")
+st.markdown(
+    f"<span class='workspace-state-anchor' data-active-view='{html.escape(active_main_tab)}'></span>",
+    unsafe_allow_html=True,
+)
 render_html_frame(
     """
     <script>
+    const getSpringState = (root) => {
+        const win = root.defaultView || window;
+        if (!win.__intelliDocTabSpring) {
+            let storedX = Number(win.sessionStorage.getItem('intelliDocTabIndicatorX'));
+            let storedW = Number(win.sessionStorage.getItem('intelliDocTabIndicatorW'));
+            win.__intelliDocTabSpring = {
+                x: Number.isFinite(storedX) ? storedX : 0,
+                width: Number.isFinite(storedW) ? storedW : 44,
+                vx: 0,
+                vw: 0,
+                raf: null,
+                targetX: 0,
+                targetWidth: 44
+            };
+        }
+        return win.__intelliDocTabSpring;
+    };
+
+    const applyIndicatorFrame = (indicator, state) => {
+        indicator.style.width = `${Math.max(24, state.width)}px`;
+        indicator.style.setProperty('--tab-glow-x', `${state.x}px`);
+        indicator.style.transform = `translate3d(${state.x}px, 0, 0)`;
+    };
+
+    const animateIndicatorSpring = (root, indicator, targetX, targetWidth) => {
+        const win = root.defaultView || window;
+        const state = getSpringState(root);
+        state.targetX = targetX;
+        state.targetWidth = targetWidth;
+
+        if (state.raf) {
+            win.cancelAnimationFrame(state.raf);
+            state.raf = null;
+        }
+
+        const stiffness = 0.22;
+        const damping = 0.74;
+        const settleDistance = 0.08;
+        const settleVelocity = 0.08;
+
+        const step = () => {
+            const dx = state.targetX - state.x;
+            const dw = state.targetWidth - state.width;
+            state.vx = (state.vx + dx * stiffness) * damping;
+            state.vw = (state.vw + dw * stiffness) * damping;
+            state.x += state.vx;
+            state.width += state.vw;
+
+            applyIndicatorFrame(indicator, state);
+
+            const settled =
+                Math.abs(dx) < settleDistance &&
+                Math.abs(dw) < settleDistance &&
+                Math.abs(state.vx) < settleVelocity &&
+                Math.abs(state.vw) < settleVelocity;
+
+            if (settled) {
+                state.x = state.targetX;
+                state.width = state.targetWidth;
+                state.vx = 0;
+                state.vw = 0;
+                applyIndicatorFrame(indicator, state);
+                win.sessionStorage.setItem('intelliDocTabIndicatorX', String(state.x));
+                win.sessionStorage.setItem('intelliDocTabIndicatorW', String(state.width));
+                state.raf = null;
+                return;
+            }
+
+            state.raf = win.requestAnimationFrame(step);
+        };
+
+        state.raf = win.requestAnimationFrame(step);
+    };
+
     const installGlassTabIndicator = () => {
         const root = window.parent ? window.parent.document : document;
         const wrapper = root.querySelector('.st-key-active_main_tab');
@@ -7685,8 +7791,29 @@ render_html_frame(
         const lineWidth = Math.max(28, tabRect.width * 0.72);
         const x = tabRect.left - groupRect.left + (tabRect.width - lineWidth) / 2;
 
-        indicator.style.width = `${lineWidth}px`;
-        indicator.style.setProperty('--tab-glow-x', `${x}px`);
+        if (root.body) {
+            root.body.classList.add('premium-ai-workspace', 'premium-workspace-ready');
+        }
+        group.dataset.activeView = (checked.innerText || checked.textContent || '').trim().toLowerCase();
+        indicator.dataset.layoutId = 'workspace-tab-glass-indicator';
+        indicator.setAttribute('aria-hidden', 'true');
+
+        const win = root.defaultView || window;
+        const reducedMotion = win.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const hasStoredFrame =
+            win.sessionStorage.getItem('intelliDocTabIndicatorX') !== null &&
+            win.sessionStorage.getItem('intelliDocTabIndicatorW') !== null;
+        const state = getSpringState(root);
+        if (reducedMotion || (!indicator.dataset.hasMounted && !hasStoredFrame)) {
+            state.x = x;
+            state.width = lineWidth;
+            state.vx = 0;
+            state.vw = 0;
+            applyIndicatorFrame(indicator, state);
+            indicator.dataset.hasMounted = 'true';
+        } else {
+            animateIndicatorSpring(root, indicator, x, lineWidth);
+        }
 
         const activeLabel = (checked.innerText || checked.textContent || '').trim();
         if (root.body && root.body.dataset.activeWorkspaceTab !== activeLabel) {
@@ -7694,6 +7821,9 @@ render_html_frame(
             root.body.classList.remove('premium-view-swap');
             void root.body.offsetWidth;
             root.body.classList.add('premium-view-swap');
+            win.setTimeout(() => {
+                root.body.classList.remove('premium-view-swap');
+            }, 260);
         }
     };
 
@@ -7720,10 +7850,10 @@ render_html_frame(
 )
 
 # -------------------------------
-# TAB 1: CHAT
+# WORKSPACE VIEW: CHAT
 # -------------------------------
-# Chat tab:
-# Handles per-tab file selection, direct commands like summarize/find/count,
+# Chat view:
+# Handles per-view file selection, direct commands like summarize/find/count,
 # semantic Q&A via vector search, and chat-specific download assets.
 if active_main_tab == "Chat":
     chat_header_col, chat_reset_col = st.columns([8, 1])
@@ -7932,7 +8062,7 @@ if active_main_tab == "Chat":
         st.info("Select files from the sidebar to start chatting.")
 
 # -------------------------------
-# TAB 2: DASHBOARD
+# WORKSPACE VIEW: DASHBOARD
 # -------------------------------
 # Dashboard tab:
 # Focused on structured HTML/XLSX analysis, charts, login/stat extraction, and
@@ -8493,7 +8623,7 @@ if active_main_tab == "Dashboard":
                     st.warning("No structured test results found.")
 
 # -------------------------------
-# TAB 3: COMPARE
+# WORKSPACE VIEW: COMPARE
 # -------------------------------
 # Compare tab:
 # Lets users pick 2+ selected files, generate inline word-level differences,
@@ -8590,7 +8720,7 @@ if active_main_tab == "Compare":
         st.info("Select at least two files to compare.")
 
 # -------------------------------
-# TAB 4: CAPL
+# WORKSPACE VIEW: CAPL
 # -------------------------------
 # CAPL tab:
 # Dedicated to CAPL file selection, live editing, compile/analyze checks, issue
