@@ -3953,8 +3953,22 @@ with st.sidebar:
                         st.session_state.capl_last_analyzed_file = None
                         st.session_state.capl_last_issues = None
                     st.rerun()
-        st.markdown("*Selected files above are available across all tabs.*")
-        st.markdown("---")
+
+        uploaded_names = [f["name"] for f in st.session_state.uploaded_files]
+        if uploaded_names:
+            st.markdown("---")
+            st.markdown("### Workspace file selection")
+            st.session_state.selected_files = st.multiselect(
+                "Select files for workspace access",
+                options=uploaded_names,
+                default=st.session_state.selected_files,
+                key="selected_files",
+            )
+            st.markdown("*Selected files above are available across all tabs.*")
+            st.markdown("---")
+        else:
+            st.markdown("*Upload files above to select them for chat, compare, dashboard, and CAPL.*")
+            st.markdown("---")
         if st.button("Clear All Files"):
             for key in ["uploaded_files", "selected_files", "file_texts", "excel_data_by_file", "vector_stores",
                         "messages"]:
