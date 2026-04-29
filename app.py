@@ -1041,18 +1041,18 @@ def render_status_strip():
         .dashboard-grid {{
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 10px;
-            padding: 4px 2px;
+            gap: 8px;
+            padding: 0 2px 4px;
         }}
         .metric-card {{
             position: relative;
             overflow: hidden;
-            min-height: 70px;
-            border-radius: 16px;
-            padding: 12px;
+            min-height: 58px;
+            border-radius: 12px;
+            padding: 8px 10px;
             border: 1px solid rgba(255, 255, 255, 0.5) !important;
-            box-shadow: 0 10px 20px rgba(15, 23, 42, 0.16);
-            transform: translateY(12px) scale(0.98);
+            box-shadow: 0 6px 14px rgba(15, 23, 42, 0.12);
+            transform: translateY(8px) scale(0.98);
             opacity: 0;
             animation: riseIn 0.65s ease-out forwards, cardFloat 4.5s ease-in-out infinite;
         }}
@@ -1088,15 +1088,15 @@ def render_status_strip():
             display: block;
         }}
         .card-label {{
-            font-size: 0.65rem !important;
+            font-size: 0.58rem !important;
             font-weight: 700 !important;
-            letter-spacing: 0.08em;
+            letter-spacing: 0.05em;
             text-transform: uppercase;
             color: rgba(15, 23, 42, 0.68) !important;
-            margin-bottom: 6px;
+            margin-bottom: 4px;
         }}
         .card-value {{
-            font-size: 1.2rem !important;
+            font-size: 1rem !important;
             font-weight: 800 !important;
             line-height: 1.2;
             word-break: break-word;
@@ -1106,7 +1106,7 @@ def render_status_strip():
             animation: timerGlow 1.8s ease-in-out infinite;
         }}
         @keyframes riseIn {{
-            from {{ opacity: 0; transform: translateY(12px) scale(0.98); }}
+            from {{ opacity: 0; transform: translateY(8px) scale(0.98); }}
             to {{ opacity: 1; transform: translateY(0) scale(1); }}
         }}
         @keyframes cardFloat {{
@@ -1198,7 +1198,7 @@ def render_status_strip():
     </div>
     """
 
-    render_html_frame(status_html, height=180)
+    render_html_frame(status_html, height=118)
 
 
 def _help_state_key(tab_name):
@@ -1269,18 +1269,28 @@ if st.session_state.is_authenticated:
     st.markdown(
         """
         <style>
+            section.main .block-container,
+            .main .block-container,
+            div[data-testid="stMain"] .block-container {
+                padding-top: 8px !important;
+            }
+            div[data-testid="stVerticalBlock"] {
+                gap: 0.5rem !important;
+            }
             div[data-testid="stHorizontalBlock"]:has(.st-key-header_brain_icon) {
-                margin-top: -0.55rem !important;
-                margin-bottom: -0.2rem !important;
+                margin-top: -0.75rem !important;
+                margin-bottom: -0.35rem !important;
                 align-items: center !important;
+                min-height: 48px !important;
             }
             .app-header-title {
-                transform: translateY(-6px);
+                transform: translateY(-4px);
                 line-height: 1.1;
+                margin: 0 !important;
             }
             .app-header-main {
                 color: #1e293b;
-                font-size: 1.25rem;
+                font-size: 1.18rem;
                 font-weight: 700;
                 margin: 0;
             }
@@ -1292,7 +1302,16 @@ if st.session_state.is_authenticated:
             }
             .st-key-header_brain_icon,
             .st-key-main_logout_btn {
-                margin-top: -0.4rem !important;
+                margin-top: -0.45rem !important;
+            }
+            .st-key-main_logout_btn {
+                display: flex !important;
+                align-items: center !important;
+            }
+            .compact-header-divider {
+                height: 1px;
+                background: #e2e8f0;
+                margin: 4px 0 8px;
             }
         </style>
         """,
@@ -1369,7 +1388,7 @@ if st.session_state.is_authenticated:
             st.success(f"Goodbye, {goodbye_user}! You have been logged out.")
             st.rerun()
 
-    st.divider()
+    st.markdown("<div class='compact-header-divider'></div>", unsafe_allow_html=True)
 
     render_html_frame(
         """
@@ -6865,18 +6884,29 @@ st.markdown("""
     <style>
     /* Hide default radio UI */
     div[role="radiogroup"] > label > div:first-child { display: none !important; }
-    div[role="radiogroup"] { gap: 12px; display: flex; }
+    div[role="radiogroup"] {
+        gap: 8px;
+        display: flex;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    .st-key-active_main_tab {
+        margin-top: 8px !important;
+        margin-bottom: 8px !important;
+    }
 
     /* Base Pill Styling */
     div[role="radiogroup"] > label {
         background-color: rgba(128, 128, 128, 0.08) !important;
-        padding: 8px 22px !important;
+        padding: 6px 18px !important;
         border-radius: 50px !important;
         border: 1px solid rgba(128, 128, 128, 0.1) !important;
         display: flex !important;
         align-items: center !important;
-        height: 42px;
+        height: 38px;
+        min-height: 38px !important;
         font-weight: 500;
+        line-height: 1.1 !important;
         transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
     }
 
@@ -6940,14 +6970,14 @@ st.markdown("""
         }
         div[role="radiogroup"] > label {
             flex: 0 0 auto;
-            min-width: 120px;
+            min-width: 112px;
         }
     }
 
     /* Desktop */
     @media (min-width: 1024px) {
         div[role="radiogroup"] > label {
-            min-width: 140px;
+            min-width: 128px;
         }
     }
 
