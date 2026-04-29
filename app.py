@@ -3958,7 +3958,7 @@ with st.sidebar:
         if uploaded_names:
             st.markdown("---")
             st.markdown("### Workspace file selection")
-            st.session_state.selected_files = st.multiselect(
+            st.multiselect(
                 "Select files for workspace access",
                 options=uploaded_names,
                 default=st.session_state.selected_files,
