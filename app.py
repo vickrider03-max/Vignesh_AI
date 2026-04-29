@@ -51,6 +51,7 @@ PREVIEW_STORE = {}   # token -> file_dict
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 PREVIEW_DATA_FILE = os.path.join(APP_DIR, "preview_data.pkl")
+WORKSPACE_MEMORY_FILE = os.path.join(APP_DIR, "workspace_memory.json")
 PDF_PREVIEW_RESOLUTION = 100
 PDF_PREVIEW_WINDOW = 25
 PDF_ASSET_SCAN_PAGE_LIMIT = 10
@@ -171,6 +172,64 @@ def save_preview_data():
                 os.remove(temp_file)
             except Exception:
                 pass
+
+
+def default_workspace_memory():
+    """Create the shared memory used by all workspace AI modules."""
+    return {
+        "chat": [],
+        "documents": {},
+        "dashboard": {},
+        "compare": {},
+        "capl": {},
+        "events": [],
+    }
+
+
+def load_workspace_memory():
+    """Load shared workspace memory from disk without affecting feature state."""
+    if not os.path.exists(WORKSPACE_MEMORY_FILE):
+        return default_workspace_memory()
+    try:
+        with open(WORKSPACE_MEMORY_FILE, "r", encoding="utf-8") as f:
+            loaded = json.load(f)
+        if not isinstance(loaded, dict):
+            return default_workspace_memory()
+        memory = default_workspace_memory()
+        for key, value in loaded.items():
+            if key in memory and isinstance(value, type(memory[key])):
+                memory[key] = value
+        return memory
+    except Exception:
+        return default_workspace_memory()
+
+
+def save_workspace_memory():
+    """Persist lightweight shared AI memory for the unified workspace."""
+    try:
+        memory = st.session_state.get("workspace_memory", default_workspace_memory())
+        safe_memory = default_workspace_memory()
+        for key in safe_memory:
+            if key in memory:
+                safe_memory[key] = memory[key]
+        with open(WORKSPACE_MEMORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(safe_memory, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def record_workspace_event(module, action, detail=None):
+    """Append a compact cross-module event to the shared workspace graph."""
+    memory = st.session_state.setdefault("workspace_memory", default_workspace_memory())
+    events = memory.setdefault("events", [])
+    events.append({
+        "module": str(module),
+        "action": str(action),
+        "detail": str(detail or "")[:500],
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+    })
+    memory["events"] = events[-80:]
+    save_workspace_memory()
 
 def cleanup_expired_preview_tokens():
     """Remove preview tokens older than 1 hour to prevent memory accumulation."""
@@ -954,6 +1013,9 @@ for key, default_value in [
     ("messages", []),
     ("welcome_shown", False),
     ("mobile_sidebar_visible", False),
+    ("workspace_memory", default_workspace_memory()),
+    ("workspace_execution_logs", []),
+    ("latest_stream_message_index", None),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default_value
@@ -1542,6 +1604,12 @@ if "start_time" not in st.session_state:
     st.session_state.start_time = None
 if "active_main_tab" not in st.session_state:
     st.session_state.active_main_tab = "Chat"
+if not st.session_state.get("workspace_memory_loaded"):
+    loaded_workspace_memory = load_workspace_memory()
+    st.session_state.workspace_memory = loaded_workspace_memory
+    if not st.session_state.get("messages") and loaded_workspace_memory.get("chat"):
+        st.session_state.messages = loaded_workspace_memory.get("chat", [])[-60:]
+    st.session_state.workspace_memory_loaded = True
 
 # -------------------------------
 # DOCUMENT PREVIEW FUNCTION
@@ -3831,6 +3899,8 @@ with st.sidebar:
                         uploaded_new_file = True
                 if uploaded_new_file:
                     st.session_state.messages = []
+                    st.session_state.workspace_memory["chat"] = []
+                    save_workspace_memory()
                     st.session_state.chat_summary_downloads = {"images": [], "tables": [], "csv": [], "diagrams": []}
                     st.session_state.chat_file_selection = []
                     st.success("✅ New files uploaded. Chat history has been cleared.")
@@ -3893,6 +3963,8 @@ with st.sidebar:
             st.session_state.chat_file_selection = []
             st.session_state.capl_last_analyzed_file = None
             st.session_state.capl_last_issues = None
+            st.session_state.workspace_memory = default_workspace_memory()
+            save_workspace_memory()
             st.session_state.file_uploader_key += 1
             st.rerun()
 
@@ -4054,6 +4126,272 @@ def get_document_asset_counts(file_name, file_bytes, extracted_text):
         image_count = int(image_match.group(1)) if image_match else 0
 
     return page_count, image_count, table_count
+
+
+def remember_workspace_documents(file_names):
+    """Refresh shared document memory for the selected workspace files."""
+    memory = st.session_state.setdefault("workspace_memory", default_workspace_memory())
+    documents = memory.setdefault("documents", {})
+    for file_name in file_names:
+        text = str(st.session_state.file_texts.get(file_name, "") or "")
+        if not text.strip():
+            continue
+        words = re.findall(r"[A-Za-z][A-Za-z0-9_+\-/]{2,}", text)
+        keyword_counts = Counter(
+            word.lower()
+            for word in words
+            if len(word) > 3 and word.lower() not in SUMMARY_STOPWORDS and not word.isdigit()
+        )
+        page_count, image_count, table_count = get_document_asset_counts(
+            file_name,
+            get_uploaded_file_entry(file_name).get("bytes", b"") if get_uploaded_file_entry(file_name) else b"",
+            text,
+        )
+        documents[file_name] = {
+            "chars": len(text),
+            "keywords": [word.title() for word, _ in keyword_counts.most_common(10)],
+            "pages": page_count,
+            "tables": table_count,
+            "images": image_count,
+            "updated": datetime.now().isoformat(timespec="seconds"),
+        }
+    memory["documents"] = documents
+    save_workspace_memory()
+
+
+def extract_workspace_entities(text, limit=12):
+    """Best-effort entity extraction for the shared intelligence layer."""
+    candidates = []
+    for pattern in [
+        r"\b[A-Z]{2,}[A-Za-z0-9_+\-/]*\b",
+        r"\b[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z0-9]+){0,2}\b",
+    ]:
+        candidates.extend(re.findall(pattern, str(text or "")))
+    counts = Counter(
+        normalize_extracted_line(candidate)
+        for candidate in candidates
+        if 2 < len(normalize_extracted_line(candidate)) < 48
+        and normalize_extracted_line(candidate).lower() not in SUMMARY_STOPWORDS
+    )
+    return [entity for entity, _ in counts.most_common(limit)]
+
+
+def build_workspace_intelligence_snapshot(file_names=None):
+    """Build live AI-style insight blocks from documents and conversation memory."""
+    file_names = file_names or st.session_state.get("selected_files", [])
+    if file_names:
+        ensure_files_processed(file_names)
+        remember_workspace_documents(file_names)
+
+    memory = st.session_state.setdefault("workspace_memory", default_workspace_memory())
+    selected_text = "\n".join(str(st.session_state.file_texts.get(file_name, "")) for file_name in file_names)
+    chat_tail = " ".join(
+        str(msg.get("content", ""))
+        for msg in st.session_state.get("messages", [])[-8:]
+    )
+    combined = f"{selected_text}\n{chat_tail}".strip()
+    words = re.findall(r"[A-Za-z][A-Za-z0-9_+\-/]{2,}", combined)
+    keyword_counts = Counter(
+        word.lower()
+        for word in words
+        if len(word) > 3 and word.lower() not in SUMMARY_STOPWORDS and not word.isdigit()
+    )
+    keywords = [word.title() for word, _ in keyword_counts.most_common(8)]
+    entities = extract_workspace_entities(combined, limit=10)
+
+    document_memory = memory.get("documents", {})
+    total_chars = sum(int(document_memory.get(name, {}).get("chars", 0) or 0) for name in file_names)
+    total_tables = sum(int(document_memory.get(name, {}).get("tables", 0) or 0) for name in file_names)
+    total_images = sum(int(document_memory.get(name, {}).get("images", 0) or 0) for name in file_names)
+    events = memory.get("events", [])[-6:]
+
+    summary = []
+    if file_names:
+        summary.append(f"{len(file_names)} active file(s) are connected to the workspace intelligence layer.")
+    if keywords:
+        summary.append(f"Current focus areas: {', '.join(keywords[:5])}.")
+    if chat_tail:
+        summary.append("Recent chat context is included, so the insight layer reflects the latest conversation.")
+    if not summary:
+        summary.append("Upload and select files to activate live workspace intelligence.")
+
+    risks = []
+    lower = combined.lower()
+    for term in ["fail", "failed", "error", "warning", "risk", "missing", "not supported", "invalid"]:
+        count = lower.count(term)
+        if count:
+            risks.append(f"{term.title()}: {count} signal(s)")
+    if not risks and file_names:
+        risks.append("No obvious risk keywords detected in the current extracted context.")
+
+    timeline = [
+        f"{event.get('timestamp', '')} - {event.get('module', '')}: {event.get('action', '')}"
+        for event in events
+    ] or ["No cross-module actions recorded yet."]
+
+    return {
+        "summary": summary,
+        "insights": [
+            f"Readable context: {total_chars:,} characters.",
+            f"Structured assets detected: {total_tables} table(s), {total_images} image(s).",
+            f"Memory graph events: {len(memory.get('events', []))}.",
+        ],
+        "entities": entities or ["No strong entities detected yet."],
+        "timeline": timeline,
+        "risks": risks,
+    }
+
+
+def render_flowing_intelligence_blocks(snapshot):
+    """Render dashboard intelligence as flowing blocks instead of cards."""
+    labels = [
+        ("AI Summary", snapshot.get("summary", [])),
+        ("Key Insights", snapshot.get("insights", [])),
+        ("Detected Entities", snapshot.get("entities", [])),
+        ("Timeline / Changes", snapshot.get("timeline", [])),
+        ("Risk or Key Signals", snapshot.get("risks", [])),
+    ]
+    st.markdown("<div class='ai-flow-intelligence'>", unsafe_allow_html=True)
+    for title, items in labels:
+        st.markdown(f"<section class='ai-flow-block'><h3>{html.escape(title)}</h3>", unsafe_allow_html=True)
+        for item in items:
+            st.markdown(f"<p>{html.escape(str(item))}</p>", unsafe_allow_html=True)
+        st.markdown("</section>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def build_semantic_compare_explanation(file_names):
+    """Explain comparison results as meaning, structure, and likely impact."""
+    if len(file_names) < 2:
+        return []
+    texts = {name: str(st.session_state.file_texts.get(name, "") or "") for name in file_names}
+    lengths = {name: len(text) for name, text in texts.items()}
+    entities = {name: set(extract_workspace_entities(text, limit=18)) for name, text in texts.items()}
+    base_name = file_names[0]
+    base_entities = entities.get(base_name, set())
+    explanation = [
+        f"Baseline: {base_name} is compared against {len(file_names) - 1} other file(s).",
+    ]
+    for name in file_names[1:]:
+        delta = lengths.get(name, 0) - lengths.get(base_name, 0)
+        added = sorted(entities.get(name, set()) - base_entities)[:6]
+        removed = sorted(base_entities - entities.get(name, set()))[:6]
+        direction = "more" if delta > 0 else "less"
+        explanation.append(f"{name}: {abs(delta):,} characters {direction} extracted content than the baseline.")
+        if added:
+            explanation.append(f"{name}: new semantic signals include {', '.join(added)}.")
+        if removed:
+            explanation.append(f"{name}: baseline-only signals include {', '.join(removed)}.")
+    explanation.append("Why it matters: use the highlighted diff for exact changes, then use these semantic signals to judge scope and impact.")
+    return explanation
+
+
+def run_capl_workspace_command(command):
+    """Execute an additive AI command for the CAPL module without changing existing tools."""
+    command_text = str(command or "").strip()
+    lowered = command_text.lower()
+    output = []
+    active_files = st.session_state.get("selected_files", [])
+    if any(term in lowered for term in ["analyze document", "analyze workspace", "summarize file", "extract entities"]):
+        if active_files:
+            ensure_files_processed(active_files)
+            remember_workspace_documents(active_files)
+        combined = "\n".join(str(st.session_state.file_texts.get(file_name, "")) for file_name in active_files)
+        if "extract entities" in lowered:
+            entities = extract_workspace_entities(combined, limit=20)
+            output = ["Entities:"] + [f"- {entity}" for entity in entities] if entities else ["No entities detected."]
+        elif "summarize file" in lowered:
+            snapshot = build_workspace_intelligence_snapshot(active_files)
+            output = ["Summary:"] + [f"- {item}" for item in snapshot.get("summary", [])]
+        else:
+            snapshot = build_workspace_intelligence_snapshot(active_files)
+            output = ["Workspace analysis:"] + [f"- {item}" for item in snapshot.get("insights", []) + snapshot.get("risks", [])]
+    elif "analyze capl" in lowered or "analyze code" in lowered:
+        selected_capl = st.session_state.get("selected_capl_file", "--Select CAPL file--")
+        code = st.session_state.get("capl_editor_code", "")
+        if selected_capl != "--Select CAPL file--":
+            code = st.session_state.file_texts.get(selected_capl, code)
+        issues = analyze_capl_code_with_suggestions(code)
+        output = [f"CAPL issues detected: {len(issues)}"] + [
+            f"- Line {issue.get('line', '?')}: {issue.get('message', issue.get('error', 'Issue'))}"
+            for issue in issues[:12]
+        ]
+    else:
+        output = [
+            "Available commands:",
+            "- analyze document",
+            "- summarize file",
+            "- extract entities",
+            "- analyze CAPL",
+        ]
+
+    log_item = {
+        "command": command_text,
+        "output": "\n".join(output),
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+    }
+    st.session_state.workspace_execution_logs = [log_item] + st.session_state.get("workspace_execution_logs", [])[:19]
+    memory = st.session_state.setdefault("workspace_memory", default_workspace_memory())
+    memory["capl"] = {
+        "last_command": command_text,
+        "last_output": log_item["output"],
+        "updated": log_item["timestamp"],
+    }
+    memory["chat"] = memory.get("chat", st.session_state.get("messages", []))[-60:]
+    save_workspace_memory()
+    record_workspace_event("CAPL", "command executed", command_text)
+    return log_item
+
+
+def render_ai_module_intro(module_name, engine_name, description):
+    """Render a restrained module identity line for the unified workspace."""
+    st.markdown(
+        f"""
+        <div class="ai-module-intro" data-module="{html.escape(module_name)}">
+            <div class="ai-module-kicker">{html.escape(module_name)} module</div>
+            <div class="ai-module-title">{html.escape(engine_name)}</div>
+            <div class="ai-module-desc">{html.escape(description)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_streaming_markdown(content, stream=False):
+    """Render assistant content with progressive reveal when safe for Markdown."""
+    content = str(content or "")
+    if not stream or "<" in content:
+        st.markdown(f"<div class='ai-message-reveal'>{content}</div>", unsafe_allow_html=True)
+        return
+    placeholder = st.empty()
+    pieces = re.split(r"(\s+)", content)
+    rendered = ""
+    for piece in pieces:
+        rendered += piece
+        placeholder.markdown(f"<div class='ai-message-reveal'>{html.escape(rendered)}</div>", unsafe_allow_html=True)
+        if piece.strip():
+            time.sleep(0.008)
+
+
+def install_chat_interaction_script():
+    """Focus chat input on activation and keep Enter behavior natural."""
+    render_html_frame(
+        """
+        <script>
+        const root = window.parent ? window.parent.document : document;
+        const focusChat = () => {
+            const chatInput = root.querySelector('textarea[data-testid="stChatInputTextArea"]');
+            if (chatInput && root.body.dataset.activeWorkspaceTab === 'Chat') {
+                chatInput.focus({ preventScroll: true });
+                chatInput.dataset.workspaceEnterHint = 'Enter sends, Shift+Enter creates a newline';
+            }
+        };
+        requestAnimationFrame(focusChat);
+        setTimeout(focusChat, 250);
+        </script>
+        """,
+        height=0,
+    )
 
 
 def empty_chat_summary_downloads():
@@ -7305,6 +7643,78 @@ st.markdown(
         overflow: hidden;
     }
 
+    .ai-module-intro {
+        padding: 0.35rem 0 1.05rem;
+        border-bottom: 1px solid rgba(15, 23, 42, 0.055);
+        margin-bottom: 1rem;
+        animation: premiumViewIn 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    .ai-module-kicker {
+        color: #2563eb;
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0;
+        margin-bottom: 0.15rem;
+    }
+
+    .ai-module-title {
+        color: #111827;
+        font-size: 1.2rem;
+        font-weight: 760;
+        letter-spacing: 0;
+        line-height: 1.2;
+    }
+
+    .ai-module-desc {
+        color: #64748b;
+        font-size: 0.92rem;
+        margin-top: 0.18rem;
+        max-width: 760px;
+    }
+
+    .ai-flow-intelligence {
+        display: grid;
+        gap: 1.1rem;
+        margin: 0.8rem 0 1.4rem;
+    }
+
+    .ai-flow-block {
+        padding: 0.2rem 0 0.9rem;
+        border-bottom: 1px solid rgba(15, 23, 42, 0.055);
+    }
+
+    .ai-flow-block h3 {
+        margin: 0 0 0.35rem;
+        color: #111827;
+        font-size: 1rem;
+        letter-spacing: 0;
+    }
+
+    .ai-flow-block p {
+        margin: 0.26rem 0;
+        color: #475569;
+        line-height: 1.55;
+    }
+
+    .ai-message-row,
+    .ai-message-reveal {
+        animation: premiumMessageIn 210ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    @keyframes premiumMessageIn {
+        from {
+            opacity: 0;
+            transform: translateY(5px);
+            filter: blur(1.5px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+            filter: blur(0);
+        }
+    }
+
     [data-testid="stSidebar"],
     .stSidebar {
         background: rgba(248, 250, 252, 0.64) !important;
@@ -7856,6 +8266,12 @@ render_html_frame(
 # Handles per-view file selection, direct commands like summarize/find/count,
 # semantic Q&A via vector search, and chat-specific download assets.
 if active_main_tab == "Chat":
+    render_ai_module_intro(
+        "Chat",
+        "Conversational intelligence engine",
+        "Persistent workspace conversation with shared document memory and live context for the other AI modules.",
+    )
+    install_chat_interaction_script()
     chat_header_col, chat_reset_col = st.columns([8, 1])
     with chat_header_col:
         st.subheader("Chat with Selected Documents")
@@ -7894,9 +8310,13 @@ if active_main_tab == "Chat":
                 if user_input.strip().lower() == "clear":
                     st.session_state.messages = []
                     st.session_state.chat_summary_downloads = empty_chat_summary_downloads()
+                    st.session_state.workspace_memory["chat"] = []
+                    save_workspace_memory()
                     st.success("✅ Chat cleared!")
                 else:
                     st.session_state.messages.append({"role": "user", "content": user_input})
+                    st.session_state.workspace_memory["chat"] = st.session_state.messages[-60:]
+                    record_workspace_event("Chat", "user message", user_input)
                     with st.spinner("Processing your request..."):
                         st.session_state.chat_summary_downloads = empty_chat_summary_downloads()
                         user_input_lower = user_input.lower()
@@ -8020,15 +8440,28 @@ if active_main_tab == "Chat":
                             combined_vs = get_combined_vector_store(chat_files)
                             retriever = combined_vs.as_retriever(search_kwargs={"k": 3})
                             llm = load_llm()
+                            recent_chat_context = "\n".join(
+                                f"{item.get('role', 'message')}: {str(item.get('content', ''))[:700]}"
+                                for item in st.session_state.get("messages", [])[-8:]
+                            )
+                            capl_context = st.session_state.workspace_memory.get("capl", {}).get("last_output", "")
+                            compare_context = "\n".join(
+                                st.session_state.workspace_memory.get("compare", {}).get("explanation", [])[:5]
+                            )
                             prompt = ChatPromptTemplate.from_messages([
                                 ("system",
                                  "You are an intelligent document assistant. Answer ONLY using context from the provided documents.\nIf information is not found in the documents, say 'This information is not available in the uploaded documents.'\nContext:\n{context}"),
+                                ("system",
+                                 "Workspace memory:\nRecent chat:\n{chat_memory}\nLatest compare insight:\n{compare_memory}\nLatest CAPL output:\n{capl_memory}"),
                                 ("human", "{question}")
                             ])
                             chain = None
                             if llm is not None:
                                 try:
                                     chain = ({"context": retriever | (lambda x: '\n'.join(x)),
+                                              "chat_memory": lambda _: recent_chat_context,
+                                              "compare_memory": lambda _: compare_context,
+                                              "capl_memory": lambda _: capl_context,
                                               "question": RunnablePassthrough()} | prompt | llm)
                                 except Exception as e:
                                     st.warning(f"Could not create LLM chain: {e}")
@@ -8039,13 +8472,23 @@ if active_main_tab == "Chat":
                             else:
                                 response = "⚠️ AI model is unavailable. Use direct extraction questions such as 'count(\"keyword\")', 'find(\"phrase\")', 'summarize', or 'overview'."
                         st.session_state.messages.append({"role": "assistant", "content": response})
+                        st.session_state.latest_stream_message_index = len(st.session_state.messages) - 1
+                        st.session_state.workspace_memory["chat"] = st.session_state.messages[-60:]
+                        save_workspace_memory()
+                        record_workspace_event("Chat", "assistant response", response)
                         if "⚠️" in response or "not found" in response.lower() or "please select" in response.lower() or "ai model is unavailable" in response.lower():
                             set_help_popup_state("chat", True)
 
         for message_index, msg in enumerate(st.session_state.messages):
             role = "🧑" if msg["role"] == "user" else "🤖"
             st.markdown(f"**{role}**", unsafe_allow_html=True)
-            st.markdown(msg["content"], unsafe_allow_html=True)
+            should_stream = (
+                msg["role"] == "assistant"
+                and st.session_state.get("latest_stream_message_index") == message_index
+            )
+            render_streaming_markdown(msg["content"], stream=should_stream)
+            if should_stream:
+                st.session_state.latest_stream_message_index = None
             if msg["role"] == "assistant":
                 prompt_to_regenerate = None
                 for previous_msg in reversed(st.session_state.messages[:message_index]):
@@ -8068,6 +8511,17 @@ if active_main_tab == "Chat":
 # Focused on structured HTML/XLSX analysis, charts, login/stat extraction, and
 # grouped test fixture reporting for uploaded report files.
 if active_main_tab == "Dashboard":
+    render_ai_module_intro(
+        "Dashboard",
+        "Live AI insights engine",
+        "Dynamic intelligence generated from uploaded files, document memory, and recent chat context.",
+    )
+    dashboard_snapshot = build_workspace_intelligence_snapshot(st.session_state.get("selected_files", []))
+    render_flowing_intelligence_blocks(dashboard_snapshot)
+    dashboard_signature = get_selection_signature(st.session_state.get("selected_files", []))
+    if st.session_state.get("last_dashboard_intelligence_signature") != dashboard_signature:
+        st.session_state.last_dashboard_intelligence_signature = dashboard_signature
+        record_workspace_event("Dashboard", "insights refreshed", ", ".join(st.session_state.get("selected_files", [])))
     dashboard_header_col, dashboard_reset_col = st.columns([8, 1])
     with dashboard_header_col:
         st.subheader("Dashboard")
@@ -8629,6 +9083,11 @@ if active_main_tab == "Dashboard":
 # Lets users pick 2+ selected files, generate inline word-level differences,
 # and download the comparison results as an Excel file.
 if active_main_tab == "Compare":
+    render_ai_module_intro(
+        "Compare",
+        "Semantic diff intelligence engine",
+        "Meaning-based comparison that keeps exact diffs, structural signals, and AI explanations connected to workspace memory.",
+    )
     compare_header_col, compare_reset_col = st.columns([8, 1])
     with compare_header_col:
         st.subheader("Compare Files")
@@ -8701,6 +9160,14 @@ if active_main_tab == "Compare":
             st.session_state.compare_result_html = html_diff
             st.session_state.compare_result_excel_bytes = excel_io.getvalue()
             st.session_state.compare_result_files = selected_files_for_comparison.copy()
+            st.session_state.workspace_memory["compare"] = {
+                "files": selected_files_for_comparison.copy(),
+                "mode": compare_mode,
+                "explanation": build_semantic_compare_explanation(selected_files_for_comparison),
+                "updated": datetime.now().isoformat(timespec="seconds"),
+            }
+            save_workspace_memory()
+            record_workspace_event("Compare", "semantic comparison", ", ".join(selected_files_for_comparison))
         else:
             st.warning("Select at least two files to compare.")
 
@@ -8708,6 +9175,11 @@ if active_main_tab == "Compare":
         st.info("Compared files: " + ", ".join(st.session_state.compare_result_files))
         st.markdown(f"### Comparison Results ({len(st.session_state.compare_result_files)} files)")
         render_html_frame(st.session_state.compare_result_html, height=800)
+        semantic_explanation = st.session_state.workspace_memory.get("compare", {}).get("explanation", [])
+        if semantic_explanation:
+            st.markdown("### AI Explanation Layer")
+            for explanation_item in semantic_explanation:
+                st.markdown(f"- {html.escape(str(explanation_item))}", unsafe_allow_html=True)
 
         st.markdown("### Download Excel Comparison")
         st.download_button(
@@ -8726,6 +9198,31 @@ if active_main_tab == "Compare":
 # Dedicated to CAPL file selection, live editing, compile/analyze checks, issue
 # reporting, and optional AI-assisted fix generation for CAPL scripts.
 if active_main_tab == "CAPL":
+    render_ai_module_intro(
+        "CAPL",
+        "AI tool execution engine",
+        "Command-driven actions for document analysis, entity extraction, and CAPL code intelligence with shared execution history.",
+    )
+    with st.expander("AI Command Executor", expanded=False):
+        command_cols = st.columns([4, 1])
+        with command_cols[0]:
+            workspace_command = st.text_input(
+                "Command",
+                key="workspace_ai_command",
+                placeholder="analyze document, summarize file, extract entities, analyze CAPL",
+            )
+        with command_cols[1]:
+            execute_workspace_command = st.button("Run", key="run_workspace_ai_command", use_container_width=True)
+        if execute_workspace_command and workspace_command.strip():
+            command_result = run_capl_workspace_command(workspace_command)
+            st.markdown("#### Structured AI Response")
+            st.code(command_result["output"], language="text")
+        if st.session_state.get("workspace_execution_logs"):
+            st.markdown("#### Execution History")
+            for index, log in enumerate(st.session_state.workspace_execution_logs[:8], start=1):
+                with st.expander(f"{index}. {log.get('command', 'Command')} - {log.get('timestamp', '')}", expanded=index == 1):
+                    st.code(log.get("output", ""), language="text")
+
     capl_header_col, capl_reset_col = st.columns([8, 1])
     with capl_header_col:
         st.subheader("⚙️ CAPL Compiler & Analyzer")
