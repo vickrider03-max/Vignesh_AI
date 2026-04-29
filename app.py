@@ -1,38 +1,32 @@
 # -------------------------------
 # IMPORTS
 # -------------------------------
-import base64
-import hashlib
-import html
+# Standard library and third-party imports for the application.
+import html, re, hashlib, os, json, base64, pickle, zipfile
 import importlib
-import json
-import os
-import pickle
-import re
-import time
-import urllib.parse
 import uuid
+import urllib.parse
 import xml.etree.ElementTree as ET
-import zipfile
-from collections import Counter, OrderedDict, defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from difflib import SequenceMatcher
 from io import BytesIO
-
-import docx
-import openpyxl
-import pandas as pd
-import pdfplumber
-import plotly.express as px
-import streamlit as st
-import streamlit.components.v1 as components
-from bs4 import BeautifulSoup
-from docx.table import Table
-from docx.text.paragraph import Paragraph
-from openpyxl.styles import PatternFill
-from PIL import Image, ImageDraw, ImageFont
-from pptx import Presentation
 from pytz import timezone
+import time
+from functools import lru_cache
+from collections import OrderedDict
+
+import docx, openpyxl, pdfplumber, streamlit as st
+import streamlit.components.v1 as components
+from docx.text.paragraph import Paragraph
+from docx.table import Table
+import pandas as pd
+from openpyxl.styles import PatternFill
+from pptx import Presentation
+from bs4 import BeautifulSoup
+from PIL import Image, ImageDraw, ImageFont
+import plotly.express as px
+import plotly.graph_objects as go
 
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.llms import HuggingFacePipeline
@@ -51,7 +45,6 @@ PREVIEW_STORE = {}   # token -> file_dict
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 PREVIEW_DATA_FILE = os.path.join(APP_DIR, "preview_data.pkl")
-WORKSPACE_MEMORY_FILE = os.path.join(APP_DIR, "workspace_memory.json")
 PDF_PREVIEW_RESOLUTION = 100
 PDF_PREVIEW_WINDOW = 25
 PDF_ASSET_SCAN_PAGE_LIMIT = 10
@@ -101,6 +94,7 @@ class CacheManager:
 FILE_TEXT_CACHE = CacheManager(max_size=100)
 VECTOR_STORE_CACHE = CacheManager(max_size=20)
 EXCEL_DATA_CACHE = CacheManager(max_size=50)
+EMBEDDINGS_CACHE = CacheManager(max_size=200)
 
 # Cache for file hashes to detect modifications
 FILE_HASH_CACHE = {}
@@ -111,6 +105,14 @@ FILE_HASH_CACHE = {}
 def get_file_hash(file_bytes):
     """Generate SHA256 hash of file contents for change detection"""
     return hashlib.sha256(file_bytes).hexdigest()
+
+def file_has_changed(file_name, file_bytes):
+    """Check if file has been modified since last processing"""
+    new_hash = get_file_hash(file_bytes)
+    cache_key = f"{file_name}_hash"
+    old_hash = FILE_HASH_CACHE.get(cache_key)
+    FILE_HASH_CACHE[cache_key] = new_hash
+    return old_hash != new_hash
 
 # ===============================================
 # PREVIEW PERSISTENCE HELPERS
@@ -172,64 +174,6 @@ def save_preview_data():
                 os.remove(temp_file)
             except Exception:
                 pass
-
-
-def default_workspace_memory():
-    """Create the shared memory used by all workspace AI modules."""
-    return {
-        "chat": [],
-        "documents": {},
-        "dashboard": {},
-        "compare": {},
-        "capl": {},
-        "events": [],
-    }
-
-
-def load_workspace_memory():
-    """Load shared workspace memory from disk without affecting feature state."""
-    if not os.path.exists(WORKSPACE_MEMORY_FILE):
-        return default_workspace_memory()
-    try:
-        with open(WORKSPACE_MEMORY_FILE, "r", encoding="utf-8") as f:
-            loaded = json.load(f)
-        if not isinstance(loaded, dict):
-            return default_workspace_memory()
-        memory = default_workspace_memory()
-        for key, value in loaded.items():
-            if key in memory and isinstance(value, type(memory[key])):
-                memory[key] = value
-        return memory
-    except Exception:
-        return default_workspace_memory()
-
-
-def save_workspace_memory():
-    """Persist lightweight shared AI memory for the unified workspace."""
-    try:
-        memory = st.session_state.get("workspace_memory", default_workspace_memory())
-        safe_memory = default_workspace_memory()
-        for key in safe_memory:
-            if key in memory:
-                safe_memory[key] = memory[key]
-        with open(WORKSPACE_MEMORY_FILE, "w", encoding="utf-8") as f:
-            json.dump(safe_memory, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
-
-
-def record_workspace_event(module, action, detail=None):
-    """Append a compact cross-module event to the shared workspace graph."""
-    memory = st.session_state.setdefault("workspace_memory", default_workspace_memory())
-    events = memory.setdefault("events", [])
-    events.append({
-        "module": str(module),
-        "action": str(action),
-        "detail": str(detail or "")[:500],
-        "timestamp": datetime.now().isoformat(timespec="seconds"),
-    })
-    memory["events"] = events[-80:]
-    save_workspace_memory()
 
 def cleanup_expired_preview_tokens():
     """Remove preview tokens older than 1 hour to prevent memory accumulation."""
@@ -986,13 +930,30 @@ st.markdown(
         hideStreamlitFooter();
         setInterval(hideStreamlitFooter, 1000);
 
-        const markPremiumWorkspace = () => {
-            document.body.classList.add('premium-ai-workspace');
+        const applyLightButtonStyles = () => {
+            const selectors = [
+                'button',
+                'input[type="button"]',
+                'input[type="submit"]',
+                '[role="button"]',
+                '.stButton > button',
+                'div[data-testid="stBaseButton"] button'
+            ];
+            document.querySelectorAll(selectors.join(',')).forEach(el => {
+                el.style.setProperty('background-color', '#e8f6ff', 'important');
+                el.style.setProperty('color', '#1e293b', 'important');
+                el.style.setProperty('border-color', '#c0dff0', 'important');
+                el.style.setProperty('border-style', 'solid', 'important');
+                el.style.setProperty('border-width', '2px', 'important');
+                el.style.setProperty('box-shadow', '0 2px 4px rgba(200, 230, 250, 0.2)', 'important');
+            });
         };
 
-        const workspaceObserver = new MutationObserver(markPremiumWorkspace);
-        workspaceObserver.observe(document.body, { childList: true, subtree: true });
-        markPremiumWorkspace();
+        const buttonObserver = new MutationObserver(() => {
+            applyLightButtonStyles();
+        });
+        buttonObserver.observe(document.body, { childList: true, subtree: true });
+        applyLightButtonStyles();
     </script>
     """,
     unsafe_allow_html=True
@@ -1013,9 +974,6 @@ for key, default_value in [
     ("messages", []),
     ("welcome_shown", False),
     ("mobile_sidebar_visible", False),
-    ("workspace_memory", default_workspace_memory()),
-    ("workspace_execution_logs", []),
-    ("latest_stream_message_index", None),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default_value
@@ -1073,8 +1031,6 @@ def render_status_strip():
     </script>
     """
 
-    role_label = str(role).title()
-
     status_html = f"""
     <style>
         body {{
@@ -1082,68 +1038,167 @@ def render_status_strip():
             background: transparent;
             font-family: 'Segoe UI', Tahoma, sans-serif;
         }}
-        .context-strip {{
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            min-height: 28px;
-            color: #64748b;
-            font-size: 0.84rem;
-            line-height: 1;
-            white-space: nowrap;
+        .dashboard-grid {{
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 8px;
+            padding: 0 2px 4px;
+        }}
+        .metric-card {{
+            position: relative;
             overflow: hidden;
-            text-overflow: ellipsis;
-            padding: 0 2px;
+            min-height: 58px;
+            border-radius: 12px;
+            padding: 8px 10px;
+            border: 1px solid rgba(255, 255, 255, 0.5) !important;
+            box-shadow: 0 6px 14px rgba(15, 23, 42, 0.12);
+            transform: translateY(8px) scale(0.98);
+            opacity: 0;
+            animation: riseIn 0.65s ease-out forwards, cardFloat 4.5s ease-in-out infinite;
         }}
-        .context-strip span {{
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            opacity: 0.82;
+        .metric-card:nth-child(1) {{ animation-delay: 0.05s, 0.9s; }}
+        .metric-card:nth-child(2) {{ animation-delay: 0.15s, 1.05s; }}
+        .metric-card:nth-child(3) {{ animation-delay: 0.25s, 1.2s; }}
+        .metric-card:nth-child(4) {{ animation-delay: 0.35s, 1.35s; }}
+        .metric-card::before {{
+            content: "";
+            position: absolute;
+            width: 100px;
+            height: 100px;
+            top: -40px;
+            right: -20px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.22);
+            filter: blur(4px);
+            animation: bubbleDrift 8s ease-in-out infinite;
         }}
-        .context-strip .dot {{
-            color: #cbd5e1;
-            opacity: 1;
+        .metric-card::after {{
+            content: "";
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            bottom: -20px;
+            left: -8px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.16);
         }}
-        .timer-badge {{
-            background: #eff6ff;
-            color: #1e40af;
-            border: 1px solid #dbeafe;
-            border-radius: 6px;
-            padding: 4px 8px;
-            font-weight: 700;
-            opacity: 1 !important;
+        .card-label, .card-value {{
+            position: relative;
+            z-index: 1;
+            display: block;
+        }}
+        .card-label {{
+            font-size: 0.58rem !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: rgba(15, 23, 42, 0.68) !important;
+            margin-bottom: 4px;
+        }}
+        .card-value {{
+            font-size: 1rem !important;
+            font-weight: 800 !important;
+            line-height: 1.2;
+            word-break: break-word;
         }}
         #live-timer {{
-            font-family: 'Courier New', monospace;
-            letter-spacing: 0.03em;
+            letter-spacing: 0.06em;
+            animation: timerGlow 1.8s ease-in-out infinite;
+        }}
+        @keyframes riseIn {{
+            from {{ opacity: 0; transform: translateY(8px) scale(0.98); }}
+            to {{ opacity: 1; transform: translateY(0) scale(1); }}
+        }}
+        @keyframes cardFloat {{
+            0%, 100% {{ transform: translateY(0); }}
+            50% {{ transform: translateY(-3px); }}
+        }}
+        @keyframes bubbleDrift {{
+            0%, 100% {{ transform: translate(0, 0); }}
+            50% {{ transform: translate(-8px, 10px); }}
+        }}
+        @keyframes timerGlow {{
+            0%, 100% {{ text-shadow: 0 0 0 rgba(46, 125, 50, 0); }}
+            50% {{ text-shadow: 0 0 12px rgba(46, 125, 50, 0.25); }}
+        }}
+        @media (max-width: 900px) {{
+            .dashboard-grid {{
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }}
         }}
         @media (max-width: 560px) {{
-            .context-strip {{
-                gap: 7px;
-                font-size: 0.74rem;
+            .dashboard-grid {{
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 8px;
+                padding: 4px 2px 8px;
             }}
-            .timer-badge {{
-                padding: 3px 6px;
+            .metric-card {{
+                min-height: 74px;
+                border-radius: 12px;
+                padding: 9px 8px;
+                box-shadow: 0 6px 14px rgba(15, 23, 42, 0.12);
+            }}
+            .card-label {{
+                font-size: 0.54rem !important;
+                letter-spacing: 0.04em;
+                margin-bottom: 4px;
+                white-space: normal;
+            }}
+            .card-value {{
+                font-size: clamp(0.82rem, 4vw, 1rem) !important;
+                line-height: 1.15;
+                overflow-wrap: anywhere;
+            }}
+            #live-timer {{
+                font-size: clamp(0.78rem, 3.8vw, 0.95rem) !important;
+                letter-spacing: 0.02em;
             }}
         }}
     </style>
     <script>
-        document.body.classList.add('premium-status-strip');
+        // Dynamically override button colors on page load and mutations
+        function applyButtonColors() {{
+            const buttons = document.querySelectorAll('button, [role="button"]');
+            buttons.forEach(btn => {{
+                btn.style.backgroundColor = '#e8f6ff !important';
+                btn.style.color = '#1e293b !important';
+                btn.style.borderColor = '#c0dff0 !important';
+                btn.style.border = '2px solid #c0dff0 !important';
+            }});
+        }}
+        
+        // Apply on page load
+        document.addEventListener('DOMContentLoaded', applyButtonColors);
+        
+        // Apply on mutation (when new buttons are added)
+        const observer = new MutationObserver(applyButtonColors);
+        observer.observe(document.body, {{ childList: true, subtree: true }});
+        
+        // Apply immediately
+        applyButtonColors();
     </script>
     {live_timer_js}
-    <div class="context-strip" title="Current session context">
-        <span>👤 {html.escape(username)}</span>
-        <span class="dot">•</span>
-        <span>🏷️ {html.escape(role_label)}</span>
-        <span class="dot">•</span>
-        <span>📁 {available_files} Files</span>
-        <span class="dot">•</span>
-        <span class="timer-badge">⏱ <span id="live-timer">{timer_str}</span></span>
+    <div class="dashboard-grid">
+        <div class="metric-card" style="background: linear-gradient(135deg, #e8eaf6 0%, #c5cae9 100%); color: #3c4f7e; border: 1px solid #e8eaf6;">
+            <span class="card-label" style="color: #666;">👤 User</span>
+            <span class="card-value" style="color: #3c4f7e;">{html.escape(username)}</span>
+        </div>
+        <div class="metric-card" style="background: linear-gradient(135deg, #fce4ec 0%, #f8bbd9 100%); color: #7b1fa2; border: 1px solid #fce4ec;">
+            <span class="card-label" style="color: #666;">🔑 Role</span>
+            <span class="card-value" style="color: #7b1fa2;">{html.escape(str(role).title())}</span>
+        </div>
+        <div class="metric-card" style="background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); color: #1565c0; border: 1px solid #e3f2fd;">
+            <span class="card-label" style="color: #666;">📁 Available Files</span>
+            <span class="card-value" style="color: #1565c0;">{available_files}</span>
+        </div>
+        <div class="metric-card" style="background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%); color: #2e7d32; border: 1px solid #e8f5e8;">
+            <span class="card-label" style="color: #666;">⏱️ Usage Time</span>
+            <span class="card-value" id="live-timer" style="color: #2e7d32; font-family: 'Courier New', monospace;">{timer_str}</span>
+        </div>
     </div>
     """
 
-    render_html_frame(status_html, height=34)
+    render_html_frame(status_html, height=118)
 
 
 def _help_state_key(tab_name):
@@ -1217,25 +1272,25 @@ if st.session_state.is_authenticated:
             section.main .block-container,
             .main .block-container,
             div[data-testid="stMain"] .block-container {
-                padding-top: 6px !important;
+                padding-top: 8px !important;
             }
             div[data-testid="stVerticalBlock"] {
-                gap: 0.375rem !important;
+                gap: 0.5rem !important;
             }
             div[data-testid="stHorizontalBlock"]:has(.st-key-header_brain_icon) {
-                margin-top: -0.6rem !important;
-                margin-bottom: -0.2rem !important;
+                margin-top: -0.75rem !important;
+                margin-bottom: -0.35rem !important;
                 align-items: center !important;
-                min-height: 56px !important;
+                min-height: 48px !important;
             }
             .app-header-title {
-                transform: translateY(-2px);
+                transform: translateY(-4px);
                 line-height: 1.1;
                 margin: 0 !important;
             }
             .app-header-main {
                 color: #1e293b;
-                font-size: 1.2rem;
+                font-size: 1.18rem;
                 font-weight: 700;
                 margin: 0;
             }
@@ -1247,23 +1302,16 @@ if st.session_state.is_authenticated:
             }
             .st-key-header_brain_icon,
             .st-key-main_logout_btn {
-                margin-top: -0.3rem !important;
+                margin-top: -0.45rem !important;
             }
             .st-key-main_logout_btn {
                 display: flex !important;
                 align-items: center !important;
-                justify-content: flex-end !important;
-                min-height: 56px !important;
-            }
-            .st-key-main_logout_btn button {
-                min-height: 38px !important;
-                border-radius: 8px !important;
-                padding: 0.45rem 0.8rem !important;
             }
             .compact-header-divider {
                 height: 1px;
                 background: #e2e8f0;
-                margin: 2px 0 6px;
+                margin: 4px 0 8px;
             }
         </style>
         """,
@@ -1277,12 +1325,12 @@ if st.session_state.is_authenticated:
         with brain_col:
             if st.button("🧠", key="header_brain_icon", help="Click to show/hide helper tips"):
                 helper_tab_map = {
-                    "Chat": "chat",
-                    "Dashboard": "dashboard",
-                    "Compare": "compare",
-                    "CAPL": "capl",
+                    "💬 Chat": "chat",
+                    "📊 Dashboard": "dashboard",
+                    "📂 Compare": "compare",
+                    "📡 CAPL": "capl"
                 }
-                current_helper_tab = helper_tab_map.get(st.session_state.get("active_main_tab", "Chat"), "chat")
+                current_helper_tab = helper_tab_map.get(st.session_state.get("active_main_tab", "💬 Chat"), "chat")
                 state_key = _help_state_key(current_helper_tab)
                 st.session_state[state_key] = not st.session_state.get(state_key, False)
         with title_col:
@@ -1603,13 +1651,7 @@ if "user_session_start_time" not in st.session_state:
 if "start_time" not in st.session_state:
     st.session_state.start_time = None
 if "active_main_tab" not in st.session_state:
-    st.session_state.active_main_tab = "Chat"
-if not st.session_state.get("workspace_memory_loaded"):
-    loaded_workspace_memory = load_workspace_memory()
-    st.session_state.workspace_memory = loaded_workspace_memory
-    if not st.session_state.get("messages") and loaded_workspace_memory.get("chat"):
-        st.session_state.messages = loaded_workspace_memory.get("chat", [])[-60:]
-    st.session_state.workspace_memory_loaded = True
+    st.session_state.active_main_tab = "💬 Chat"
 
 # -------------------------------
 # DOCUMENT PREVIEW FUNCTION
@@ -1620,6 +1662,22 @@ if not st.session_state.get("workspace_memory_loaded"):
 # ===============================================
 # LAZY LOADING & PERFORMANCE OPTIMIZATION
 # ===============================================
+
+def lazy_load_file_section(file_name, section_id, loader_func):
+    """Lazily load file sections on demand to reduce initial load time"""
+    cache_key = f"{file_name}_{section_id}"
+    cached_result = FILE_TEXT_CACHE.get(cache_key, ttl_seconds=7200)
+    if cached_result is not None:
+        return cached_result
+    
+    result = loader_func()
+    FILE_TEXT_CACHE.set(cache_key, result)
+    return result
+
+def optimize_tab_rendering():
+    """Optimize rendering by deferring non-active tab loading"""
+    active_tab = st.session_state.get("active_main_tab", "💬 Chat")
+    return active_tab
 
 def ensure_file_processed(file_name):
     """Process file with caching to avoid redundant extraction"""
@@ -2290,6 +2348,18 @@ def create_heading_anchor(text):
     return f"heading-{anchor_text}"
 
 
+def highlight_for_preview(text, highlight_term=None):
+    if not highlight_term:
+        return html.escape(text)
+    escaped = html.escape(text)
+    pattern = re.compile(re.escape(highlight_term), re.IGNORECASE)
+    highlighted = pattern.sub(
+        lambda m: f"<mark style='background:#fff3a3; padding:0 2px;'>{html.escape(m.group(0))}</mark>",
+        escaped
+    )
+    return highlighted
+
+
 def render_text_block(text, highlight_term=None, anchor_id=None):
     if not highlight_term:
         return None
@@ -2353,9 +2423,10 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None, hig
                 st.markdown(f"**PDF Pages: {total_pages}**")
                 
                 # Determine which page to show
+                selected_page_index = None
                 if highlight_page is not None:
                     if 1 <= highlight_page <= total_pages:
-                        pass
+                        selected_page_index = highlight_page - 1
                     else:
                         st.warning(f"⚠️ Page {highlight_page} not found. Showing all pages.")
                 else:
@@ -2427,6 +2498,7 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None, hig
                 st.caption(f"Showing page {int(page_start)} to {page_end} of {total_pages}. Change the start page to preview any page.")
 
                 # Render pages
+                highlight_found = False
                 for i in pages_to_show:
                     page = pdf.pages[i]
                     
@@ -2437,6 +2509,7 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None, hig
                         
                         if highlight_term and highlight_term.lower() in page_text.lower():
                             page_anchor_id = create_heading_anchor(highlight_term)
+                            highlight_found = True
                             if page_anchor_id:
                                 st.markdown(f"<div id='{page_anchor_id}'></div>", unsafe_allow_html=True)
                         
@@ -3788,6 +3861,14 @@ with st.sidebar:
             st.session_state.mobile_sidebar_visible = False
             st.rerun()
 
+        creator_timestamp = None
+        if st.session_state.user_role == "creator" and st.session_state.login_history:
+            creator_entries = [
+                entry for entry in st.session_state.login_history
+                if entry.get("username") == st.session_state.logged_in_username and entry.get("role") == "creator" and entry.get("action") == "login"
+            ]
+            if creator_entries:
+                creator_timestamp = creator_entries[-1].get("timestamp")
 
         st.markdown(
             """
@@ -3899,8 +3980,6 @@ with st.sidebar:
                         uploaded_new_file = True
                 if uploaded_new_file:
                     st.session_state.messages = []
-                    st.session_state.workspace_memory["chat"] = []
-                    save_workspace_memory()
                     st.session_state.chat_summary_downloads = {"images": [], "tables": [], "csv": [], "diagrams": []}
                     st.session_state.chat_file_selection = []
                     st.success("✅ New files uploaded. Chat history has been cleared.")
@@ -3913,12 +3992,19 @@ with st.sidebar:
             with cols[0]:
                 file_name = file_dict["name"]
                 is_selected = file_name in st.session_state.selected_files
-                checkbox_key = f"select_file_checkbox_{idx}_{file_name}"
-                file_selected = st.checkbox(file_name, value=is_selected, key=checkbox_key)
-                if file_selected and not is_selected:
-                    st.session_state.selected_files.append(file_name)
-                elif not file_selected and is_selected:
-                    st.session_state.selected_files.remove(file_name)
+                button_label = file_name if not is_selected else f"Selected: {file_name}"
+                if st.button(
+                    button_label,
+                    key=f"select_file_{idx}",
+                    help=f"Click to {'remove' if is_selected else 'add'} {file_name}",
+                    use_container_width=True,
+                    type="primary" if is_selected else "secondary",
+                ):
+                    if is_selected:
+                        st.session_state.selected_files.remove(file_name)
+                    else:
+                        st.session_state.selected_files.append(file_name)
+                    st.rerun()
             with cols[1]:
                 preview_url = create_preview_link(file_name)
                 st.link_button(
@@ -3946,21 +4032,8 @@ with st.sidebar:
                         st.session_state.capl_last_analyzed_file = None
                         st.session_state.capl_last_issues = None
                     st.rerun()
-
-        uploaded_names = [f["name"] for f in st.session_state.uploaded_files]
-        if uploaded_names:
-            st.markdown("---")
-            st.markdown("### Workspace file selection")
-            st.multiselect(
-                "Select files for workspace access",
-                options=uploaded_names,
-                key="selected_files",
-            )
-            st.markdown("*Selected files above are available across all tabs.*")
-            st.markdown("---")
-        else:
-            st.markdown("*Upload files above to select them for chat, compare, dashboard, and CAPL.*")
-            st.markdown("---")
+        st.markdown("*Selected files above are available across all tabs.*")
+        st.markdown("---")
         if st.button("Clear All Files"):
             for key in ["uploaded_files", "selected_files", "file_texts", "excel_data_by_file", "vector_stores",
                         "messages"]:
@@ -3969,8 +4042,6 @@ with st.sidebar:
             st.session_state.chat_file_selection = []
             st.session_state.capl_last_analyzed_file = None
             st.session_state.capl_last_issues = None
-            st.session_state.workspace_memory = default_workspace_memory()
-            save_workspace_memory()
             st.session_state.file_uploader_key += 1
             st.rerun()
 
@@ -4086,6 +4157,11 @@ def ensure_files_processed(file_names):
         ensure_file_processed(file_name)
 
 
+def process_selected_files():
+    """Fully extract all currently selected files so every tab uses the same data."""
+    ensure_files_processed(st.session_state.selected_files)
+
+
 def get_selection_signature(file_names):
     digest = hashlib.md5()
     for file_name in sorted(file_names):
@@ -4132,272 +4208,6 @@ def get_document_asset_counts(file_name, file_bytes, extracted_text):
         image_count = int(image_match.group(1)) if image_match else 0
 
     return page_count, image_count, table_count
-
-
-def remember_workspace_documents(file_names):
-    """Refresh shared document memory for the selected workspace files."""
-    memory = st.session_state.setdefault("workspace_memory", default_workspace_memory())
-    documents = memory.setdefault("documents", {})
-    for file_name in file_names:
-        text = str(st.session_state.file_texts.get(file_name, "") or "")
-        if not text.strip():
-            continue
-        words = re.findall(r"[A-Za-z][A-Za-z0-9_+\-/]{2,}", text)
-        keyword_counts = Counter(
-            word.lower()
-            for word in words
-            if len(word) > 3 and word.lower() not in SUMMARY_STOPWORDS and not word.isdigit()
-        )
-        page_count, image_count, table_count = get_document_asset_counts(
-            file_name,
-            get_uploaded_file_entry(file_name).get("bytes", b"") if get_uploaded_file_entry(file_name) else b"",
-            text,
-        )
-        documents[file_name] = {
-            "chars": len(text),
-            "keywords": [word.title() for word, _ in keyword_counts.most_common(10)],
-            "pages": page_count,
-            "tables": table_count,
-            "images": image_count,
-            "updated": datetime.now().isoformat(timespec="seconds"),
-        }
-    memory["documents"] = documents
-    save_workspace_memory()
-
-
-def extract_workspace_entities(text, limit=12):
-    """Best-effort entity extraction for the shared intelligence layer."""
-    candidates = []
-    for pattern in [
-        r"\b[A-Z]{2,}[A-Za-z0-9_+\-/]*\b",
-        r"\b[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z0-9]+){0,2}\b",
-    ]:
-        candidates.extend(re.findall(pattern, str(text or "")))
-    counts = Counter(
-        normalize_extracted_line(candidate)
-        for candidate in candidates
-        if 2 < len(normalize_extracted_line(candidate)) < 48
-        and normalize_extracted_line(candidate).lower() not in SUMMARY_STOPWORDS
-    )
-    return [entity for entity, _ in counts.most_common(limit)]
-
-
-def build_workspace_intelligence_snapshot(file_names=None):
-    """Build live AI-style insight blocks from documents and conversation memory."""
-    file_names = file_names or st.session_state.get("selected_files", [])
-    if file_names:
-        ensure_files_processed(file_names)
-        remember_workspace_documents(file_names)
-
-    memory = st.session_state.setdefault("workspace_memory", default_workspace_memory())
-    selected_text = "\n".join(str(st.session_state.file_texts.get(file_name, "")) for file_name in file_names)
-    chat_tail = " ".join(
-        str(msg.get("content", ""))
-        for msg in st.session_state.get("messages", [])[-8:]
-    )
-    combined = f"{selected_text}\n{chat_tail}".strip()
-    words = re.findall(r"[A-Za-z][A-Za-z0-9_+\-/]{2,}", combined)
-    keyword_counts = Counter(
-        word.lower()
-        for word in words
-        if len(word) > 3 and word.lower() not in SUMMARY_STOPWORDS and not word.isdigit()
-    )
-    keywords = [word.title() for word, _ in keyword_counts.most_common(8)]
-    entities = extract_workspace_entities(combined, limit=10)
-
-    document_memory = memory.get("documents", {})
-    total_chars = sum(int(document_memory.get(name, {}).get("chars", 0) or 0) for name in file_names)
-    total_tables = sum(int(document_memory.get(name, {}).get("tables", 0) or 0) for name in file_names)
-    total_images = sum(int(document_memory.get(name, {}).get("images", 0) or 0) for name in file_names)
-    events = memory.get("events", [])[-6:]
-
-    summary = []
-    if file_names:
-        summary.append(f"{len(file_names)} active file(s) are connected to the workspace intelligence layer.")
-    if keywords:
-        summary.append(f"Current focus areas: {', '.join(keywords[:5])}.")
-    if chat_tail:
-        summary.append("Recent chat context is included, so the insight layer reflects the latest conversation.")
-    if not summary:
-        summary.append("Upload and select files to activate live workspace intelligence.")
-
-    risks = []
-    lower = combined.lower()
-    for term in ["fail", "failed", "error", "warning", "risk", "missing", "not supported", "invalid"]:
-        count = lower.count(term)
-        if count:
-            risks.append(f"{term.title()}: {count} signal(s)")
-    if not risks and file_names:
-        risks.append("No obvious risk keywords detected in the current extracted context.")
-
-    timeline = [
-        f"{event.get('timestamp', '')} - {event.get('module', '')}: {event.get('action', '')}"
-        for event in events
-    ] or ["No cross-module actions recorded yet."]
-
-    return {
-        "summary": summary,
-        "insights": [
-            f"Readable context: {total_chars:,} characters.",
-            f"Structured assets detected: {total_tables} table(s), {total_images} image(s).",
-            f"Memory graph events: {len(memory.get('events', []))}.",
-        ],
-        "entities": entities or ["No strong entities detected yet."],
-        "timeline": timeline,
-        "risks": risks,
-    }
-
-
-def render_flowing_intelligence_blocks(snapshot):
-    """Render dashboard intelligence as flowing blocks instead of cards."""
-    labels = [
-        ("AI Summary", snapshot.get("summary", [])),
-        ("Key Insights", snapshot.get("insights", [])),
-        ("Detected Entities", snapshot.get("entities", [])),
-        ("Timeline / Changes", snapshot.get("timeline", [])),
-        ("Risk or Key Signals", snapshot.get("risks", [])),
-    ]
-    st.markdown("<div class='ai-flow-intelligence'>", unsafe_allow_html=True)
-    for title, items in labels:
-        st.markdown(f"<section class='ai-flow-block'><h3>{html.escape(title)}</h3>", unsafe_allow_html=True)
-        for item in items:
-            st.markdown(f"<p>{html.escape(str(item))}</p>", unsafe_allow_html=True)
-        st.markdown("</section>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
-def build_semantic_compare_explanation(file_names):
-    """Explain comparison results as meaning, structure, and likely impact."""
-    if len(file_names) < 2:
-        return []
-    texts = {name: str(st.session_state.file_texts.get(name, "") or "") for name in file_names}
-    lengths = {name: len(text) for name, text in texts.items()}
-    entities = {name: set(extract_workspace_entities(text, limit=18)) for name, text in texts.items()}
-    base_name = file_names[0]
-    base_entities = entities.get(base_name, set())
-    explanation = [
-        f"Baseline: {base_name} is compared against {len(file_names) - 1} other file(s).",
-    ]
-    for name in file_names[1:]:
-        delta = lengths.get(name, 0) - lengths.get(base_name, 0)
-        added = sorted(entities.get(name, set()) - base_entities)[:6]
-        removed = sorted(base_entities - entities.get(name, set()))[:6]
-        direction = "more" if delta > 0 else "less"
-        explanation.append(f"{name}: {abs(delta):,} characters {direction} extracted content than the baseline.")
-        if added:
-            explanation.append(f"{name}: new semantic signals include {', '.join(added)}.")
-        if removed:
-            explanation.append(f"{name}: baseline-only signals include {', '.join(removed)}.")
-    explanation.append("Why it matters: use the highlighted diff for exact changes, then use these semantic signals to judge scope and impact.")
-    return explanation
-
-
-def run_capl_workspace_command(command):
-    """Execute an additive AI command for the CAPL module without changing existing tools."""
-    command_text = str(command or "").strip()
-    lowered = command_text.lower()
-    output = []
-    active_files = st.session_state.get("selected_files", [])
-    if any(term in lowered for term in ["analyze document", "analyze workspace", "summarize file", "extract entities"]):
-        if active_files:
-            ensure_files_processed(active_files)
-            remember_workspace_documents(active_files)
-        combined = "\n".join(str(st.session_state.file_texts.get(file_name, "")) for file_name in active_files)
-        if "extract entities" in lowered:
-            entities = extract_workspace_entities(combined, limit=20)
-            output = ["Entities:"] + [f"- {entity}" for entity in entities] if entities else ["No entities detected."]
-        elif "summarize file" in lowered:
-            snapshot = build_workspace_intelligence_snapshot(active_files)
-            output = ["Summary:"] + [f"- {item}" for item in snapshot.get("summary", [])]
-        else:
-            snapshot = build_workspace_intelligence_snapshot(active_files)
-            output = ["Workspace analysis:"] + [f"- {item}" for item in snapshot.get("insights", []) + snapshot.get("risks", [])]
-    elif "analyze capl" in lowered or "analyze code" in lowered:
-        selected_capl = st.session_state.get("selected_capl_file", "--Select CAPL file--")
-        code = st.session_state.get("capl_editor_code", "")
-        if selected_capl != "--Select CAPL file--":
-            code = st.session_state.file_texts.get(selected_capl, code)
-        issues = analyze_capl_code_with_suggestions(code)
-        output = [f"CAPL issues detected: {len(issues)}"] + [
-            f"- Line {issue.get('line', '?')}: {issue.get('message', issue.get('error', 'Issue'))}"
-            for issue in issues[:12]
-        ]
-    else:
-        output = [
-            "Available commands:",
-            "- analyze document",
-            "- summarize file",
-            "- extract entities",
-            "- analyze CAPL",
-        ]
-
-    log_item = {
-        "command": command_text,
-        "output": "\n".join(output),
-        "timestamp": datetime.now().isoformat(timespec="seconds"),
-    }
-    st.session_state.workspace_execution_logs = [log_item] + st.session_state.get("workspace_execution_logs", [])[:19]
-    memory = st.session_state.setdefault("workspace_memory", default_workspace_memory())
-    memory["capl"] = {
-        "last_command": command_text,
-        "last_output": log_item["output"],
-        "updated": log_item["timestamp"],
-    }
-    memory["chat"] = memory.get("chat", st.session_state.get("messages", []))[-60:]
-    save_workspace_memory()
-    record_workspace_event("CAPL", "command executed", command_text)
-    return log_item
-
-
-def render_ai_module_intro(module_name, engine_name, description):
-    """Render a restrained module identity line for the unified workspace."""
-    st.markdown(
-        f"""
-        <div class="ai-module-intro" data-module="{html.escape(module_name)}">
-            <div class="ai-module-kicker">{html.escape(module_name)} module</div>
-            <div class="ai-module-title">{html.escape(engine_name)}</div>
-            <div class="ai-module-desc">{html.escape(description)}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def render_streaming_markdown(content, stream=False):
-    """Render assistant content with progressive reveal when safe for Markdown."""
-    content = str(content or "")
-    if not stream or "<" in content:
-        st.markdown(f"<div class='ai-message-reveal'>{content}</div>", unsafe_allow_html=True)
-        return
-    placeholder = st.empty()
-    pieces = re.split(r"(\s+)", content)
-    rendered = ""
-    for piece in pieces:
-        rendered += piece
-        placeholder.markdown(f"<div class='ai-message-reveal'>{html.escape(rendered)}</div>", unsafe_allow_html=True)
-        if piece.strip():
-            time.sleep(0.008)
-
-
-def install_chat_interaction_script():
-    """Focus chat input on activation and keep Enter behavior natural."""
-    render_html_frame(
-        """
-        <script>
-        const root = window.parent ? window.parent.document : document;
-        const focusChat = () => {
-            const chatInput = root.querySelector('textarea[data-testid="stChatInputTextArea"]');
-            if (chatInput && root.body.dataset.activeWorkspaceTab === 'Chat') {
-                chatInput.focus({ preventScroll: true });
-                chatInput.dataset.workspaceEnterHint = 'Enter sends, Shift+Enter creates a newline';
-            }
-        };
-        requestAnimationFrame(focusChat);
-        setTimeout(focusChat, 250);
-        </script>
-        """,
-        height=0,
-    )
 
 
 def empty_chat_summary_downloads():
@@ -4462,6 +4272,215 @@ def render_chat_summary_downloads():
                     mime=item["mime"],
                     key=f"chat_summary_diagram_{index}_{item['file_name']}"
                 )
+
+
+def build_adaptive_document_analysis(file_name, file_bytes, text):
+    raw_text = str(text or "")
+    lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+    words = re.findall(r"\w+", raw_text)
+    title_match = re.search(r"Title:\s*(.+)", raw_text)
+    title = title_match.group(1).strip() if title_match and title_match.group(1).strip() else file_name
+
+    keyword_counts = Counter(
+        word.lower()
+        for word in words
+        if len(word) > 3 and word.lower() not in SUMMARY_STOPWORDS and not word.isdigit()
+    )
+    keywords = [word.title() for word, _ in keyword_counts.most_common(8)]
+    keyword_text = ", ".join(keywords) if keywords else "Not available"
+    page_count, image_count, table_count = get_document_asset_counts(file_name, file_bytes, raw_text)
+
+    ignored_prefixes = (
+        "pdf metadata:", "document metadata:", "meta tags:", "total pages:", "total slides:",
+        "workbook contains", "error:", "[image:", "[embedded_image:", "table:"
+    )
+    metadata_prefixes = (
+        "producer:", "creationdate:", "moddate:", "author:", "creator:", "title:",
+        "subject:", "keywords:", "trapped:", "pdfversion:"
+    )
+
+    def prettify_extracted_text(value):
+        value = str(value or "").strip()
+        if not value:
+            return value
+        value = re.sub(r"([a-z])([A-Z])", r"\1 \2", value)
+        value = re.sub(r"([A-Za-z])(\d)", r"\1 \2", value)
+        value = re.sub(r"(\d)([A-Za-z])", r"\1 \2", value)
+        value = re.sub(r"\s+", " ", value)
+        value = value.replace("e. g.", "e.g.").replace("i. e.", "i.e.")
+        return value.strip()
+
+    keywords = [prettify_extracted_text(keyword) for keyword in keywords]
+    keyword_text = ", ".join(keywords) if keywords else "Not available"
+
+    def clean_content_lines(max_items=12):
+        cleaned = []
+        seen = set()
+        for line in lines:
+            line_lower = line.lower()
+            if line_lower.startswith(ignored_prefixes):
+                continue
+            if line_lower.startswith(metadata_prefixes):
+                continue
+            if len(line) < 8 or len(line) > 240:
+                continue
+            if re.fullmatch(r"[\W_]+", line):
+                continue
+            line = prettify_extracted_text(line)
+            line_lower = line.lower()
+            if line in seen:
+                continue
+            seen.add(line)
+            cleaned.append(line)
+            if len(cleaned) >= max_items:
+                break
+        return cleaned
+
+    key_lines = clean_content_lines(12)
+    headings = extract_document_headings(raw_text)
+    toc_entries = extract_toc_with_page_numbers(raw_text)
+    lower_text = raw_text.lower()
+    file_name_lower = file_name.lower()
+    type_scores = {
+        "technical": sum(1 for term in [
+            "architecture", "system", "module", "component", "workflow", "api", "interface",
+            "configuration", "requirement", "software", "hardware", "capl", "diagnostic", "test"
+        ] if term in lower_text),
+        "business": sum(1 for term in [
+            "strategy", "market", "customer", "revenue", "business", "goal", "objective",
+            "stakeholder", "risk", "cost", "benefit", "performance", "operation"
+        ] if term in lower_text),
+        "research": sum(1 for term in [
+            "abstract", "methodology", "experiment", "hypothesis", "dataset", "findings",
+            "results", "conclusion", "references", "study", "analysis"
+        ] if term in lower_text),
+    }
+    if file_name_lower.endswith((".can", ".capl")):
+        type_scores["technical"] += 4
+    if file_name_lower.endswith((".xlsx", ".html", ".htm")):
+        type_scores["business"] += 1
+    document_type = max(type_scores, key=type_scores.get) if max(type_scores.values() or [0]) > 0 else "general"
+
+    def pick_lines(patterns, limit=5):
+        selected = []
+        seen = set()
+        for line in key_lines + lines:
+            line = prettify_extracted_text(line)
+            if len(line) < 8 or len(line) > 260:
+                continue
+            line_lower = line.lower()
+            if line_lower.startswith(ignored_prefixes) or line_lower.startswith(metadata_prefixes):
+                continue
+            if any(pattern in line_lower for pattern in patterns) and line not in seen:
+                selected.append(line)
+                seen.add(line)
+            if len(selected) >= limit:
+                break
+        return selected
+
+    feature_lines = pick_lines(["feature", "component", "module", "function", "capability", "system", "interface", "configuration"])
+    workflow_lines = pick_lines(["step", "process", "workflow", "flow", "first", "then", "after", "before", "execute", "upload", "select"])
+    use_case_lines = pick_lines(["use case", "application", "used for", "used to", "can be used", "supports", "helps", "enables"])
+    important_note_lines = pick_lines(["warning", "caution", "note", "limit", "constraint", "assumption", "must", "shall", "required", "error"])
+
+    context_bits = []
+    if page_count:
+        context_bits.append(f"{page_count} pages/sections")
+    if image_count:
+        context_bits.append(f"{image_count} images")
+    if table_count:
+        context_bits.append(f"{table_count} tables")
+    context_text = ", ".join(context_bits) if context_bits else f"{len(lines)} content lines"
+
+    def bullet_list(items, fallback):
+        usable_items = [item for item in items if item] or fallback
+        return "<ul>" + "".join(f"<li>{html.escape(str(item))}</li>" for item in usable_items) + "</ul>"
+
+    def section(title_text, body_html):
+        if not body_html:
+            return ""
+        return f"<h4 style='margin:16px 0 6px 0; color:#173152;'>{html.escape(title_text)}</h4>{body_html}"
+
+    structure_items = []
+    if toc_entries:
+        structure_items = [
+            f"{num + ' ' if num else ''}{prettify_extracted_text(heading)}" + (f" - page {page_num}" if page_num else "")
+            for num, heading, page_num in toc_entries[:6]
+        ]
+    elif headings:
+        structure_items = [f"{num + ' ' if num else ''}{prettify_extracted_text(heading)}" for num, heading in headings[:6]]
+    else:
+        structure_items = [
+            "Content is presented as extracted text rather than clearly labeled sections.",
+            f"Detected document assets: {context_text}.",
+        ]
+
+    purpose_by_type = {
+        "technical": "to describe a system, process, implementation, test, or technical capability",
+        "business": "to communicate objectives, operational context, metrics, or decision-oriented information",
+        "research": "to explain a problem, method, evidence, findings, and conclusions",
+        "general": "to present information in a readable and referenceable form",
+    }
+    summary_focus = ", ".join(keywords[:4]) if keywords else "the extracted document content"
+    key_point_items = key_lines[:5] or ["No detailed content lines could be extracted, but document metadata was detected."]
+    insight_items = [
+        f"The document appears to focus on {summary_focus}.",
+        f"It should be read as a {document_type} document.",
+    ]
+    if image_count or table_count:
+        insight_items.append("Visual or tabular assets may contain supporting details that complement the extracted text.")
+    if important_note_lines:
+        insight_items.append("Several lines contain requirements, constraints, warnings, or operational notes.")
+
+    simplified_items = [
+        f"In simple terms, this document is about {summary_focus}.",
+        "It collects the main information a reader needs to understand the topic, context, and next actions.",
+    ]
+    takeaway_items = []
+    if keywords:
+        takeaway_items.append(f"Primary themes: {', '.join(keywords[:5])}.")
+    takeaway_items.extend(key_point_items[:4])
+    takeaway_items = takeaway_items[:5]
+
+    summary_html = (
+        "<div>"
+        f"<div><b>What the document is about:</b> {html.escape(title)}</div>"
+        f"<div><b>Main purpose:</b> {html.escape(purpose_by_type[document_type])}.</div>"
+        f"<div><b>Key context:</b> {html.escape(context_text)}. Detected type: {html.escape(document_type.title())}.</div>"
+        f"<div><b>Important themes:</b> {html.escape(keyword_text)}</div>"
+        "</div>"
+    )
+
+    optional_sections = ""
+    if feature_lines or document_type == "technical":
+        optional_sections += section("Features / Concepts / Components", bullet_list(
+            feature_lines,
+            [f"Relevant concepts include {keyword_text}.", "No explicit feature list was detected in the extracted text."]
+        ))
+    if workflow_lines or document_type == "technical":
+        optional_sections += section("Workflow / Process", bullet_list(
+            workflow_lines,
+            ["No clear step-by-step workflow was detected in the extracted text."]
+        ))
+    if use_case_lines or document_type in ("technical", "business"):
+        optional_sections += section("Use Cases / Applications", bullet_list(
+            use_case_lines,
+            ["Use this document as a reference for understanding the topic, validating details, or planning related work."]
+        ))
+    if important_note_lines:
+        optional_sections += section("Important Notes", bullet_list(important_note_lines, []))
+
+    analysis_sections = [
+        f"<h3 style='margin:0 0 10px 0; color:#173152;'>Document Analysis: {html.escape(file_name)}</h3>",
+        section("Summary", summary_html),
+        section("Key Points", bullet_list(key_point_items, [])),
+        section("Structure Breakdown", bullet_list(structure_items, [])),
+        section("Key Insights / Core Insights", bullet_list(insight_items, [])),
+        optional_sections,
+        section("Simplified Explanation", bullet_list(simplified_items, [])),
+        section("Key Takeaways", bullet_list(takeaway_items, [])),
+    ]
+    return "<div style='margin-bottom:18px; line-height:1.5;'>" + "".join(analysis_sections) + "</div>"
 
 
 def build_product_documentation_analysis(file_name, file_bytes, text):
@@ -5014,6 +5033,17 @@ def build_item_visual_response(file_name, text, item_name):
 # Document structure helpers:
 # Used by the Chat "overview" flow and preview links to identify headings,
 # table-of-contents entries, and likely page numbers inside uploaded documents.
+def extract_page_text(text, page_number=1):
+    text = str(text)
+    pattern = rf"Page {page_number}\s+Text:\s*(.*?)(?=Page \d+\s+Text:|\Z)"
+    match = re.search(pattern, text, re.S | re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    return "\n".join(lines[:80])
+
+
 def find_heading_page_number(text, heading):
     text = str(text)
     lines = [line for line in text.splitlines()]
@@ -5127,6 +5157,50 @@ def extract_toc_with_page_numbers(text):
                         break
             toc_entries.append((num, title, page_num))
     return toc_entries
+
+
+def build_file_overview(file_name, text):
+    text = str(text)
+    toc_entries = extract_toc_with_page_numbers(text)
+    all_headings = extract_document_headings(text)
+
+    overview_parts = [f"📄 **{file_name}**"]
+    
+    # Table of Contents section
+    overview_parts.append("### Table of Contents")
+    if toc_entries:
+        overview_parts.append("| Contents | Page No |")
+        overview_parts.append("|----------|---------|")
+        for num, title, page_num in toc_entries:
+            content_str = f"{num} {title}" if num else title
+            display_text = f"{content_str} (Page {page_num})" if page_num else content_str
+            preview_link = create_preview_link(file_name, highlight_term=title, page_num=page_num)
+            anchor_id = create_heading_anchor(title)
+            if preview_link:
+                page_display = page_num if page_num else "-"
+                overview_parts.append(f"| <a href='{preview_link}#{anchor_id}' target='_blank'>{html.escape(display_text)}</a> | {page_display} |")
+            else:
+                page_display = page_num if page_num else "-"
+                overview_parts.append(f"| {html.escape(display_text)} | {page_display} |")
+    else:
+        overview_parts.append("- No table of contents found with page numbers.")
+
+    # Document Headings section
+    overview_parts.append("### Document Headings")
+    if all_headings:
+        for num, title in all_headings:
+            content_str = f"{num} {title}" if num else title
+            anchor_id = create_heading_anchor(title)
+            page_num = resolve_heading_page_number(text, title, toc_entries)
+            preview_link = create_preview_link(file_name, highlight_term=title, page_num=page_num)
+            if preview_link:
+                overview_parts.append(f"- <a href='{preview_link}#{anchor_id}' target='_blank'>{html.escape(content_str)}</a>")
+            else:
+                overview_parts.append(f"- {content_str}")
+    else:
+        overview_parts.append("- No document headings were detected.")
+
+    return "\n".join(overview_parts)
 
 
 @st.cache_data(show_spinner=False)
@@ -6556,6 +6630,16 @@ def render_file_context_card(title, available_files, active_files=None):
 
 
 
+# Floating icon function removed - helper is now triggered by header 🧠 icon
+
+
+# Define keywords for each tab
+tab_keywords = {
+    "chat": ["overview", "summary", "count", "find", "analyze", "explain", "details", "questions"],
+    "dashboard": ["statistics", "trends", "charts", "metrics", "data", "visualize", "insights"],
+    "compare": ["differences", "compare", "changes", "merge", "diff", "side-by-side", "inline"],
+    "capl": ["syntax", "variables", "functions", "errors", "debug", "code", "fix", "suggestions"]
+}
 
 
 def track_user_behavior(tab_name):
@@ -6804,54 +6888,49 @@ st.markdown("""
         gap: 8px;
         display: flex;
         margin: 0 !important;
-        padding: 0 0 8px !important;
-        border-bottom: 1px solid #e2e8f0;
+        padding: 0 !important;
     }
     .st-key-active_main_tab {
-        margin-top: 6px !important;
-        margin-bottom: 16px !important;
+        margin-top: 8px !important;
+        margin-bottom: 8px !important;
     }
 
     /* Base Pill Styling */
     div[role="radiogroup"] > label {
-        background-color: #ffffff !important;
-        padding: 7px 16px !important;
-        border-radius: 10px !important;
-        border: 1px solid #e2e8f0 !important;
+        background-color: rgba(128, 128, 128, 0.08) !important;
+        padding: 6px 18px !important;
+        border-radius: 50px !important;
+        border: 1px solid rgba(128, 128, 128, 0.1) !important;
         display: flex !important;
         align-items: center !important;
-        height: 40px;
-        min-height: 40px !important;
-        font-weight: 650;
-        color: #475569 !important;
+        height: 38px;
+        min-height: 38px !important;
+        font-weight: 500;
         line-height: 1.1 !important;
-        box-shadow: none !important;
-        transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+        transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
     }
 
-    /* Active State - Premium Soft Blue */
+    /* Active State - Deep Electric Blue */
     div[role="radiogroup"] > label[data-checked="true"] {
-        background-color: #eff6ff !important;
-        color: #2563eb !important;
-        border-color: #bfdbfe !important;
-        box-shadow: inset 0 -2px 0 #2563eb !important;
+        background-color: #1E88E5 !important;
+        color: #F6F9FF !important;
+        box-shadow: 0 4px 15px rgba(30, 136, 229, 0.4);
     }
 
-    /* Dot Base Style - Subtle Status Dot */
+    /* Dot Base Style - Soft Glow */
     div[role="radiogroup"] > label::after {
         content: '';
-        margin-left: 10px;
-        width: 5px;
-        height: 5px;
+        margin-left: 12px;
+        width: 6px;
+        height: 6px;
         border-radius: 50%;
-        opacity: 0.58;
+        filter: blur(0.4px); /* Softens the edges */
     }
 
     /* White Dot for Active Tab */
     div[role="radiogroup"] > label[data-checked="true"]::after {
-        background-color: #2563eb !important;
-        box-shadow: none !important;
-        opacity: 1;
+        background-color: #F6F9FF !important;
+        box-shadow: 0 0 8px #ffffff;
     }
 
     /* --- UPDATED PREMIUM COLORS --- */
@@ -6887,11 +6966,11 @@ st.markdown("""
     @media (min-width: 768px) {
         div[role="radiogroup"] {
             flex-direction: row !important;
-            justify-content: flex-start;
+            justify-content: center;
         }
         div[role="radiogroup"] > label {
             flex: 0 0 auto;
-            min-width: 116px;
+            min-width: 112px;
         }
     }
 
@@ -6919,43 +6998,6 @@ st.markdown("""
         div[role="radiogroup"] > label::after {
             margin-left: 8px;
         }
-    }
-
-    /* Premium chat input and message actions */
-    [data-testid="stChatInput"] {
-        border-top: 1px solid #e2e8f0 !important;
-        padding-top: 12px !important;
-        margin-top: 12px !important;
-    }
-    [data-testid="stChatInput"] textarea {
-        border-radius: 10px !important;
-        border: 1px solid #cbd5e1 !important;
-        padding: 9px 12px !important;
-        font-size: 0.9rem !important;
-        box-shadow: none !important;
-    }
-    [data-testid="stChatInput"] button {
-        background: #2563eb !important;
-        color: #ffffff !important;
-        border: 1px solid #2563eb !important;
-        border-radius: 8px !important;
-        box-shadow: none !important;
-    }
-    [class*="st-key-regenerate_ai_"] button {
-        min-height: auto !important;
-        padding: 2px 0 !important;
-        border: 0 !important;
-        background: transparent !important;
-        color: #94a3b8 !important;
-        box-shadow: none !important;
-        font-size: 0.76rem !important;
-        font-weight: 600 !important;
-    }
-    [class*="st-key-regenerate_ai_"] button:hover {
-        color: #2563eb !important;
-        background: transparent !important;
-        transform: none !important;
-        box-shadow: none !important;
     }
 
     /* Touch-friendly buttons on mobile */
@@ -7230,19 +7272,18 @@ st.markdown("""
     }
 
     .st-key-active_main_tab div[role="radiogroup"] > label[data-checked="true"] {
-        background: #eff6ff !important;
-        border: 1px solid #bfdbfe !important;
-        color: #2563eb !important;
+        background: linear-gradient(135deg, #dbeafe 0%, #e0f2fe 48%, #ede9fe 100%) !important;
+        border: 2px solid #60a5fa !important;
+        color: #0f172a !important;
         font-weight: 800 !important;
-        transform: none;
-        animation: none;
-        box-shadow: inset 0 -2px 0 #2563eb !important;
+        transform: translateY(-1px);
+        animation: selectedPillGlow 2.2s ease-in-out infinite;
     }
 
     .st-key-active_main_tab div[role="radiogroup"] > label[data-checked="true"] p,
     .st-key-dashboard_chart_type div[role="radiogroup"] > label[data-checked="true"] p,
     .st-key-dashboard_bar_orientation div[role="radiogroup"] > label[data-checked="true"] p {
-        color: #2563eb !important;
+        color: #0f172a !important;
         font-weight: 800 !important;
     }
 
@@ -7276,141 +7317,6 @@ st.markdown("""
             animation-duration: 0.01ms !important;
             animation-iteration-count: 1 !important;
             transition-duration: 0.01ms !important;
-        }
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-st.markdown("""
-    <style>
-    /* Premium glass sliding navigation: main tabs only */
-    .st-key-active_main_tab {
-        margin-top: 6px !important;
-        margin-bottom: 16px !important;
-    }
-    .st-key-active_main_tab div[role="radiogroup"] {
-        position: relative !important;
-        display: flex !important;
-        flex-direction: row !important;
-        align-items: center !important;
-        justify-content: flex-start !important;
-        gap: 28px !important;
-        width: 100% !important;
-        padding: 4px 0 12px !important;
-        margin: 0 !important;
-        border-bottom: 1px solid #e5e7eb !important;
-        background: transparent !important;
-        overflow: visible !important;
-    }
-    .st-key-active_main_tab div[role="radiogroup"] > label {
-        position: relative !important;
-        z-index: 2 !important;
-        min-width: auto !important;
-        width: auto !important;
-        height: auto !important;
-        min-height: 32px !important;
-        padding: 0 !important;
-        border: 0 !important;
-        border-radius: 0 !important;
-        background: transparent !important;
-        color: #6b7280 !important;
-        box-shadow: none !important;
-        font-size: 0.94rem !important;
-        font-weight: 650 !important;
-        line-height: 1.2 !important;
-        cursor: pointer !important;
-        transform: translateY(0) scale(1) !important;
-        transition:
-            color 220ms cubic-bezier(0.22, 1, 0.36, 1),
-            transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
-            text-shadow 260ms ease !important;
-    }
-    .st-key-active_main_tab div[role="radiogroup"] > label::before,
-    .st-key-active_main_tab div[role="radiogroup"] > label::after {
-        display: none !important;
-        content: none !important;
-    }
-    .st-key-active_main_tab div[role="radiogroup"] > label:hover {
-        color: #2563eb !important;
-        transform: translateY(-1px) scale(1.06) !important;
-        text-shadow: 0 8px 20px rgba(59, 130, 246, 0.18) !important;
-    }
-    .st-key-active_main_tab div[role="radiogroup"] > label[data-checked="true"] {
-        color: #2563eb !important;
-        background: transparent !important;
-        border: 0 !important;
-        box-shadow: none !important;
-        transform: translateY(-1px) scale(1.03) !important;
-        text-shadow: 0 8px 22px rgba(59, 130, 246, 0.26) !important;
-        animation: none !important;
-    }
-    .st-key-active_main_tab div[role="radiogroup"] > label p {
-        color: inherit !important;
-        font-weight: inherit !important;
-        margin: 0 !important;
-        transition: inherit !important;
-    }
-    .st-key-active_main_tab .tab-glass-indicator {
-        position: absolute;
-        z-index: 1;
-        left: 0;
-        bottom: -1px;
-        width: 48px;
-        height: 3px;
-        border-radius: 999px;
-        pointer-events: none;
-        background: linear-gradient(90deg, rgba(147, 197, 253, 0.14), rgba(59, 130, 246, 0.92), rgba(147, 197, 253, 0.16));
-        box-shadow:
-            0 0 18px rgba(59, 130, 246, 0.56),
-            0 0 36px rgba(59, 130, 246, 0.34);
-        transform: translate3d(var(--tab-glow-x, 0px), 0, 0);
-        transition:
-            transform 480ms cubic-bezier(0.34, 1.56, 0.64, 1),
-            width 480ms cubic-bezier(0.34, 1.56, 0.64, 1);
-        animation: tabGlowBreath 2.8s ease-in-out infinite;
-    }
-    .st-key-active_main_tab .tab-glass-indicator::before {
-        content: "";
-        position: absolute;
-        left: -10px;
-        right: -10px;
-        top: -7px;
-        bottom: -9px;
-        border-radius: 999px;
-        background: rgba(59, 130, 246, 0.28);
-        filter: blur(8px);
-        opacity: 0.85;
-    }
-    .st-key-active_main_tab .tab-glass-indicator::after {
-        content: "";
-        position: absolute;
-        left: 10%;
-        right: 10%;
-        top: 0;
-        height: 1px;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.72);
-        filter: blur(0.2px);
-    }
-    @keyframes tabGlowBreath {
-        0%, 100% {
-            opacity: 0.78;
-            filter: saturate(1);
-        }
-        50% {
-            opacity: 1;
-            filter: saturate(1.18);
-        }
-    }
-    @media (max-width: 767px) {
-        .st-key-active_main_tab div[role="radiogroup"] {
-            gap: 16px !important;
-            flex-wrap: wrap !important;
-            padding-bottom: 12px !important;
-        }
-        .st-key-active_main_tab div[role="radiogroup"] > label {
-            font-size: 0.9rem !important;
-            min-height: 30px !important;
         }
     }
     </style>
@@ -7601,683 +7507,21 @@ st.markdown(
 )
 
 
-st.markdown(
-    """
-    <style>
-    /* Premium AI workspace skin: applied after the legacy dashboard styles. */
-    :root {
-        color-scheme: light;
-        --workspace-bg: #fbfcfe;
-        --workspace-surface: rgba(255, 255, 255, 0.78);
-        --workspace-text: #111827;
-        --workspace-muted: #6b7280;
-        --workspace-line: rgba(17, 24, 39, 0.07);
-        --workspace-blue: #2563eb;
-        --workspace-blue-soft: rgba(37, 99, 235, 0.12);
-    }
-
-    html,
-    body,
-    .stApp,
-    div[data-testid="stAppViewContainer"] {
-        color-scheme: light !important;
-        background:
-            radial-gradient(circle at 48% -18%, rgba(96, 165, 250, 0.12), transparent 34rem),
-            linear-gradient(180deg, #ffffff 0%, var(--workspace-bg) 52%, #f8fafc 100%) !important;
-        color: var(--workspace-text) !important;
-    }
-
-    section.main .block-container,
-    .main .block-container,
-    div[data-testid="stMain"] .block-container {
-        max-width: 1180px !important;
-        margin: 0 auto !important;
-        padding: 0.65rem clamp(1rem, 3vw, 2.4rem) 3rem !important;
-    }
-
-    .premium-ai-workspace section.main .block-container > div[data-testid="stVerticalBlock"],
-    .premium-ai-workspace div[data-testid="stMain"] .block-container > div[data-testid="stVerticalBlock"] {
-        position: relative !important;
-        isolation: isolate !important;
-    }
-
-    .workspace-state-anchor {
-        display: block;
-        height: 0;
-        margin: 0;
-        padding: 0;
-        overflow: hidden;
-    }
-
-    .ai-module-intro {
-        padding: 0.35rem 0 1.05rem;
-        border-bottom: 1px solid rgba(15, 23, 42, 0.055);
-        margin-bottom: 1rem;
-        animation: premiumViewIn 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
-    }
-
-    .ai-module-kicker {
-        color: #2563eb;
-        font-size: 0.78rem;
-        font-weight: 700;
-        letter-spacing: 0;
-        margin-bottom: 0.15rem;
-    }
-
-    .ai-module-title {
-        color: #111827;
-        font-size: 1.2rem;
-        font-weight: 760;
-        letter-spacing: 0;
-        line-height: 1.2;
-    }
-
-    .ai-module-desc {
-        color: #64748b;
-        font-size: 0.92rem;
-        margin-top: 0.18rem;
-        max-width: 760px;
-    }
-
-    .ai-flow-intelligence {
-        display: grid;
-        gap: 1.1rem;
-        margin: 0.8rem 0 1.4rem;
-    }
-
-    .ai-flow-block {
-        padding: 0.2rem 0 0.9rem;
-        border-bottom: 1px solid rgba(15, 23, 42, 0.055);
-    }
-
-    .ai-flow-block h3 {
-        margin: 0 0 0.35rem;
-        color: #111827;
-        font-size: 1rem;
-        letter-spacing: 0;
-    }
-
-    .ai-flow-block p {
-        margin: 0.26rem 0;
-        color: #475569;
-        line-height: 1.55;
-    }
-
-    .ai-message-row,
-    .ai-message-reveal {
-        animation: premiumMessageIn 210ms cubic-bezier(0.22, 1, 0.36, 1) both;
-    }
-
-    @keyframes premiumMessageIn {
-        from {
-            opacity: 0;
-            transform: translateY(5px);
-            filter: blur(1.5px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-            filter: blur(0);
-        }
-    }
-
-    [data-testid="stSidebar"],
-    .stSidebar {
-        background: rgba(248, 250, 252, 0.64) !important;
-        border-right: 0 !important;
-        box-shadow: none !important;
-        backdrop-filter: blur(16px) saturate(1.08);
-    }
-
-    [data-testid="stSidebar"] > div {
-        background: transparent !important;
-        border-right: 1px solid rgba(15, 23, 42, 0.045) !important;
-        box-shadow: none !important;
-    }
-
-    [data-testid="stSidebar"] hr,
-    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] hr {
-        border: 0 !important;
-        border-top: 1px solid rgba(15, 23, 42, 0.06) !important;
-        margin: 1.05rem 0 !important;
-    }
-
-    [data-testid="stSidebar"] h1,
-    [data-testid="stSidebar"] h2,
-    [data-testid="stSidebar"] h3,
-    [data-testid="stSidebar"] .stMarkdown {
-        color: #475569 !important;
-    }
-
-    [data-testid="stSidebar"] .stAlert {
-        background: transparent !important;
-        border: 0 !important;
-        box-shadow: none !important;
-        color: #64748b !important;
-        padding: 0.45rem 0 !important;
-    }
-
-    .app-card,
-    .metric-card,
-    .file-box,
-    .helper-next-action,
-    div[data-testid="stExpander"],
-    [data-testid="stMetric"] {
-        border-color: rgba(15, 23, 42, 0.06) !important;
-        box-shadow: none !important;
-    }
-
-    .app-card,
-    .metric-card {
-        background: transparent !important;
-        border: 0 !important;
-        border-radius: 0 !important;
-        padding: 1rem 0 !important;
-    }
-
-    div[data-testid="stExpander"] {
-        background: rgba(255, 255, 255, 0.54) !important;
-        border-radius: 8px !important;
-    }
-
-    .stAlert {
-        border: 0 !important;
-        border-left: 1px solid rgba(37, 99, 235, 0.16) !important;
-        border-radius: 0 !important;
-        background: rgba(255, 255, 255, 0.58) !important;
-        box-shadow: none !important;
-    }
-
-    .stButton > button,
-    div.stButton > button,
-    button[kind="secondary"],
-    button[kind="tertiary"] {
-        border: 0 !important;
-        border-radius: 8px !important;
-        background: transparent !important;
-        color: #334155 !important;
-        box-shadow: none !important;
-        transition:
-            transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
-            color 220ms ease,
-            background-color 220ms ease !important;
-    }
-
-    .stButton > button:hover,
-    div.stButton > button:hover,
-    button[kind="secondary"]:hover,
-    button[kind="tertiary"]:hover {
-        transform: translateY(-1px) scale(1.03) !important;
-        color: var(--workspace-blue) !important;
-        background: rgba(37, 99, 235, 0.055) !important;
-        box-shadow: none !important;
-    }
-
-    button[kind="primary"],
-    .stButton > button[kind="primary"] {
-        border: 0 !important;
-        background: rgba(37, 99, 235, 0.09) !important;
-        color: #1d4ed8 !important;
-        box-shadow: none !important;
-    }
-
-    button:focus-visible,
-    a:focus-visible,
-    input:focus-visible,
-    textarea:focus-visible,
-    select:focus-visible,
-    [role="button"]:focus-visible,
-    div[role="radiogroup"] > label:focus-within {
-        outline: 0 !important;
-        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14) !important;
-    }
-
-    div[role="radiogroup"] {
-        gap: 1.15rem !important;
-        border: 0 !important;
-        background: transparent !important;
-    }
-
-    div[role="radiogroup"] > label {
-        border: 0 !important;
-        border-radius: 0 !important;
-        background: transparent !important;
-        box-shadow: none !important;
-        color: #64748b !important;
-        min-height: 30px !important;
-        height: auto !important;
-        padding: 0 !important;
-        transition:
-            color 240ms cubic-bezier(0.22, 1, 0.36, 1),
-            transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1) !important;
-    }
-
-    div[role="radiogroup"] > label::after {
-        display: none !important;
-        content: none !important;
-    }
-
-    div[role="radiogroup"] > label:hover {
-        transform: translateY(-1px) scale(1.03) !important;
-        color: var(--workspace-blue) !important;
-        background: transparent !important;
-    }
-
-    div[role="radiogroup"] > label[data-checked="true"] {
-        border: 0 !important;
-        background: transparent !important;
-        box-shadow: none !important;
-        color: var(--workspace-blue) !important;
-    }
-
-    div[role="radiogroup"] > label[data-checked="true"] p {
-        color: var(--workspace-blue) !important;
-        font-weight: 700 !important;
-    }
-
-    [data-testid="stSidebar"] [class*="st-key-select_file_"] button[kind="primary"],
-    [data-testid="stSidebar"] [class*="st-key-select_file_"] button[kind="secondary"] {
-        background: transparent !important;
-        border: 0 !important;
-        border-radius: 8px !important;
-        color: #475569 !important;
-        min-height: 58px !important;
-        box-shadow: none !important;
-    }
-
-    [data-testid="stSidebar"] [class*="st-key-select_file_"] button[kind="primary"] {
-        color: #1d4ed8 !important;
-        background: rgba(37, 99, 235, 0.06) !important;
-    }
-
-    [data-testid="stSidebar"] div[data-testid="stLinkButton"] a {
-        border: 0 !important;
-        background: transparent !important;
-        color: #64748b !important;
-        box-shadow: none !important;
-    }
-
-    [data-testid="stSidebar"] div[data-testid="stLinkButton"] a:hover {
-        background: rgba(37, 99, 235, 0.055) !important;
-        color: #1d4ed8 !important;
-    }
-
-    .compact-header-divider {
-        background: rgba(15, 23, 42, 0.055) !important;
-        margin: 0 0 12px !important;
-    }
-
-    .app-header-main {
-        color: #111827 !important;
-        letter-spacing: 0 !important;
-    }
-
-    .app-header-subtitle {
-        color: #6b7280 !important;
-    }
-
-    /* Text-only glass motion navigation. */
-    .st-key-active_main_tab {
-        margin: 0.45rem 0 1.3rem !important;
-        position: relative !important;
-    }
-
-    .st-key-active_main_tab div[role="radiogroup"] {
-        position: relative !important;
-        display: flex !important;
-        flex-direction: row !important;
-        align-items: center !important;
-        justify-content: flex-start !important;
-        gap: clamp(1.25rem, 4vw, 3rem) !important;
-        width: 100% !important;
-        padding: 0 0 0.9rem !important;
-        margin: 0 !important;
-        border: 0 !important;
-        border-bottom: 1px solid var(--workspace-line) !important;
-        background: transparent !important;
-        overflow: visible !important;
-    }
-
-    .st-key-active_main_tab div[role="radiogroup"] > label {
-        position: relative !important;
-        z-index: 2 !important;
-        flex: 0 0 auto !important;
-        min-width: auto !important;
-        width: auto !important;
-        min-height: 30px !important;
-        height: auto !important;
-        padding: 0 !important;
-        border: 0 !important;
-        border-radius: 0 !important;
-        background: transparent !important;
-        color: #737b8c !important;
-        box-shadow: none !important;
-        font-size: 0.95rem !important;
-        font-weight: 620 !important;
-        letter-spacing: 0 !important;
-        line-height: 1.2 !important;
-        cursor: pointer !important;
-        transform: translateY(0) scale(1) !important;
-        transition:
-            color 260ms cubic-bezier(0.22, 1, 0.36, 1),
-            transform 360ms cubic-bezier(0.34, 1.56, 0.64, 1),
-            text-shadow 280ms ease !important;
-    }
-
-    .st-key-active_main_tab div[role="radiogroup"] > label > div:first-child,
-    .st-key-active_main_tab div[role="radiogroup"] > label::before,
-    .st-key-active_main_tab div[role="radiogroup"] > label::after {
-        display: none !important;
-        content: none !important;
-    }
-
-    .st-key-active_main_tab div[role="radiogroup"] > label:hover {
-        color: var(--workspace-blue) !important;
-        transform: translateY(-1px) scale(1.04) !important;
-        text-shadow: 0 8px 24px rgba(37, 99, 235, 0.14) !important;
-    }
-
-    .st-key-active_main_tab div[role="radiogroup"] > label[data-checked="true"] {
-        background: transparent !important;
-        border: 0 !important;
-        color: var(--workspace-blue) !important;
-        box-shadow: none !important;
-        transform: translateY(-1px) scale(1.025) !important;
-        text-shadow: 0 8px 24px rgba(37, 99, 235, 0.22) !important;
-        animation: activeTabBreath 3s ease-in-out infinite !important;
-    }
-
-    .st-key-active_main_tab div[role="radiogroup"] > label p {
-        color: inherit !important;
-        font-weight: inherit !important;
-        margin: 0 !important;
-        transition: inherit !important;
-    }
-
-    .st-key-active_main_tab .tab-glass-indicator {
-        position: absolute !important;
-        z-index: 1 !important;
-        left: 0 !important;
-        bottom: -1px !important;
-        width: 44px;
-        height: 3px;
-        border-radius: 999px;
-        pointer-events: none;
-        background: linear-gradient(90deg, rgba(147, 197, 253, 0.12), rgba(37, 99, 235, 0.95), rgba(147, 197, 253, 0.14)) !important;
-        box-shadow: 0 0 20px rgba(37, 99, 235, 0.48), 0 0 42px rgba(37, 99, 235, 0.25) !important;
-        transform: translate3d(var(--tab-glow-x, 0px), 0, 0);
-        will-change: transform, width, opacity, filter;
-        transition:
-            opacity 180ms ease,
-            filter 180ms ease !important;
-        animation: tabGlowBreath 2.8s ease-in-out infinite !important;
-    }
-
-    .st-key-active_main_tab .tab-glass-indicator::before {
-        content: "";
-        position: absolute;
-        left: -14px;
-        right: -14px;
-        top: -9px;
-        bottom: -10px;
-        border-radius: 999px;
-        background: rgba(37, 99, 235, 0.26);
-        filter: blur(9px);
-        opacity: 0.88;
-    }
-
-    .st-key-active_main_tab .tab-glass-indicator::after {
-        content: "";
-        position: absolute;
-        left: 12%;
-        right: 12%;
-        top: 0;
-        height: 1px;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.78);
-    }
-
-    @keyframes activeTabBreath {
-        0%, 100% { text-shadow: 0 8px 24px rgba(37, 99, 235, 0.18); }
-        50% { text-shadow: 0 10px 30px rgba(37, 99, 235, 0.32); }
-    }
-
-    @keyframes premiumViewIn {
-        from {
-            opacity: 0;
-            transform: translateY(6px);
-            filter: blur(2px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-            filter: blur(0);
-        }
-    }
-
-    .premium-view-swap section.main .block-container > div[data-testid="stVerticalBlock"] {
-        animation: premiumViewIn 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
-    }
-
-    @media (max-width: 767px) {
-        .st-key-active_main_tab div[role="radiogroup"] {
-            gap: 1rem !important;
-            flex-wrap: wrap !important;
-            justify-content: flex-start !important;
-        }
-        .st-key-active_main_tab div[role="radiogroup"] > label {
-            flex: 0 0 auto !important;
-            min-width: auto !important;
-            font-size: 0.92rem !important;
-        }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-        .st-key-active_main_tab .tab-glass-indicator,
-        .st-key-active_main_tab div[role="radiogroup"] > label,
-        .premium-view-swap section.main .block-container > div[data-testid="stVerticalBlock"] {
-            animation: none !important;
-            transition-duration: 0.01ms !important;
-        }
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-
 # -------------------------------
-# WORKSPACE STATE CONTROLLER
+# MAIN TAB NAVIGATION
 # -------------------------------
-# Chat, Dashboard, Compare, and CAPL remain in one Streamlit workspace.
-# This control changes active view state; it does not create routes or pages.
-main_tab_options = ["Chat", "Dashboard", "Compare", "CAPL"]
-legacy_tab_label_map = {
-    "💬 Chat": "Chat",
-    "📊 Dashboard": "Dashboard",
-    "📂 Compare": "Compare",
-    "📡 CAPL": "CAPL",
-}
-st.session_state.active_main_tab = legacy_tab_label_map.get(
-    st.session_state.get("active_main_tab", "Chat"),
-    st.session_state.get("active_main_tab", "Chat"),
-)
-if st.session_state.active_main_tab not in main_tab_options:
-    st.session_state.active_main_tab = "Chat"
+# Creates the horizontal tab navigation with custom styling.
+# Each tab corresponds to a major feature area of the application.
+main_tab_options = ["💬 Chat", "📊 Dashboard", "📂 Compare", "📡 CAPL"]
 active_main_tab = st.radio("Open Section", main_tab_options, horizontal=True, key="active_main_tab", label_visibility="collapsed")
-st.markdown(
-    f"<span class='workspace-state-anchor' data-active-view='{html.escape(active_main_tab)}'></span>",
-    unsafe_allow_html=True,
-)
-render_html_frame(
-    """
-    <script>
-    const getSpringState = (root) => {
-        const win = root.defaultView || window;
-        if (!win.__intelliDocTabSpring) {
-            let storedX = Number(win.sessionStorage.getItem('intelliDocTabIndicatorX'));
-            let storedW = Number(win.sessionStorage.getItem('intelliDocTabIndicatorW'));
-            win.__intelliDocTabSpring = {
-                x: Number.isFinite(storedX) ? storedX : 0,
-                width: Number.isFinite(storedW) ? storedW : 44,
-                vx: 0,
-                vw: 0,
-                raf: null,
-                targetX: 0,
-                targetWidth: 44
-            };
-        }
-        return win.__intelliDocTabSpring;
-    };
-
-    const applyIndicatorFrame = (indicator, state) => {
-        indicator.style.width = `${Math.max(24, state.width)}px`;
-        indicator.style.setProperty('--tab-glow-x', `${state.x}px`);
-        indicator.style.transform = `translate3d(${state.x}px, 0, 0)`;
-    };
-
-    const animateIndicatorSpring = (root, indicator, targetX, targetWidth) => {
-        const win = root.defaultView || window;
-        const state = getSpringState(root);
-        state.targetX = targetX;
-        state.targetWidth = targetWidth;
-
-        if (state.raf) {
-            win.cancelAnimationFrame(state.raf);
-            state.raf = null;
-        }
-
-        const stiffness = 0.22;
-        const damping = 0.74;
-        const settleDistance = 0.08;
-        const settleVelocity = 0.08;
-
-        const step = () => {
-            const dx = state.targetX - state.x;
-            const dw = state.targetWidth - state.width;
-            state.vx = (state.vx + dx * stiffness) * damping;
-            state.vw = (state.vw + dw * stiffness) * damping;
-            state.x += state.vx;
-            state.width += state.vw;
-
-            applyIndicatorFrame(indicator, state);
-
-            const settled =
-                Math.abs(dx) < settleDistance &&
-                Math.abs(dw) < settleDistance &&
-                Math.abs(state.vx) < settleVelocity &&
-                Math.abs(state.vw) < settleVelocity;
-
-            if (settled) {
-                state.x = state.targetX;
-                state.width = state.targetWidth;
-                state.vx = 0;
-                state.vw = 0;
-                applyIndicatorFrame(indicator, state);
-                win.sessionStorage.setItem('intelliDocTabIndicatorX', String(state.x));
-                win.sessionStorage.setItem('intelliDocTabIndicatorW', String(state.width));
-                state.raf = null;
-                return;
-            }
-
-            state.raf = win.requestAnimationFrame(step);
-        };
-
-        state.raf = win.requestAnimationFrame(step);
-    };
-
-    const installGlassTabIndicator = () => {
-        const root = window.parent ? window.parent.document : document;
-        const wrapper = root.querySelector('.st-key-active_main_tab');
-        const group = wrapper ? wrapper.querySelector('div[role="radiogroup"]') : null;
-        if (!wrapper || !group) return;
-
-        let indicator = wrapper.querySelector('.tab-glass-indicator');
-        if (!indicator) {
-            indicator = root.createElement('div');
-            indicator.className = 'tab-glass-indicator';
-            group.appendChild(indicator);
-        }
-
-        const checked = group.querySelector('label[data-checked="true"]') || group.querySelector('label');
-        if (!checked) return;
-
-        const groupRect = group.getBoundingClientRect();
-        const tabRect = checked.getBoundingClientRect();
-        const lineWidth = Math.max(28, tabRect.width * 0.72);
-        const x = tabRect.left - groupRect.left + (tabRect.width - lineWidth) / 2;
-
-        if (root.body) {
-            root.body.classList.add('premium-ai-workspace', 'premium-workspace-ready');
-        }
-        group.dataset.activeView = (checked.innerText || checked.textContent || '').trim().toLowerCase();
-        indicator.dataset.layoutId = 'workspace-tab-glass-indicator';
-        indicator.setAttribute('aria-hidden', 'true');
-
-        const win = root.defaultView || window;
-        const reducedMotion = win.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        const hasStoredFrame =
-            win.sessionStorage.getItem('intelliDocTabIndicatorX') !== null &&
-            win.sessionStorage.getItem('intelliDocTabIndicatorW') !== null;
-        const state = getSpringState(root);
-        if (reducedMotion || (!indicator.dataset.hasMounted && !hasStoredFrame)) {
-            state.x = x;
-            state.width = lineWidth;
-            state.vx = 0;
-            state.vw = 0;
-            applyIndicatorFrame(indicator, state);
-            indicator.dataset.hasMounted = 'true';
-        } else {
-            animateIndicatorSpring(root, indicator, x, lineWidth);
-        }
-
-        const activeLabel = (checked.innerText || checked.textContent || '').trim();
-        if (root.body && root.body.dataset.activeWorkspaceTab !== activeLabel) {
-            root.body.dataset.activeWorkspaceTab = activeLabel;
-            root.body.classList.remove('premium-view-swap');
-            void root.body.offsetWidth;
-            root.body.classList.add('premium-view-swap');
-            win.setTimeout(() => {
-                root.body.classList.remove('premium-view-swap');
-            }, 260);
-        }
-    };
-
-    const scheduleGlassTabs = () => {
-        requestAnimationFrame(installGlassTabIndicator);
-        setTimeout(installGlassTabIndicator, 120);
-        setTimeout(installGlassTabIndicator, 360);
-    };
-
-    scheduleGlassTabs();
-    if (window.parent && window.parent.document) {
-        const observer = new MutationObserver(scheduleGlassTabs);
-        observer.observe(window.parent.document.body, {
-            childList: true,
-            subtree: true,
-            attributes: true,
-            attributeFilter: ['data-checked', 'class', 'style']
-        });
-        window.parent.addEventListener('resize', scheduleGlassTabs);
-    }
-    </script>
-    """,
-    height=0,
-)
 
 # -------------------------------
-# WORKSPACE VIEW: CHAT
+# TAB 1: CHAT
 # -------------------------------
-# Chat view:
-# Handles per-view file selection, direct commands like summarize/find/count,
+# Chat tab:
+# Handles per-tab file selection, direct commands like summarize/find/count,
 # semantic Q&A via vector search, and chat-specific download assets.
-if active_main_tab == "Chat":
-    render_ai_module_intro(
-        "Chat",
-        "Conversational intelligence engine",
-        "Persistent workspace conversation with shared document memory and live context for the other AI modules.",
-    )
-    install_chat_interaction_script()
+if active_main_tab == "💬 Chat":
     chat_header_col, chat_reset_col = st.columns([8, 1])
     with chat_header_col:
         st.subheader("Chat with Selected Documents")
@@ -8310,19 +7554,14 @@ if active_main_tab == "Chat":
                 ensure_files_processed(chat_files)
             combined_text = "\n".join([st.session_state.file_texts.get(f, "") for f in chat_files])
     
-            regenerated_prompt = st.session_state.pop("chat_regenerate_prompt", None)
-            user_input = regenerated_prompt or st.chat_input("Type your message...")
+            user_input = st.chat_input("Ask something... Try: analyze, item details \"VN1630A\", pin diagram \"D-SUB9\", find \"keyword\", count \"signal\", overview")
             if user_input:
                 if user_input.strip().lower() == "clear":
                     st.session_state.messages = []
                     st.session_state.chat_summary_downloads = empty_chat_summary_downloads()
-                    st.session_state.workspace_memory["chat"] = []
-                    save_workspace_memory()
                     st.success("✅ Chat cleared!")
                 else:
                     st.session_state.messages.append({"role": "user", "content": user_input})
-                    st.session_state.workspace_memory["chat"] = st.session_state.messages[-60:]
-                    record_workspace_event("Chat", "user message", user_input)
                     with st.spinner("Processing your request..."):
                         st.session_state.chat_summary_downloads = empty_chat_summary_downloads()
                         user_input_lower = user_input.lower()
@@ -8446,28 +7685,15 @@ if active_main_tab == "Chat":
                             combined_vs = get_combined_vector_store(chat_files)
                             retriever = combined_vs.as_retriever(search_kwargs={"k": 3})
                             llm = load_llm()
-                            recent_chat_context = "\n".join(
-                                f"{item.get('role', 'message')}: {str(item.get('content', ''))[:700]}"
-                                for item in st.session_state.get("messages", [])[-8:]
-                            )
-                            capl_context = st.session_state.workspace_memory.get("capl", {}).get("last_output", "")
-                            compare_context = "\n".join(
-                                st.session_state.workspace_memory.get("compare", {}).get("explanation", [])[:5]
-                            )
                             prompt = ChatPromptTemplate.from_messages([
                                 ("system",
                                  "You are an intelligent document assistant. Answer ONLY using context from the provided documents.\nIf information is not found in the documents, say 'This information is not available in the uploaded documents.'\nContext:\n{context}"),
-                                ("system",
-                                 "Workspace memory:\nRecent chat:\n{chat_memory}\nLatest compare insight:\n{compare_memory}\nLatest CAPL output:\n{capl_memory}"),
                                 ("human", "{question}")
                             ])
                             chain = None
                             if llm is not None:
                                 try:
                                     chain = ({"context": retriever | (lambda x: '\n'.join(x)),
-                                              "chat_memory": lambda _: recent_chat_context,
-                                              "compare_memory": lambda _: compare_context,
-                                              "capl_memory": lambda _: capl_context,
                                               "question": RunnablePassthrough()} | prompt | llm)
                                 except Exception as e:
                                     st.warning(f"Could not create LLM chain: {e}")
@@ -8478,56 +7704,25 @@ if active_main_tab == "Chat":
                             else:
                                 response = "⚠️ AI model is unavailable. Use direct extraction questions such as 'count(\"keyword\")', 'find(\"phrase\")', 'summarize', or 'overview'."
                         st.session_state.messages.append({"role": "assistant", "content": response})
-                        st.session_state.latest_stream_message_index = len(st.session_state.messages) - 1
-                        st.session_state.workspace_memory["chat"] = st.session_state.messages[-60:]
-                        save_workspace_memory()
-                        record_workspace_event("Chat", "assistant response", response)
                         if "⚠️" in response or "not found" in response.lower() or "please select" in response.lower() or "ai model is unavailable" in response.lower():
                             set_help_popup_state("chat", True)
 
-        for message_index, msg in enumerate(st.session_state.messages):
+        for msg in st.session_state.messages:
             role = "🧑" if msg["role"] == "user" else "🤖"
             st.markdown(f"**{role}**", unsafe_allow_html=True)
-            should_stream = (
-                msg["role"] == "assistant"
-                and st.session_state.get("latest_stream_message_index") == message_index
-            )
-            render_streaming_markdown(msg["content"], stream=should_stream)
-            if should_stream:
-                st.session_state.latest_stream_message_index = None
-            if msg["role"] == "assistant":
-                prompt_to_regenerate = None
-                for previous_msg in reversed(st.session_state.messages[:message_index]):
-                    if previous_msg.get("role") == "user":
-                        prompt_to_regenerate = previous_msg.get("content")
-                        break
-                if prompt_to_regenerate:
-                    if st.button("↻ Regenerate", key=f"regenerate_ai_{message_index}", help="Resend the previous prompt"):
-                        st.session_state.chat_regenerate_prompt = prompt_to_regenerate
-                        st.rerun()
+            st.markdown(msg["content"], unsafe_allow_html=True)
 
         render_chat_summary_downloads()
     else:
         st.info("Select files from the sidebar to start chatting.")
 
 # -------------------------------
-# WORKSPACE VIEW: DASHBOARD
+# TAB 2: DASHBOARD
 # -------------------------------
 # Dashboard tab:
 # Focused on structured HTML/XLSX analysis, charts, login/stat extraction, and
 # grouped test fixture reporting for uploaded report files.
-if active_main_tab == "Dashboard":
-    render_ai_module_intro(
-        "Dashboard",
-        "Live AI insights engine",
-        "Dynamic intelligence generated from uploaded files, document memory, and recent chat context.",
-    )
-    dashboard_snapshot = build_workspace_intelligence_snapshot(st.session_state.get("selected_files", []))
-    render_flowing_intelligence_blocks(dashboard_snapshot)
-    dashboard_signature = get_selection_signature(st.session_state.get("selected_files", []))
-    if st.session_state.get("last_dashboard_intelligence_signature") != dashboard_signature:
-        st.session_state.last_dashboard_intelligence_signature = dashboard_signature
-        record_workspace_event("Dashboard", "insights refreshed", ", ".join(st.session_state.get("selected_files", [])))
+if active_main_tab == "📊 Dashboard":
     dashboard_header_col, dashboard_reset_col = st.columns([8, 1])
     with dashboard_header_col:
         st.subheader("Dashboard")
@@ -9083,17 +8278,12 @@ if active_main_tab == "Dashboard":
                     st.warning("No structured test results found.")
 
 # -------------------------------
-# WORKSPACE VIEW: COMPARE
+# TAB 3: COMPARE
 # -------------------------------
 # Compare tab:
 # Lets users pick 2+ selected files, generate inline word-level differences,
 # and download the comparison results as an Excel file.
-if active_main_tab == "Compare":
-    render_ai_module_intro(
-        "Compare",
-        "Semantic diff intelligence engine",
-        "Meaning-based comparison that keeps exact diffs, structural signals, and AI explanations connected to workspace memory.",
-    )
+if active_main_tab == "📂 Compare":
     compare_header_col, compare_reset_col = st.columns([8, 1])
     with compare_header_col:
         st.subheader("Compare Files")
@@ -9166,14 +8356,6 @@ if active_main_tab == "Compare":
             st.session_state.compare_result_html = html_diff
             st.session_state.compare_result_excel_bytes = excel_io.getvalue()
             st.session_state.compare_result_files = selected_files_for_comparison.copy()
-            st.session_state.workspace_memory["compare"] = {
-                "files": selected_files_for_comparison.copy(),
-                "mode": compare_mode,
-                "explanation": build_semantic_compare_explanation(selected_files_for_comparison),
-                "updated": datetime.now().isoformat(timespec="seconds"),
-            }
-            save_workspace_memory()
-            record_workspace_event("Compare", "semantic comparison", ", ".join(selected_files_for_comparison))
         else:
             st.warning("Select at least two files to compare.")
 
@@ -9181,11 +8363,6 @@ if active_main_tab == "Compare":
         st.info("Compared files: " + ", ".join(st.session_state.compare_result_files))
         st.markdown(f"### Comparison Results ({len(st.session_state.compare_result_files)} files)")
         render_html_frame(st.session_state.compare_result_html, height=800)
-        semantic_explanation = st.session_state.workspace_memory.get("compare", {}).get("explanation", [])
-        if semantic_explanation:
-            st.markdown("### AI Explanation Layer")
-            for explanation_item in semantic_explanation:
-                st.markdown(f"- {html.escape(str(explanation_item))}", unsafe_allow_html=True)
 
         st.markdown("### Download Excel Comparison")
         st.download_button(
@@ -9198,37 +8375,12 @@ if active_main_tab == "Compare":
         st.info("Select at least two files to compare.")
 
 # -------------------------------
-# WORKSPACE VIEW: CAPL
+# TAB 4: CAPL
 # -------------------------------
 # CAPL tab:
 # Dedicated to CAPL file selection, live editing, compile/analyze checks, issue
 # reporting, and optional AI-assisted fix generation for CAPL scripts.
-if active_main_tab == "CAPL":
-    render_ai_module_intro(
-        "CAPL",
-        "AI tool execution engine",
-        "Command-driven actions for document analysis, entity extraction, and CAPL code intelligence with shared execution history.",
-    )
-    with st.expander("AI Command Executor", expanded=False):
-        command_cols = st.columns([4, 1])
-        with command_cols[0]:
-            workspace_command = st.text_input(
-                "Command",
-                key="workspace_ai_command",
-                placeholder="analyze document, summarize file, extract entities, analyze CAPL",
-            )
-        with command_cols[1]:
-            execute_workspace_command = st.button("Run", key="run_workspace_ai_command", use_container_width=True)
-        if execute_workspace_command and workspace_command.strip():
-            command_result = run_capl_workspace_command(workspace_command)
-            st.markdown("#### Structured AI Response")
-            st.code(command_result["output"], language="text")
-        if st.session_state.get("workspace_execution_logs"):
-            st.markdown("#### Execution History")
-            for index, log in enumerate(st.session_state.workspace_execution_logs[:8], start=1):
-                with st.expander(f"{index}. {log.get('command', 'Command')} - {log.get('timestamp', '')}", expanded=index == 1):
-                    st.code(log.get("output", ""), language="text")
-
+if active_main_tab == "📡 CAPL":
     capl_header_col, capl_reset_col = st.columns([8, 1])
     with capl_header_col:
         st.subheader("⚙️ CAPL Compiler & Analyzer")
