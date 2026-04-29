@@ -3913,19 +3913,12 @@ with st.sidebar:
             with cols[0]:
                 file_name = file_dict["name"]
                 is_selected = file_name in st.session_state.selected_files
-                button_label = file_name if not is_selected else f"Selected: {file_name}"
-                if st.button(
-                    button_label,
-                    key=f"select_file_{idx}",
-                    help=f"Click to {'remove' if is_selected else 'add'} {file_name}",
-                    use_container_width=True,
-                    type="primary" if is_selected else "secondary",
-                ):
-                    if is_selected:
-                        st.session_state.selected_files.remove(file_name)
-                    else:
-                        st.session_state.selected_files.append(file_name)
-                    st.rerun()
+                checkbox_key = f"select_file_checkbox_{idx}_{file_name}"
+                file_selected = st.checkbox(file_name, value=is_selected, key=checkbox_key)
+                if file_selected and not is_selected:
+                    st.session_state.selected_files.append(file_name)
+                elif not file_selected and is_selected:
+                    st.session_state.selected_files.remove(file_name)
             with cols[1]:
                 preview_url = create_preview_link(file_name)
                 st.link_button(
@@ -3961,7 +3954,6 @@ with st.sidebar:
             st.multiselect(
                 "Select files for workspace access",
                 options=uploaded_names,
-                default=st.session_state.selected_files,
                 key="selected_files",
             )
             st.markdown("*Selected files above are available across all tabs.*")
