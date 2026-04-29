@@ -3825,13 +3825,11 @@ if "preview_token" in query_params and query_params["preview_token"]:
         st.title("Document Preview")
         st.warning("This preview link is no longer available.")
         st.info("Return to the main app and click the eye preview button next to the uploaded file again.")
-        st.link_button("Back to workspace", "?", icon="↩️")
         st.stop()
 
 if preview_file_from_url:
     preview_entry = PREVIEW_STORE.get(preview_token)
     st.title("📄 Document Preview")
-    st.link_button("Back to workspace", "?", icon="↩️")
     if preview_entry is not None:
         st.markdown(f"### {preview_entry['name']}")
         st.markdown("---")
