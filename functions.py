@@ -3510,6 +3510,182 @@ def render_chat_summary_downloads():
                 )
 
 
+# ==============================
+# DOCUMENT-AWARE CHAT REASONING ENGINE
+# Shared chat helpers that classify intent before generating responses.
+# This prevents extraction prompts from producing generic follow-up buttons.
+# ==============================
+def classify_document_chat_intent(user_query):
+    """Classify the user's document-chat intent with lightweight keyword rules."""
+    query = str(user_query or "").strip().lower()
+    if not query:
+        return "UNKNOWN"
+
+    guidance_terms = ["what can i ask", "what should i do", "suggest", "next step", "guide me", "help me"]
+    comparison_terms = ["compare", "difference", "differences", "diff", "versus", "vs ", "between"]
+    summary_terms = ["summary", "summarize", "summarise", "overview", "brief", "recap"]
+    analysis_terms = ["why", "how", "explain", "analyze", "analyse", "insight", "reason", "impact", "meaning"]
+    extraction_terms = [
+        "list", "list out", "find", "show", "get", "extract", "give me", "display",
+        "what are", "which are", "where is", "all the", "all ", "names of",
+    ]
+
+    if any(term in query for term in guidance_terms):
+        return "GUIDANCE"
+    if any(term in query for term in comparison_terms):
+        return "COMPARISON"
+    if any(term in query for term in summary_terms):
+        return "SUMMARY"
+    if any(term in query for term in analysis_terms):
+        return "ANALYSIS"
+    if any(term in query for term in extraction_terms):
+        return "EXTRACTION"
+    if extract_bare_item_name(user_query):
+        return "EXTRACTION"
+    return "UNKNOWN"
+
+
+def detect_document_chat_profile(file_names, document_context):
+    """Detect a broad document profile for prompt and extraction routing."""
+    lower_names = " ".join(file_names or []).lower()
+    lower_context = str(document_context or "").lower()
+    combined = f"{lower_names}\n{lower_context[:50000]}"
+
+    if ".can" in lower_names or "capl" in combined or "on message" in combined:
+        return "CAPL"
+    if "vn" in combined and re.search(r"\bvn\s*[- ]?\d{3,5}[a-z]?\b", combined, re.IGNORECASE):
+        return "VN_DEVICE"
+    if any(marker in combined for marker in ["table:", "sheet '", "csv rows:", "|"]):
+        return "TABLE"
+    if ".pdf" in lower_names or "pdf metadata" in combined or "page 1 text" in combined:
+        return "PDF"
+    return "MIXED"
+
+
+def normalize_technical_identifier(value):
+    """Normalize identifiers such as 'VN 1630A' to 'VN1630A'."""
+    value = normalize_extracted_line(value)
+    value = re.sub(r"\b(VN)\s*[- ]?\s*(\d{3,5}[A-Za-z]?)\b", lambda m: f"{m.group(1).upper()}{m.group(2).upper()}", value)
+    return value.strip()
+
+
+def extract_vn_devices_from_text(text):
+    """Extract unique VN device identifiers from technical manuals and PDFs."""
+    devices = []
+    seen = set()
+    for match in re.finditer(r"\bVN\s*[- ]?\s*(\d{3,5}[A-Za-z]?)\b", str(text or ""), re.IGNORECASE):
+        device = f"VN{match.group(1).upper()}"
+        if device.lower() not in seen:
+            seen.add(device.lower())
+            devices.append(device)
+    return devices
+
+
+def derive_extraction_topic(user_query):
+    """Best-effort extraction topic for generic list/show/get prompts."""
+    query = str(user_query or "").strip()
+    patterns = [
+        r"\b(?:list(?: out)?|show|get|extract|give me|display)\s+(?:all\s+|the\s+|all the\s+)?(.+)$",
+        r"\b(?:what are|which are)\s+(?:all\s+|the\s+|all the\s+)?(.+)$",
+        r"\b(?:find|search|locate)\s+(?:all\s+|the\s+|all the\s+)?(.+)$",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, query, re.IGNORECASE)
+        if match:
+            topic = match.group(1).strip(" ?.:-")
+            topic = re.sub(r"\b(?:in|from|inside|within)\s+(?:this|the|selected)?\s*(?:document|file|files|pdf)?\b.*$", "", topic, flags=re.IGNORECASE).strip()
+            return topic
+    return ""
+
+
+def extract_lines_for_topic(text, topic, limit=25):
+    """Return relevant lines for a generic extraction topic."""
+    topic = str(topic or "").strip()
+    if not topic:
+        return []
+
+    topic_terms = [
+        term.lower()
+        for term in re.findall(r"[A-Za-z0-9_+\-/]{2,}", topic)
+        if term.lower() not in {"all", "the", "a", "an", "of", "device", "devices", "list"}
+    ]
+    if not topic_terms:
+        topic_terms = [topic.lower()]
+
+    results = []
+    seen = set()
+    for raw_line in str(text or "").splitlines():
+        line = normalize_extracted_line(raw_line)
+        if len(line) < 3 or len(line) > 260:
+            continue
+        lower_line = line.lower()
+        if all(term in lower_line for term in topic_terms) or any(term in lower_line for term in topic_terms):
+            key = lower_line
+            if key not in seen:
+                seen.add(key)
+                results.append(line)
+        if len(results) >= limit:
+            break
+    return results
+
+
+def build_extraction_response_for_query(user_query, file_texts):
+    """Build a direct extraction answer with no suggestions."""
+    query = str(user_query or "")
+    query_lower = query.lower()
+    file_texts = file_texts or {}
+
+    if "vn" in query_lower and any(term in query_lower for term in ["device", "devices", "interface", "module", "modules"]):
+        rows = []
+        all_devices = []
+        for file_name, text in file_texts.items():
+            devices = extract_vn_devices_from_text(text)
+            all_devices.extend(devices)
+            if devices:
+                rows.append(f"**{html.escape(file_name)}**\n" + "\n".join(f"- {html.escape(device)}" for device in devices))
+        unique_devices = list(dict.fromkeys(all_devices))
+        if unique_devices:
+            return "**VN devices found:**\n\n" + "\n\n".join(rows)
+        return "No VN device identifiers were found in the selected document text."
+
+    topic = derive_extraction_topic(query)
+    if not topic:
+        return "What exact information should I extract from the selected document?"
+
+    response_blocks = []
+    for file_name, text in file_texts.items():
+        lines = extract_lines_for_topic(text, topic)
+        if lines:
+            response_blocks.append(
+                f"**{html.escape(file_name)}**\n"
+                + "\n".join(f"- {html.escape(line)}" for line in lines)
+            )
+
+    if response_blocks:
+        return "\n\n---\n\n".join(response_blocks)
+    return f"No direct matches were found for **{html.escape(topic)}** in the selected document text."
+
+
+def strip_llm_suggestions_from_response(response):
+    """Remove model-produced Suggestions blocks from final chat output."""
+    text = str(response or "").strip()
+    if not text:
+        return text
+    text = re.split(r"\n\s*-{3,}\s*\n\s*Suggestions\s*:", text, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+    text = re.split(r"\n\s*Suggestions\s*:", text, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+    return text
+
+
+def should_show_chat_suggestions(intent, user_query):
+    """Only show suggestion buttons when the user explicitly asks for guidance."""
+    query = str(user_query or "").lower()
+    if intent == "GUIDANCE":
+        return True
+    if any(term in query for term in ["suggest", "next step", "what can i ask", "guide me"]):
+        return True
+    return False
+
+
 def build_adaptive_document_analysis(file_name, file_bytes, text):
     raw_text = str(text or "")
     lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
