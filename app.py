@@ -8,6 +8,9 @@
 
 import functions as fn
 from functions import *
+from router import TAB_OPTIONS, init_router, render_tab_router
+from state_firewall import init_state_firewall, tab_state_scope
+from tab_memory import init_tab_memory
 from tab_chat import render_chat_tab
 from tab_dashboard import render_dashboard_tab
 from tab_compare import render_compare_tab
@@ -3302,16 +3305,19 @@ st.markdown(
 
 
 
-main_tab_options = ["💬 Chat", "📊 Dashboard", "📂 Compare", "📡 CAPL"]
+main_tab_options = TAB_OPTIONS
 
 # ==============================
-# AUTO TAB SUGGESTION STATE
-# Uses lightweight keyword matching over chat, recent actions, and CAPL context.
+# ROUTER / STATE FIREWALL INITIALIZATION
+# The router is the single source of truth for active tabs. Automatic tab
+# switching is disabled unless auto_tab_switch_enabled is explicitly set.
 # ==============================
-if "active_main_tab" not in st.session_state:
-    st.session_state.active_main_tab = main_tab_options[0]
+init_state_firewall()
+init_tab_memory()
+init_router(main_tab_options[0])
 ensure_context_memory()
-apply_auto_tab_suggestion(main_tab_options)
+if st.session_state.get("auto_tab_switch_enabled", False):
+    apply_auto_tab_suggestion(main_tab_options)
 
 # ==============================
 # ANIMATED TAB COLOR SYSTEM
@@ -3563,7 +3569,7 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-active_main_tab = st.radio("Open Section", main_tab_options, horizontal=True, key="active_main_tab", label_visibility="collapsed")
+active_main_tab = render_tab_router("Open Section")
 
 # -------------------------------
 # ==============================
@@ -3573,10 +3579,14 @@ active_main_tab = st.radio("Open Section", main_tab_options, horizontal=True, ke
 # ==============================
 fn.query_params = query_params
 if active_main_tab == main_tab_options[0]:
-    render_chat_tab()
+    with tab_state_scope("chat"):
+        render_chat_tab()
 elif active_main_tab == main_tab_options[1]:
-    render_dashboard_tab()
+    with tab_state_scope("dashboard"):
+        render_dashboard_tab()
 elif active_main_tab == main_tab_options[2]:
-    render_compare_tab()
+    with tab_state_scope("compare"):
+        render_compare_tab()
 elif active_main_tab == main_tab_options[3]:
-    render_capl_tab()
+    with tab_state_scope("capl"):
+        render_capl_tab()
