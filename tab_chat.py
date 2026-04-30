@@ -125,7 +125,10 @@ def render_chat_tab():
             reasoning.append("Signal analysis needed")
         return list(dict.fromkeys(reasoning))
 
-    def build_chat_next_suggestions(user_input, context):
+    def build_chat_next_suggestions(user_input, context, intent=None):
+        if not should_show_chat_suggestions(intent or classify_document_chat_intent(user_input), user_input):
+            return []
+
         suggestions = []
         memory_hits = search_workspace_memory(user_input, limit=3)
         for memory_item in memory_hits:
@@ -138,8 +141,8 @@ def render_chat_tab():
                 suggestions.append("Compare with similar items")
             if "overview" in memory_text or "summary" in memory_text:
                 suggestions.append("Get document overview")
-            if "table" in memory_text or "data" in memory_text:
-                suggestions.append("Inspect table data")
+            if ("table" in memory_text or "data" in memory_text) and intent in {"ANALYSIS", "SUMMARY", "GUIDANCE"}:
+                suggestions.append("Inspect relevant tables")
 
         entity = extract_chat_entity(user_input)
         if entity:
@@ -148,13 +151,6 @@ def render_chat_tab():
             else:
                 suggestions.insert(0, f"Item details: {entity}")
 
-        if not suggestions:
-            suggestions = [
-                "Get document overview",
-                "List key facts",
-                "Find specific terms",
-                "Explain structure",
-            ]
         return list(dict.fromkeys(suggestions))[:4]
 
     chat_header_col, chat_reset_col = st.columns([8, 1])
@@ -190,7 +186,8 @@ def render_chat_tab():
         else:
             with st.spinner("Loading selected files..."):
                 ensure_files_processed(chat_files)
-            combined_text = "\n".join([st.session_state.file_texts.get(f, "") for f in chat_files])
+            selected_file_texts = {f: st.session_state.file_texts.get(f, "") for f in chat_files}
+            combined_text = "\n".join(selected_file_texts.values())
 
 
             user_input = st.chat_input("Ask anything related to selected documents/files")
@@ -215,6 +212,8 @@ def render_chat_tab():
                     with st.spinner("Processing your request..."):
                         st.session_state.chat_summary_downloads = empty_chat_summary_downloads()
                         user_input_lower = processing_input.lower()
+                        chat_intent = classify_document_chat_intent(processing_input)
+                        document_profile = detect_document_chat_profile(chat_files, combined_text)
                         # Word count queries
                         if any(t in user_input_lower for t in ["how many", "count", "number of", "occurrences"]):
                             match = re.search(r"'(.*?)'|\"(.*?)\"", processing_input)
@@ -223,6 +222,10 @@ def render_chat_tab():
                                 count = len(
                                     re.findall(rf'(?<![\w-]){re.escape(word)}(?![\w-])', combined_text, re.IGNORECASE))
                                 response = f"🔢 The word/phrase '{word}' appears {count} times in the selected documents."
+                            elif "vn" in user_input_lower and any(term in user_input_lower for term in ["device", "devices", "interface", "module", "modules"]):
+                                extracted_response = build_extraction_response_for_query(processing_input, selected_file_texts)
+                                device_count = len(list(dict.fromkeys(extract_vn_devices_from_text(combined_text))))
+                                response = f"**VN device count:** {device_count}\n\n{extracted_response}"
                             else:
                                 response = "⚠️ Specify the word/phrase in quotes. Example: count('keyword') or count(\"keyword\")"
                         elif any(term in user_input_lower for term in ["find", "search", "locate"]) or "highlight" in user_input_lower:
@@ -341,6 +344,13 @@ def render_chat_tab():
                                 response = highlight_multi_file_differences(selected_texts)
                             else:
                                 response = "⚠️ Please select at least 2 files to compare documents."
+                        elif chat_intent == "EXTRACTION":
+                            response = build_extraction_response_for_query(processing_input, selected_file_texts)
+                        elif chat_intent == "UNKNOWN":
+                            response = (
+                                "What exactly should I do with the selected document: extract specific data, "
+                                "summarize it, compare it, or analyze/explain something?"
+                            )
                         else:
                             combined_vs = get_workspace_vector_store(chat_files) or get_combined_vector_store(chat_files)
                             retriever = combined_vs.as_retriever(search_kwargs={"k": 3})
@@ -351,14 +361,26 @@ def render_chat_tab():
                             )
                             prompt = ChatPromptTemplate.from_messages([
                                 ("system",
-                                 "You are a ChatGPT-like AI assistant specialized in analyzing user-uploaded documents.\n\nYour job is to:\n1. Understand the document\n2. Respond conversationally to the user\n3. Generate smart, context-aware suggestions\n\n---\n\nSTEP 1: DOCUMENT UNDERSTANDING\n\nIdentify:\n- Document type (e.g., dataset, invoice, technical doc, legal, general text)\n- Structure (structured, semi-structured, unstructured)\n- Key elements (tables, IDs, components, signals, dates, totals, etc.)\n\n---\n\nSTEP 2: USER INTENT\n\n- Understand the user query\n- If no query is provided, assume the user wants an overview\n\n---\n\nSTEP 3: RESPONSE (ChatGPT-style)\n\n- Respond naturally and clearly\n- Be concise but informative\n- Provide insights, not just surface-level answers\n- If data is present, mention trends or patterns\n- If unsure, say what is missing\n\n---\n\nSTEP 4: SUGGESTIONS\n\nGenerate 4–6 highly relevant next actions.\nRules:\n- Each suggestion must be short (2–5 words)\n- Must be specific to the document\n- Must reflect real user actions\n- Avoid generic phrases like \"Analyze document\"\n\nExamples:\nDataset:\n- Analyze trends\n- Find anomalies\n- Show summary stats\n\nInvoice:\n- Extract total\n- Find due date\n- List line items\n\nTechnical:\n- Explain components\n- Show pin diagram\n- List signals\n\n---\n\nSTEP 5: ENTITY AWARENESS (IMPORTANT)\n\nIf the document or user query contains a clear entity (e.g., part number, item ID, component name):\n- Adapt suggestions using that entity\n\nExample:\nInstead of:\n- Show item details\nUse:\n- Item details: VN1630A\n\nInstead of:\n- Show pin diagram\nUse:\n- Pin diagram: D-SUB9\n\n---\n\nOUTPUT FORMAT:\nReturn your response in this structure:\n\n<chat_response>\n\n---\nSuggestions:\n- suggestion 1\n- suggestion 2\n- suggestion 3\n- suggestion 4\n\n---\n\nDOCUMENT:\n{context}\n\nCONVERSATION HISTORY:\n{chat_history}\n\nUSER MESSAGE:\n{question}"),
-                                ("human", "{question}")
-                            ])
+                                 "You are a document-aware reasoning assistant for technical and mixed files.\n\n"
+                                 "First identify intent: EXTRACTION, ANALYSIS, COMPARISON, SUMMARY, or UNKNOWN.\n"
+                                 "Document profile for this request: {document_profile}.\n\n"
+                                 "STRICT RESPONSE RULES:\n"
+                                 "- If intent is EXTRACTION, return only the extracted answer. Do not include suggestions.\n"
+                                 "- If intent is UNKNOWN, ask one concise clarifying question only.\n"
+                                 "- If intent is ANALYSIS, provide explanation and relevant insight. Do not add generic next steps.\n"
+                                 "- Do not output a 'Suggestions:' section unless the user explicitly asks for guidance.\n"
+                                 "- Never use generic suggestions such as 'Inspect table data' or 'Suggested next steps'.\n\n"
+                                 "DOCUMENT:\n{context}\n\n"
+                                 "CHAT HISTORY:\n{chat_history}\n\n"
+                                 "USER QUERY:\n{question}"),
+                                 ("human", "{question}")
+                             ])
                             chain = None
                             if llm is not None:
                                 try:
                                     chain = ({"context": retriever | (lambda docs: '\n'.join(getattr(doc, "page_content", str(doc)) for doc in docs)),
                                               "chat_history": lambda _: chat_history,
+                                              "document_profile": lambda _: document_profile,
                                               "question": RunnablePassthrough()} | prompt | llm)
                                 except Exception as e:
                                     st.warning(f"Could not create LLM chain: {e}")
@@ -367,6 +389,7 @@ def render_chat_tab():
                             if chain is not None:
                                 try:
                                     response = str(chain.invoke(processing_input))
+                                    response = strip_llm_suggestions_from_response(response)
                                 except Exception as e:
                                     st.warning(f"Could not run LLM chain: {e}")
                                     chain = None
@@ -379,7 +402,7 @@ def render_chat_tab():
                                     response = "⚠️ AI model is unavailable. Use direct extraction questions such as 'count(\"keyword\")', 'find(\"phrase\")', 'summarize', or 'overview'."
                         st.session_state.messages.append({"role": "assistant", "content": response})
                         st.session_state.last_streamed_assistant_index = len(st.session_state.messages) - 1
-                        st.session_state.chat_next_suggestions = build_chat_next_suggestions(processing_input, combined_text)
+                        st.session_state.chat_next_suggestions = build_chat_next_suggestions(processing_input, combined_text, chat_intent)
                         st.session_state.chat_next_suggestions_for = len(st.session_state.messages) - 1
                         append_chat_to_workspace_memory(submitted_input, response, chat_files)
                         save_workspace_memory()
