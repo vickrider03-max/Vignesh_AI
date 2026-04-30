@@ -3799,7 +3799,7 @@ def extract_multiple_component_names(user_query):
 
 
 def classify_technical_document_request(user_query):
-    """Classify into the five premium document-response types requested by the user."""
+    """Classify user queries into the exact premium response categories requested by the user."""
     query = str(user_query or "").strip().lower()
     if not query:
         return "UNKNOWN"
@@ -3810,13 +3810,21 @@ def classify_technical_document_request(user_query):
     if len(multiple_items) >= 2 and any(term in query for term in ["between", "which", "better", "different"]):
         return "COMPARISON"
     if any(term in query for term in ["pin", "diagram", "connector", "mapping", "pinout", "visual structure", "technical table"]):
-        return "DIAGRAMS_PIN_DETAILS_TABLES"
+        return "PIN_DIAGRAMS_CONNECTORS_TABLES"
     if any(term in query for term in ["feature", "features", "workflow", "use case", "use cases", "capability", "capabilities", "process flow", "real usage", "functional behavior"]):
         return "FEATURES_WORKFLOW_USE_CASES"
+    if any(term in query for term in ["short summary", "brief summary", "concise summary", "main points", "key points", "3 key takeaways"]):
+        return "SHORT_SUMMARY"
+    if any(term in query for term in ["table extract", "extract table", "table data", "table rows", "csv extract", "spreadsheet", "table only"]):
+        return "TABLE_EXTRACTION"
+    if any(term in query for term in ["image", "diagram", "visual", "figure", "schematic", "illustration", "drawing", "visual extraction"]):
+        return "IMAGE_OR_DIAGRAM_EXTRACTION"
+    if any(term in query for term in ["downloadable report", "export report", "generate report", "report download", "create report"]):
+        return "DOWNLOADABLE_REPORT"
     if extract_specific_component_name(user_query):
-        return "SPECIFIC_COMPONENT"
+        return "SPECIFIC_COMPONENT_DETAILS"
     if any(term in query for term in ["summary", "summarize", "summarise", "overview", "analyze document", "analyse document", "full document", "explain document"]):
-        return "FULL_DOCUMENT_SUMMARY"
+        return "FULL_DOCUMENT_ANALYSIS"
     return "UNKNOWN"
 
 
@@ -3835,6 +3843,126 @@ def build_full_document_summary_response(file_texts):
             blocks.append(build_detailed_document_summary(file_name, file_bytes, file_text))
         else:
             blocks.append(f"**{html.escape(file_name)}**\n\nNo readable content found in this document.")
+    return join_response_blocks(blocks)
+
+
+def build_short_document_summary(file_name, file_bytes, text):
+    raw_text = str(text or "")
+    lines = [normalize_extracted_line(line) for line in raw_text.splitlines() if line.strip()]
+    if not lines:
+        return f"**{html.escape(file_name)}**\n\nNo readable content found in this document."
+
+    title = file_name
+    for line in lines[:20]:
+        if len(line.split()) > 4 and not re.search(r"\b(page|slide|table|metadata|error|text)\b", line.lower()):
+            title = line
+            break
+
+    main_purpose = ""
+    for line in lines:
+        ll = line.lower()
+        if any(term in ll for term in ["purpose", "provides", "supports", "enables", "used for", "application", "helps", "allows", "designed"]):
+            main_purpose = line
+            break
+    if not main_purpose:
+        main_purpose = "This document provides a technical reference and practical guidance for the selected content."
+
+    key_points = []
+    seen = set()
+    for line in lines:
+        ll = line.lower()
+        if any(term in ll for term in ["purpose", "provides", "supports", "enables", "used for", "feature", "capability", "workflow", "process", "application", "important", "note"]):
+            cleaned = line.strip()
+            if cleaned.lower() not in seen:
+                key_points.append(cleaned)
+                seen.add(cleaned.lower())
+        if len(key_points) >= 7:
+            break
+    if not key_points:
+        key_points = lines[:7]
+
+    key_takeaways = [html.escape(point) for point in key_points[:3]]
+    key_points_html = "".join(f"<li>{html.escape(point)}</li>" for point in key_points[:7])
+    takeaways_html = "".join(f"<li>{point}</li>" for point in key_takeaways)
+
+    return (
+        f"<div style='margin-bottom:18px; line-height:1.5;'>"
+        f"<h3 style='margin:0 0 10px 0; color:#173152;'>Short Summary: {html.escape(file_name)}</h3>"
+        f"<p><b>What the document is about:</b> {html.escape(title)}</p>"
+        f"<p><b>Main purpose:</b> {html.escape(main_purpose)}</p>"
+        f"<h4 style='margin:16px 0 6px 0; color:#173152;'>Key Points</h4>"
+        f"<ul>{key_points_html}</ul>"
+        f"<h4 style='margin:16px 0 6px 0; color:#173152;'>Key Takeaways</h4>"
+        f"<ul>{takeaways_html}</ul>"
+        f"</div>"
+    )
+
+
+def build_short_summary_response(file_texts):
+    blocks = []
+    for file_name, file_text in (file_texts or {}).items():
+        file_entry = get_uploaded_file_entry(file_name)
+        if file_text and str(file_text).strip():
+            file_bytes = file_entry["bytes"] if file_entry else b""
+            blocks.append(build_short_document_summary(file_name, file_bytes, file_text))
+        else:
+            blocks.append(f"**{html.escape(file_name)}**\n\nNo readable content found in this document.")
+    return join_response_blocks(blocks)
+
+
+def build_table_extraction_response(file_texts):
+    blocks = []
+    for file_name, text in (file_texts or {}).items():
+        lines = [normalize_extracted_line(line) for line in str(text or "").splitlines() if line.strip()]
+        table_lines = select_relevant_lines(lines, ["table", "row", "column", "csv", "sheet", "spreadsheet", "cells", "header", "entry"], limit=10)
+        if table_lines:
+            rows = "".join(f"<li>{html.escape(line)}</li>" for line in table_lines)
+            blocks.append(
+                f"<div style='margin-bottom:18px; line-height:1.5;'>"
+                f"<h3 style='margin:0 0 10px 0; color:#173152;'>Table Extraction: {html.escape(file_name)}</h3>"
+                f"<p>Extracted table or tabular structure lines from the document text.</p>"
+                f"<ul>{rows}</ul>"
+                f"</div>"
+            )
+        else:
+            blocks.append(f"**{html.escape(file_name)}**\n\nNo table-like data was found in the extracted document text.")
+    return join_response_blocks(blocks)
+
+
+def build_image_or_diagram_extraction_response(file_texts, user_query):
+    blocks = []
+    for file_name, text in (file_texts or {}).items():
+        lines = [normalize_extracted_line(line) for line in str(text or "").splitlines() if line.strip()]
+        image_lines = select_relevant_lines(lines, ["figure", "image", "diagram", "illustration", "schematic", "drawing", "visual"], limit=12)
+        pin_rows = extract_pin_rows(lines)
+        ascii_diagram = build_ascii_pin_diagram(pin_rows, os.path.splitext(file_name)[0]) if pin_rows else None
+        if image_lines or ascii_diagram:
+            image_block = "".join(f"<li>{html.escape(line)}</li>" for line in image_lines) if image_lines else "<li>No direct image references were found.</li>"
+            diagram_block = f"<pre style='white-space:pre-wrap; background:#f4f7fb; padding:12px; border-radius:8px;'>{html.escape(ascii_diagram)}</pre>" if ascii_diagram else ""
+            blocks.append(
+                f"<div style='margin-bottom:18px; line-height:1.5;'>"
+                f"<h3 style='margin:0 0 10px 0; color:#173152;'>Image / Diagram Extraction: {html.escape(file_name)}</h3>"
+                f"<h4 style='margin:16px 0 6px 0; color:#173152;'>Image / Figure References</h4><ul>{image_block}</ul>"
+                f"{diagram_block}"
+                f"</div>"
+            )
+        else:
+            blocks.append(f"**{html.escape(file_name)}**\n\nNo image or diagram references were found in the extracted text.")
+    return join_response_blocks(blocks)
+
+
+def build_downloadable_report_response(file_texts):
+    blocks = []
+    for file_name, file_text in (file_texts or {}).items():
+        if file_text and str(file_text).strip():
+            blocks.append(
+                f"<div style='margin-bottom:18px; line-height:1.5;'>"
+                f"<h3 style='margin:0 0 10px 0; color:#173152;'>Downloadable Report: {html.escape(file_name)}</h3>"
+                f"<p>This response is prepared for export-style delivery. Use the document preview Downloads tab to generate a DOCX or Markdown report from the extracted content.</p>"
+                f"</div>"
+            )
+        else:
+            blocks.append(f"**{html.escape(file_name)}**\n\nNo readable content found to build a downloadable report.")
     return join_response_blocks(blocks)
 
 
