@@ -8893,24 +8893,8 @@ if active_main_tab == "💬 Chat":
             reasoning.append("Signal analysis needed")
         return list(dict.fromkeys(reasoning))
 
-    def reasoning_to_suggestions(reasoning):
-        suggestions = []
-        for item in reasoning:
-            item = str(item or "").lower()
-            if "entity" in item:
-                suggestions.append("Show item details")
-            if "diagram" in item:
-                suggestions.append("Show pin diagram")
-            if "compare" in item:
-                suggestions.append("Compare with similar items")
-            if "signal" in item:
-                suggestions.append("List all signals")
-            if "missing" in item:
-                suggestions.append("Generate overview")
-        return list(dict.fromkeys(suggestions))[:4]
-
     def build_chat_next_suggestions(user_input, context):
-        suggestions = reasoning_to_suggestions(generate_chat_reasoning(user_input, context))
+        suggestions = []
         memory_hits = search_workspace_memory(user_input, limit=3)
         for memory_item in memory_hits:
             memory_text = str(memory_item or "").lower()
@@ -8920,19 +8904,26 @@ if active_main_tab == "💬 Chat":
                 suggestions.append("Count signals")
             if "compare" in memory_text or "difference" in memory_text:
                 suggestions.append("Compare with similar items")
+            if "overview" in memory_text or "summary" in memory_text:
+                suggestions.append("Get document overview")
+            if "table" in memory_text or "data" in memory_text:
+                suggestions.append("Inspect table data")
 
         entity = extract_chat_entity(user_input)
-        enhanced_suggestions = []
-        for suggestion in suggestions:
-            if entity and suggestion == "Show item details":
-                enhanced_suggestions.append(f"Item details: {entity}")
-            elif entity and suggestion == "Show pin diagram":
-                enhanced_suggestions.append(f"Pin diagram: {entity}")
-            elif suggestion == "List all signals":
-                enhanced_suggestions.append("Count signals")
+        if entity:
+            if any(term in user_input.lower() for term in ["pin", "diagram", "connector", "d-sub"]):
+                suggestions.insert(0, f"Pin diagram: {entity}")
             else:
-                enhanced_suggestions.append(suggestion)
-        return list(dict.fromkeys(enhanced_suggestions))[:4]
+                suggestions.insert(0, f"Item details: {entity}")
+
+        if not suggestions:
+            suggestions = [
+                "Get document overview",
+                "List key facts",
+                "Find specific terms",
+                "Explain structure",
+            ]
+        return list(dict.fromkeys(suggestions))[:4]
 
     chat_header_col, chat_reset_col = st.columns([8, 1])
     with chat_header_col:
@@ -9118,7 +9109,7 @@ if active_main_tab == "💬 Chat":
                             )
                             prompt = ChatPromptTemplate.from_messages([
                                 ("system",
-                                 "You are a helpful AI assistant that analyzes user-uploaded documents and responds like ChatGPT.\n\nYour goals:\n- Understand the document content\n- Answer user questions clearly and naturally\n- Provide useful insights (not just raw answers)\n- Suggest helpful next actions when relevant\n\nDOCUMENT UNDERSTANDING:\n- Identify what kind of document this is (data, report, invoice, technical, etc.)\n- Notice structure (tables, lists, sections, numbers)\n- Focus on the most important information\n\nRESPONSE STYLE:\n- Be clear, natural, and conversational\n- Keep answers concise but informative\n- Do not sound robotic or overly formal\n- If unsure, say what is missing instead of guessing\n\nWHEN DATA/TABLES ARE PRESENT:\n- Summarize key patterns or trends\n- Mention missing values or anomalies if visible\n- Do not hallucinate numbers\n\nWHEN NO USER QUESTION IS PROVIDED:\n- Give a short overview of the document\n- Highlight key points or structure\n\nSUGGESTIONS:\nAt the end of your response, suggest 3–5 useful next actions.\nRules for suggestions:\n- Each must be short (2–5 words)\n- Must be relevant to the document\n- Avoid generic phrases like \"Analyze document\"\n\nCONVERSATION:\nUse previous messages to maintain context and continuity.\n\nDOCUMENT:\n{context}\n\nCONVERSATION HISTORY:\n{chat_history}\n\nUSER MESSAGE:\n{question}"),
+                                 "You are a ChatGPT-like AI assistant specialized in analyzing user-uploaded documents.\n\nYour job is to:\n1. Understand the document\n2. Respond conversationally to the user\n3. Generate smart, context-aware suggestions\n\n---\n\nSTEP 1: DOCUMENT UNDERSTANDING\n\nIdentify:\n- Document type (e.g., dataset, invoice, technical doc, legal, general text)\n- Structure (structured, semi-structured, unstructured)\n- Key elements (tables, IDs, components, signals, dates, totals, etc.)\n\n---\n\nSTEP 2: USER INTENT\n\n- Understand the user query\n- If no query is provided, assume the user wants an overview\n\n---\n\nSTEP 3: RESPONSE (ChatGPT-style)\n\n- Respond naturally and clearly\n- Be concise but informative\n- Provide insights, not just surface-level answers\n- If data is present, mention trends or patterns\n- If unsure, say what is missing\n\n---\n\nSTEP 4: SUGGESTIONS\n\nGenerate 4–6 highly relevant next actions.\nRules:\n- Each suggestion must be short (2–5 words)\n- Must be specific to the document\n- Must reflect real user actions\n- Avoid generic phrases like \"Analyze document\"\n\nExamples:\nDataset:\n- Analyze trends\n- Find anomalies\n- Show summary stats\n\nInvoice:\n- Extract total\n- Find due date\n- List line items\n\nTechnical:\n- Explain components\n- Show pin diagram\n- List signals\n\n---\n\nSTEP 5: ENTITY AWARENESS (IMPORTANT)\n\nIf the document or user query contains a clear entity (e.g., part number, item ID, component name):\n- Adapt suggestions using that entity\n\nExample:\nInstead of:\n- Show item details\nUse:\n- Item details: VN1630A\n\nInstead of:\n- Show pin diagram\nUse:\n- Pin diagram: D-SUB9\n\n---\n\nOUTPUT FORMAT:\nReturn your response in this structure:\n\n<chat_response>\n\n---\nSuggestions:\n- suggestion 1\n- suggestion 2\n- suggestion 3\n- suggestion 4\n\n---\n\nDOCUMENT:\n{context}\n\nCONVERSATION HISTORY:\n{chat_history}\n\nUSER MESSAGE:\n{question}"),
                                 ("human", "{question}")
                             ])
                             chain = None
