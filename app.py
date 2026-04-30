@@ -7795,25 +7795,30 @@ def show_help_popup(tab_name, selected_files):
         <style>
         .helper-modal-backdrop {{
             position: fixed;
-            inset: 0;
-            background: rgba(15, 23, 42, 0.18);
-            backdrop-filter: blur(2px);
+            right: 18px;
+            bottom: 18px;
+            width: 0;
+            height: 0;
+            background: transparent;
             z-index: 99998;
+            pointer-events: none;
         }}
         .st-key-{modal_key} {{
             position: fixed !important;
-            top: 50% !important;
-            left: 50% !important;
-            transform: translate(-50%, -50%) !important;
-            width: min(560px, 92vw) !important;
-            max-height: 78vh !important;
+            right: clamp(12px, 2vw, 24px) !important;
+            bottom: clamp(12px, 2vw, 24px) !important;
+            top: auto !important;
+            left: auto !important;
+            transform: none !important;
+            width: min(460px, calc(100vw - 24px)) !important;
+            max-height: min(76vh, 620px) !important;
             overflow-y: auto !important;
             z-index: 99999 !important;
             padding: 0 !important;
             background: #ffffff !important;
             border: 1px solid rgba(15, 23, 42, 0.10) !important;
             border-radius: 14px !important;
-            box-shadow: 0 24px 70px rgba(15, 23, 42, 0.18) !important;
+            box-shadow: 0 18px 46px rgba(15, 23, 42, 0.22) !important;
         }}
         .st-key-{modal_key} > div {{
             padding: 0 !important;
@@ -7926,6 +7931,18 @@ def show_help_popup(tab_name, selected_files):
         .st-key-{helper_close_key} button:hover {{
             background: #eef2ff !important;
             color: #1d4ed8 !important;
+        }}
+        @media (max-width: 640px) {{
+            .st-key-{modal_key} {{
+                right: 10px !important;
+                bottom: 10px !important;
+                width: calc(100vw - 20px) !important;
+                max-height: 72vh !important;
+                border-radius: 12px !important;
+            }}
+            .st-key-{modal_key} [data-testid="stHorizontalBlock"]:first-of-type {{
+                padding: 12px 14px 10px !important;
+            }}
         }}
         </style>
         <div class="helper-modal-backdrop"></div>
