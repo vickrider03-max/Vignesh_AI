@@ -7713,31 +7713,58 @@ def show_help_popup(tab_name, selected_files):
     helper_defs = {
         "chat": {
             "title": "Chat Helper",
-            "text": "Chat uses selected uploads plus shared workspace memory. It can summarize, answer questions, retrieve prior context, and create downloadable extracted assets.",
-            "hint": "Try: summarize, overview, find \"keyword\", count \"signal\", item details \"VN1630A\", visual reference \"VN1640A\", or compare."
+            "text": "You are a ChatGPT-like assistant specialized in analyzing user-uploaded documents. Use selected files and workspace memory to answer questions naturally, summarize content, and provide useful insights.",
+            "hint": "Ask a question, request an overview, or use direct commands like summarize, overview, find \"keyword\", count \"phrase\", item details \"VN1630A\".",
+            "shortcuts": [
+                ("/analyze", "Run focused analysis on selected files."),
+                ("/find", "Search uploaded content and workspace memory."),
+                ("/overview", "Get a document overview with headings and structure.")
+            ]
         },
         "dashboard": {
             "title": "Dashboard Helper",
-            "text": "Dashboard shows the hidden shared AI brain as useful insights: indexed files, chat memory, agent runs, themes, entities, risks, logs, and report charts.",
-            "hint": "Use this tab to inspect workspace intelligence, then open structured HTML/XLSX reports for metrics, verdicts, fixtures, and visual summaries."
+            "text": "Dashboard visualizes data from Excel/CSV files with interactive charts, trends, statistics, and exportable insights using Plotly.",
+            "hint": "Upload data files, select visualization options, and export charts or data summaries.",
+            "shortcuts": [
+                ("/analyze", "Run focused analysis on selected files."),
+                ("/find", "Search uploaded content and workspace memory."),
+                ("/overview", "Get a document overview with headings and structure.")
+            ]
         },
         "compare": {
             "title": "Compare Helper",
-            "text": "Compare supports exact inline word diff, side-by-side line diff, word presence summaries, semantic explanations, and Excel export.",
-            "hint": "Select two or more files, choose a comparison mode, run the comparison, then review the semantic summary and download workbook."
+            "text": "Compare multiple files with word-level diffs, semantic summaries, and Excel export for detailed analysis.",
+            "hint": "Select two or more files, choose a comparison mode, run the comparison, then review the semantic summary and download workbook.",
+            "shortcuts": [
+                ("/compare", "Compare selected documents and review differences."),
+                ("/find", "Search uploaded content and workspace memory."),
+                ("/overview", "Get a document overview with headings and structure.")
+            ]
         },
         "capl": {
             "title": "CAPL Helper",
-            "text": "CAPL combines code analysis with autonomous agents. It checks syntax, reports issues, suggests fixes, and can run goal-driven workflows over shared memory.",
-            "hint": "Select a .can or .txt file for direct analysis, or enter an autonomous goal to run the planning, retrieval, execution, reasoning, and coordination agents."
+            "text": "CAPL is an advanced AI IDE assistant for CANoe/CANalyzer scripts. It acts as a static analyzer, debugger, refactoring engine, test generator, and execution simulator. Analyze code, detect issues, get fixes, and simulate execution.",
+            "hint": "Upload or edit CAPL scripts, analyze for syntax/logical errors, apply AI-powered fixes, or run autonomous agents for goal-driven workflows.",
+            "shortcuts": [
+                ("/analyze", "Run focused analysis on selected files."),
+                ("/find", "Search uploaded content and workspace memory."),
+                ("/overview", "Get a document overview with headings and structure.")
+            ]
         }
     }
 
     helper_def = helper_defs.get(tab_name, helper_defs["chat"])
     suggestions = get_dynamic_suggestions(tab_name, skill_level)[:4]
+    if not suggestions:
+        suggestions = ["Review the documents", "Ask a question", "Request an overview", "Search for keywords"]
     next_action = get_next_best_action(tab_name, skill_level)
     modal_key = f"helper_modal_{tab_name}"
     helper_close_key = f"helper_close_{tab_name}"
+
+    # Build shortcuts HTML
+    shortcuts_html = ""
+    for cmd, desc in helper_def["shortcuts"]:
+        shortcuts_html += f'<div class="helper-shortcut"><code>{html.escape(cmd)}</code><span>{html.escape(desc)}</span></div>'
 
     st.markdown(
         f"""
@@ -7905,9 +7932,7 @@ def show_help_popup(tab_name, selected_files):
                 <div class="helper-callout">{html.escape(helper_def['text'])}</div>
 
                 <h4>⚡ Shortcuts</h4>
-                <div class="helper-shortcut"><code>/analyze</code><span>Run focused analysis on selected files.</span></div>
-                <div class="helper-shortcut"><code>/compare</code><span>Compare selected documents and review differences.</span></div>
-                <div class="helper-shortcut"><code>/find</code><span>Search uploaded content and workspace memory.</span></div>
+                {shortcuts_html}
 
                 <h4>📌 Tips</h4>
                 <ul>
@@ -9953,23 +9978,230 @@ if active_main_tab == "📡 CAPL":
 
         if editor_ai_fix_clicked:
             llm = load_llm()
+            # Add line numbers to code
+            code_lines = st.session_state.capl_editor_code.split('\n')
+            capl_code_with_line_numbers = '\n'.join(f"{i+1:4d}: {line}" for i, line in enumerate(code_lines))
             editor_prompt = f"""
-            You are a CAPL expert. Here is some CAPL code with errors. Please provide the corrected version of the code that fixes all syntax and logical errors. Only output the corrected CAPL code, nothing else.
+You are an advanced CAPL (CANoe/CANalyzer) AI IDE assistant.
 
-            Code:
-            {st.session_state.capl_editor_code}
-            """
+You act as:
+- CAPL static analyzer
+- CAPL debugger
+- CAPL refactoring engine
+- CAPL test generator
+- CAPL execution simulator
+- AI coding assistant (ChatGPT-like)
+
+---
+
+## 1. UNDERSTANDING TASK
+
+First analyze the CAPL code and understand:
+- purpose of the script
+- structure (events, timers, messages)
+- signals used
+- possible runtime flow
+
+---
+
+## 2. ISSUE DETECTION (MANDATORY)
+
+Detect:
+- syntax errors
+- logical errors
+- missing handlers
+- incorrect signal usage
+- bad practices
+
+STRICT RULE:
+- Every issue MUST include exact line number(s)
+- Do NOT guess lines
+
+---
+
+## 3. OUTPUT FORMAT (STRICT JSON)
+
+Return ONLY JSON:
+
+{{
+  "chat_response": "Natural explanation of what the code does and key insights",
+
+  "issues": [
+    {{
+      "title": "Short issue title",
+      "description": "What is wrong and why",
+      "severity": "error | warning | info",
+      "line": 12
+    }}
+  ],
+
+  "suggestions": [
+    "Short action 1",
+    "Short action 2",
+    "Short action 3"
+  ],
+
+  "fixes": [
+    {{
+      "line": 12,
+      "action": "replace | insert | delete",
+      "new_code": "corrected CAPL snippet",
+      "reason": "Why this fix is needed"
+    }}
+  ],
+
+  "fixed_code": "FULL corrected CAPL script",
+
+  "refactor": {{
+    "improved_code": "cleaned and optimized CAPL code",
+    "changes_summary": [
+      "Improved naming",
+      "Fixed structure",
+      "Removed redundancy"
+    ]
+  }},
+
+  "tests": [
+    {{
+      "name": "Test case name",
+      "purpose": "What is being validated",
+      "input": "Simulated input/event",
+      "expected_output": "Expected behavior",
+      "assertion": "Pass condition"
+    }}
+  ],
+
+  "simulation": [
+    {{
+      "step": 1,
+      "event": "CAPL event triggered",
+      "action": "Function execution",
+      "result": "State or signal change"
+    }}
+  ]
+}}
+
+---
+
+## 4. EXPLANATION FEATURE (IMPORTANT)
+
+For each issue, also support explanation:
+
+If user requests:
+👉 "Explain this error"
+
+Provide:
+- meaning
+- root cause
+- CAPL-specific reason
+- fix example
+
+---
+
+## 5. REFACTOR RULES
+
+When refactoring:
+- DO NOT change behavior
+- Improve structure only
+- Improve naming
+- Reduce duplication
+- Ensure CAPL compliance
+
+---
+
+## 6. FIX RULES
+
+When generating fixes:
+- minimal changes preferred
+- preserve intent
+- ensure compilable CAPL
+
+---
+
+## 7. SIMULATION RULES
+
+Simulate execution step-by-step:
+- events
+- timers
+- message handling
+- signal updates
+
+Return chronological flow.
+
+---
+
+## 8. SUGGESTIONS RULE
+
+Always include:
+- 3 to 6 short actionable next steps
+- must be context-aware
+- no generic suggestions
+
+---
+
+## 9. CHAT STYLE RULE
+
+chat_response must:
+- be natural (like ChatGPT)
+- explain what code does
+- highlight key behavior
+- be concise
+
+---
+
+## CAPL CODE INPUT:
+
+{capl_code_with_line_numbers}
+
+---
+
+## OPTIONAL CONTEXT:
+
+User Query:
+Suggest Fix
+
+Chat History:
+None
+
+Simulated Inputs:
+None
+"""
             if llm is None:
                 st.error("AI fix feature is unavailable because model backend could not be initialized.")
             else:
                 with st.spinner("Generating CAPL fix suggestion..."):
                     try:
-                        st.session_state.capl_editor_ai_fix = llm.invoke(editor_prompt).strip()
+                        response = llm.invoke(editor_prompt)
+                        # Parse JSON response
+                        try:
+                            ai_result = json.loads(response.strip())
+                            st.session_state.capl_editor_ai_fix = ai_result.get("fixed_code", "")
+                            st.session_state.capl_editor_ai_chat = ai_result.get("chat_response", "")
+                            st.session_state.capl_editor_ai_issues = ai_result.get("issues", [])
+                            st.session_state.capl_editor_ai_suggestions = ai_result.get("suggestions", [])
+                        except json.JSONDecodeError:
+                            st.error("AI response was not valid JSON. Using raw response as fix.")
+                            st.session_state.capl_editor_ai_fix = response.strip()
                     except Exception as exc:
                         st.error(f"AI suggestion failed: {exc}")
                         st.session_state.capl_editor_ai_fix = ""
 
         if st.session_state.capl_editor_ai_fix:
+            if st.session_state.get("capl_editor_ai_chat"):
+                st.markdown("### 🤖 AI Analysis")
+                st.markdown(st.session_state.capl_editor_ai_chat)
+            
+            if st.session_state.get("capl_editor_ai_issues"):
+                st.markdown("### Issues Detected")
+                for issue in st.session_state.capl_editor_ai_issues:
+                    severity_icon = {"error": "❌", "warning": "⚠️", "info": "ℹ️"}.get(issue.get("severity", "info"), "ℹ️")
+                    st.markdown(f"{severity_icon} **{issue.get('title', 'Issue')}** (Line {issue.get('line', '?')}): {issue.get('description', '')}")
+            
+            if st.session_state.get("capl_editor_ai_suggestions"):
+                st.markdown("### Suggestions")
+                for sugg in st.session_state.capl_editor_ai_suggestions:
+                    st.markdown(f"- {sugg}")
+            
             st.markdown("### Suggested Corrected CAPL Code")
             fixed_editor_issues = analyze_capl_code_with_suggestions(st.session_state.capl_editor_ai_fix)
             st.markdown(
@@ -10069,28 +10301,227 @@ if active_main_tab == "📡 CAPL":
                     if llm is None:
                         st.error("AI fix feature is unavailable because model backend could not be initialized.")
                     else:
+                        # Add line numbers to code
+                        code_lines = code.split('\n')
+                        capl_code_with_line_numbers = '\n'.join(f"{i+1:4d}: {line}" for i, line in enumerate(code_lines))
                         prompt = f"""
-                        You are a CAPL expert. Here is some CAPL code with errors. Please provide the corrected version of the code that fixes all syntax and logical errors. Only output the corrected CAPL code, nothing else.
+You are an advanced CAPL (CANoe/CANalyzer) AI IDE assistant.
 
-                        Code:
-                        {code}
-                        """
+You act as:
+- CAPL static analyzer
+- CAPL debugger
+- CAPL refactoring engine
+- CAPL test generator
+- CAPL execution simulator
+- AI coding assistant (ChatGPT-like)
+
+---
+
+## 1. UNDERSTANDING TASK
+
+First analyze the CAPL code and understand:
+- purpose of the script
+- structure (events, timers, messages)
+- signals used
+- possible runtime flow
+
+---
+
+## 2. ISSUE DETECTION (MANDATORY)
+
+Detect:
+- syntax errors
+- logical errors
+- missing handlers
+- incorrect signal usage
+- bad practices
+
+STRICT RULE:
+- Every issue MUST include exact line number(s)
+- Do NOT guess lines
+
+---
+
+## 3. OUTPUT FORMAT (STRICT JSON)
+
+Return ONLY JSON:
+
+{{
+  "chat_response": "Natural explanation of what the code does and key insights",
+
+  "issues": [
+    {{
+      "title": "Short issue title",
+      "description": "What is wrong and why",
+      "severity": "error | warning | info",
+      "line": 12
+    }}
+  ],
+
+  "suggestions": [
+    "Short action 1",
+    "Short action 2",
+    "Short action 3"
+  ],
+
+  "fixes": [
+    {{
+      "line": 12,
+      "action": "replace | insert | delete",
+      "new_code": "corrected CAPL snippet",
+      "reason": "Why this fix is needed"
+    }}
+  ],
+
+  "fixed_code": "FULL corrected CAPL script",
+
+  "refactor": {{
+    "improved_code": "cleaned and optimized CAPL code",
+    "changes_summary": [
+      "Improved naming",
+      "Fixed structure",
+      "Removed redundancy"
+    ]
+  }},
+
+  "tests": [
+    {{
+      "name": "Test case name",
+      "purpose": "What is being validated",
+      "input": "Simulated input/event",
+      "expected_output": "Expected behavior",
+      "assertion": "Pass condition"
+    }}
+  ],
+
+  "simulation": [
+    {{
+      "step": 1,
+      "event": "CAPL event triggered",
+      "action": "Function execution",
+      "result": "State or signal change"
+    }}
+  ]
+}}
+
+---
+
+## 4. EXPLANATION FEATURE (IMPORTANT)
+
+For each issue, also support explanation:
+
+If user requests:
+👉 "Explain this error"
+
+Provide:
+- meaning
+- root cause
+- CAPL-specific reason
+- fix example
+
+---
+
+## 5. REFACTOR RULES
+
+When refactoring:
+- DO NOT change behavior
+- Improve structure only
+- Improve naming
+- Reduce duplication
+- Ensure CAPL compliance
+
+---
+
+## 6. FIX RULES
+
+When generating fixes:
+- minimal changes preferred
+- preserve intent
+- ensure compilable CAPL
+
+---
+
+## 7. SIMULATION RULES
+
+Simulate execution step-by-step:
+- events
+- timers
+- message handling
+- signal updates
+
+Return chronological flow.
+
+---
+
+## 8. SUGGESTIONS RULE
+
+Always include:
+- 3 to 6 short actionable next steps
+- must be context-aware
+- no generic suggestions
+
+---
+
+## 9. CHAT STYLE RULE
+
+chat_response must:
+- be natural (like ChatGPT)
+- explain what code does
+- highlight key behavior
+- be concise
+
+---
+
+## CAPL CODE INPUT:
+
+{capl_code_with_line_numbers}
+
+---
+
+## OPTIONAL CONTEXT:
+
+User Query:
+Analyze and fix CAPL code
+
+Chat History:
+None
+
+Simulated Inputs:
+None
+"""
                         with st.spinner("Analyzing and fixing with AI..."):
                             try:
                                 response = llm.invoke(prompt)
-                                corrected_code = response.strip()
-                                # Update the code in session state
-                                st.session_state.file_texts[selected_capl] = corrected_code
-                                code = corrected_code
-                                issues = analyze_capl_code_with_suggestions(code)
-                                st.session_state.capl_last_analyzed_file = selected_capl
-                                st.session_state.capl_last_issues = issues
-                                st.success("✅ Code corrected by AI!")
-                                st.markdown("### 📄 Corrected CAPL Code")
-                                st.markdown(render_capl_code_with_highlights(code, issues), unsafe_allow_html=True)
-                                if issues:
-                                    st.warning("⚠️ Some issues remain:")
-                                render_capl_issue_table(issues)
+                                # Parse JSON response
+                                try:
+                                    ai_result = json.loads(response.strip())
+                                    corrected_code = ai_result.get("fixed_code", "")
+                                    if corrected_code:
+                                        # Update the code in session state
+                                        st.session_state.file_texts[selected_capl] = corrected_code
+                                        code = corrected_code
+                                        issues = analyze_capl_code_with_suggestions(code)
+                                        st.session_state.capl_last_analyzed_file = selected_capl
+                                        st.session_state.capl_last_issues = issues
+                                        st.success("✅ Code corrected by AI!")
+                                        st.markdown("### 🤖 AI Analysis")
+                                        st.markdown(ai_result.get("chat_response", ""))
+                                        if ai_result.get("issues"):
+                                            st.markdown("### Issues Detected")
+                                            for issue in ai_result["issues"]:
+                                                severity_icon = {"error": "❌", "warning": "⚠️", "info": "ℹ️"}.get(issue.get("severity", "info"), "ℹ️")
+                                                st.markdown(f"{severity_icon} **{issue.get('title', 'Issue')}** (Line {issue.get('line', '?')}): {issue.get('description', '')}")
+                                        if ai_result.get("suggestions"):
+                                            st.markdown("### Suggestions")
+                                            for sugg in ai_result["suggestions"]:
+                                                st.markdown(f"- {sugg}")
+                                        st.markdown("### 📄 Corrected CAPL Code")
+                                        st.markdown(render_capl_code_with_highlights(code, issues), unsafe_allow_html=True)
+                                        if issues:
+                                            st.warning("⚠️ Some issues remain:")
+                                        render_capl_issue_table(issues)
+                                except json.JSONDecodeError:
+                                    st.error("AI response was not valid JSON.")
                             except Exception as exc:
                                 st.error(f"AI suggestion failed: {exc}")
 
