@@ -5826,3 +5826,108 @@ def ensure_tab_glow_colors(tab_options):
 
     st.session_state.tab_colors = assigned_colors
     return assigned_colors
+
+
+# ==============================
+# CONTEXT-AWARE TAB SUGGESTION ENGINE
+# Moved into functions.py so app.py remains an orchestrator.
+# Reads chat, recent behavior, and CAPL context, then suggests the best tab.
+# ==============================
+def ensure_context_memory():
+    """Initialize lightweight context memory used by automatic tab suggestion."""
+    default_memory = {
+        "recent_messages": [],
+        "recent_actions": [],
+        "capl_context": {},
+        "last_signature": "",
+        "suggested_tab": None,
+    }
+    memory = st.session_state.get("context_memory")
+    if not isinstance(memory, dict):
+        memory = {}
+    normalized = {**default_memory, **memory}
+    if not isinstance(normalized.get("recent_messages"), list):
+        normalized["recent_messages"] = []
+    if not isinstance(normalized.get("recent_actions"), list):
+        normalized["recent_actions"] = []
+    if not isinstance(normalized.get("capl_context"), dict):
+        normalized["capl_context"] = {}
+    st.session_state.context_memory = normalized
+    return normalized
+
+
+def build_context_memory_snapshot():
+    """Collect chat messages, recent actions, and CAPL state without heavy work."""
+    memory = ensure_context_memory()
+
+    message_texts = []
+    for message in st.session_state.get("messages", [])[-8:]:
+        if isinstance(message, dict):
+            message_texts.append(str(message.get("content") or message.get("user") or message.get("assistant") or ""))
+        else:
+            message_texts.append(str(message))
+
+    action_texts = []
+    tracker = st.session_state.get("behavior_tracker", {})
+    if isinstance(tracker, dict):
+        for tab_data in tracker.values():
+            if isinstance(tab_data, dict):
+                action_texts.extend(str(action) for action in tab_data.get("actions", [])[-5:])
+
+    capl_issues = st.session_state.get("capl_last_issues") or []
+    selected_capl_file = st.session_state.get("selected_capl_file", "")
+    if str(selected_capl_file).strip() == "--Select CAPL file--":
+        selected_capl_file = ""
+    capl_context = {
+        "selected_file": selected_capl_file,
+        "last_file": st.session_state.get("capl_last_analyzed_file", ""),
+        "issue_count": f"{len(capl_issues)} CAPL issue(s)" if isinstance(capl_issues, list) and capl_issues else "",
+        "goal": st.session_state.get("capl_autonomous_goal", ""),
+        "agent_result": st.session_state.get("capl_agent_result", ""),
+    }
+
+    memory["recent_messages"] = message_texts[-8:]
+    memory["recent_actions"] = action_texts[-12:]
+    memory["capl_context"] = capl_context
+    st.session_state.context_memory = memory
+    return memory
+
+
+def suggest_tab_from_context(tab_options):
+    """Return the best tab label from simple keyword rules."""
+    memory = build_context_memory_snapshot()
+    context_text = " ".join(
+        memory.get("recent_messages", [])
+        + memory.get("recent_actions", [])
+        + [str(value) for value in memory.get("capl_context", {}).values()]
+    ).lower()
+
+    tab_lookup = {tab_name.lower(): tab_name for tab_name in tab_options}
+    chat_tab = next((tab for key, tab in tab_lookup.items() if "chat" in key), tab_options[0])
+    dashboard_tab = next((tab for key, tab in tab_lookup.items() if "dashboard" in key), chat_tab)
+    compare_tab = next((tab for key, tab in tab_lookup.items() if "compare" in key), chat_tab)
+    capl_tab = next((tab for key, tab in tab_lookup.items() if "capl" in key), chat_tab)
+
+    if any(keyword in context_text for keyword in ["error", "fix", "capl", "syntax", "compile", "debug"]):
+        return capl_tab, context_text
+    if any(keyword in context_text for keyword in ["compare", "difference", "differences", "diff", "changes"]):
+        return compare_tab, context_text
+    if any(keyword in context_text for keyword in ["overview", "summary", "dashboard", "chart", "metric", "statistics"]):
+        return dashboard_tab, context_text
+    return chat_tab, context_text
+
+
+def apply_auto_tab_suggestion(tab_options):
+    """Switch active_main_tab only when the context snapshot changes."""
+    memory = ensure_context_memory()
+    suggested_tab, context_text = suggest_tab_from_context(tab_options)
+    signature = hashlib.md5(context_text.encode("utf-8", errors="ignore")).hexdigest() if context_text else ""
+
+    if signature and signature != memory.get("last_signature"):
+        memory["last_signature"] = signature
+        memory["suggested_tab"] = suggested_tab
+        st.session_state.context_memory = memory
+        if suggested_tab in tab_options:
+            st.session_state.active_main_tab = suggested_tab
+
+    return st.session_state.get("active_main_tab", suggested_tab)
