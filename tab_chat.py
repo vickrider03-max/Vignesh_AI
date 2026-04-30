@@ -240,9 +240,11 @@ def render_chat_tab():
                                 response = "".join(response_blocks)
                             else:
                                 response = "⚠️ Specify the search word or phrase in quotes. Example: find('keyword') or search(\"keyword\")"
-                        elif technical_request_type == "FULL_DOCUMENT_SUMMARY":
+                        elif technical_request_type == "FULL_DOCUMENT_ANALYSIS":
                             response = build_full_document_summary_response(selected_file_texts)
-                        elif technical_request_type == "DIAGRAMS_PIN_DETAILS_TABLES":
+                        elif technical_request_type == "SHORT_SUMMARY":
+                            response = build_short_summary_response(selected_file_texts)
+                        elif technical_request_type == "PIN_DIAGRAMS_CONNECTORS_TABLES":
                             response, pin_csv_downloads, ascii_diagram_downloads = build_diagram_pin_details_response(selected_file_texts, processing_input)
                             st.session_state.chat_summary_downloads = {
                                 "images": [],
@@ -252,9 +254,15 @@ def render_chat_tab():
                             }
                         elif technical_request_type == "FEATURES_WORKFLOW_USE_CASES":
                             response = build_features_workflow_response(selected_file_texts)
+                        elif technical_request_type == "TABLE_EXTRACTION":
+                            response = build_table_extraction_response(selected_file_texts)
+                        elif technical_request_type == "IMAGE_OR_DIAGRAM_EXTRACTION":
+                            response = build_image_or_diagram_extraction_response(selected_file_texts, processing_input)
+                        elif technical_request_type == "DOWNLOADABLE_REPORT":
+                            response = build_downloadable_report_response(selected_file_texts)
                         elif any(term in user_input_lower for term in ["item details", "item information", "extract item", "about item", "information about", "details about"]):
                             response = build_specific_component_response(selected_file_texts, processing_input)
-                        elif technical_request_type == "SPECIFIC_COMPONENT":
+                        elif technical_request_type == "SPECIFIC_COMPONENT_DETAILS":
                             response = build_specific_component_response(selected_file_texts, processing_input)
                         elif any(term in user_input_lower for term in ["analyze", "summary", "summarize", "summarise"]):
                             response = build_full_document_summary_response(selected_file_texts)
@@ -286,15 +294,19 @@ def render_chat_tab():
                                 ("system",
                                  "You are an expert technical analyst and document intelligence system.\n\n"
                                  "Classify the user's request into exactly one response type:\n"
-                                 "FULL_DOCUMENT_SUMMARY, SPECIFIC_COMPONENT, DIAGRAMS / PIN DETAILS / TABLES, "
-                                 "FEATURES / WORKFLOW / USE CASES, or COMPARISON.\n\n"
+                                 "FULL_DOCUMENT_ANALYSIS, SHORT_SUMMARY, SPECIFIC_COMPONENT_DETAILS, PIN_DIAGRAMS_CONNECTORS_TABLES, "
+                                 "FEATURES_WORKFLOW_USE_CASES, COMPARISON, TABLE_EXTRACTION, IMAGE_OR_DIAGRAM_EXTRACTION, or DOWNLOADABLE_REPORT.\n\n"
                                  "Document profile for this request: {document_profile}.\n\n"
                                  "RESPONSE RULES:\n"
-                                 "- FULL_DOCUMENT_SUMMARY: provide Overview, Core Concept, Architecture, Capabilities, Workflow, Use Cases, Key Takeaways. Do not copy page-wise text.\n"
-                                 "- SPECIFIC_COMPONENT: focus only on the requested item and include Overview, Purpose, Features, Technical Details, Interfaces, Configuration, Key Notes.\n"
-                                 "- DIAGRAMS / PIN DETAILS / TABLES: extract or reconstruct Pin Table, Diagram, and Connector Mapping. Keep tables CSV-ready.\n"
-                                 "- FEATURES / WORKFLOW / USE CASES: extract functional behavior and convert it into Capabilities, Process Flow, and Real Usage.\n"
-                                 "- COMPARISON: compare only the requested items/files without repeating shared content.\n\n"
+                                 "- FULL_DOCUMENT_ANALYSIS: provide Overview, Core Concept, Architecture / Structure, Key Capabilities, Workflow, Use Cases, Important Notes, Key Takeaways. Do not copy page-wise text.\n"
+                                 "- SHORT_SUMMARY: provide what the document is about, main purpose, 5–7 key points, and 3 key takeaways.\n"
+                                 "- SPECIFIC_COMPONENT_DETAILS: focus only on the requested item and include Overview, Purpose, Key Features, Technical Details, Interfaces, Configuration, Limitations / Important Notes.\n"
+                                 "- PIN_DIAGRAMS_CONNECTORS_TABLES: extract or reconstruct connector overview, pin configuration table, diagram, and mapping details. Keep tables CSV-ready.\n"
+                                 "- FEATURES_WORKFLOW_USE_CASES: extract functional behavior into Features, Capabilities, Workflow, Inputs/Outputs, Real-World Applications, and Benefits.\n"
+                                 "- COMPARISON: compare only the requested items/files and highlight similarities/differences without repeating shared content.\n"
+                                 "- TABLE_EXTRACTION: provide extracted tables only, preserve rows and columns, and present CSV-ready output.\n"
+                                 "- IMAGE_OR_DIAGRAM_EXTRACTION: identify relevant figures, diagrams, or visual references and recreate them as clean text diagrams when possible.\n"
+                                 "- DOWNLOADABLE_REPORT: create a structured export-style summary suitable for DOCX/Markdown/PDF report generation.\n\n"
                                  "STRICT RULES:\n"
                                  "- Do not copy raw text.\n"
                                  "- Do not show Page X Text.\n"
