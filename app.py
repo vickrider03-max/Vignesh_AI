@@ -5,6 +5,7 @@
 import html, re, hashlib, os, json, base64, pickle, zipfile, sqlite3
 import importlib
 import math
+import random
 import uuid
 import urllib.parse
 import xml.etree.ElementTree as ET
@@ -5692,6 +5693,15 @@ def extract_quoted_item_name(user_input):
     return ""
 
 
+def extract_bare_item_name(user_input):
+    """Detect terse part-number queries such as VN1671 or VN 1671."""
+    text = str(user_input or "").strip()
+    match = re.search(r"\b(VN)\s*[- ]?\s*(\d{4}[A-Za-z]?)\b", text, re.IGNORECASE)
+    if match:
+        return f"{match.group(1).upper()}{match.group(2).upper()}"
+    return ""
+
+
 def normalize_extracted_line(line):
     line = str(line or "").strip()
     line = re.sub(r"([a-z])([A-Z])", r"\1 \2", line)
@@ -8296,66 +8306,6 @@ st.markdown("""
     }
 
     </style>
-    <script>
-    (() => {
-        const setupGlassNav = () => {
-            const root = document;
-            const navHost = root.querySelector('.st-key-active_main_tab');
-            if (!navHost) return;
-
-            const group = navHost.querySelector('div[role="radiogroup"]');
-            if (!group) return;
-
-            let indicator = group.querySelector(':scope > .ai-nav-indicator');
-            if (!indicator) {
-                indicator = root.createElement('span');
-                indicator.className = 'ai-nav-indicator';
-                indicator.setAttribute('aria-hidden', 'true');
-                group.appendChild(indicator);
-            }
-
-            const labels = Array.from(group.querySelectorAll(':scope > label'));
-            if (!labels.length) return;
-
-            const activeLabel = labels.find(label =>
-                label.getAttribute('data-checked') === 'true' ||
-                label.getAttribute('aria-checked') === 'true' ||
-                label.querySelector('input:checked')
-            ) || labels[0];
-
-            labels.forEach(label => {
-                label.classList.toggle('ai-nav-active', label === activeLabel);
-            });
-
-            const groupRect = group.getBoundingClientRect();
-            const activeRect = activeLabel.getBoundingClientRect();
-            if (!groupRect.width || !activeRect.width) return;
-
-            const indicatorWidth = Math.min(Math.max(activeRect.width * 0.72, 46), 112);
-            const indicatorX = activeRect.left - groupRect.left + ((activeRect.width - indicatorWidth) / 2);
-
-            group.style.setProperty('--ai-nav-indicator-width', `${indicatorWidth}px`);
-            group.style.setProperty('--ai-nav-indicator-x', `${indicatorX}px`);
-        };
-
-        const scheduleGlassNav = () => window.requestAnimationFrame(setupGlassNav);
-
-        if (!window.__intellidocGlassNavObserver) {
-            window.__intellidocGlassNavObserver = new MutationObserver(scheduleGlassNav);
-            window.__intellidocGlassNavObserver.observe(document.body, {
-                subtree: true,
-                childList: true,
-                attributes: true,
-                attributeFilter: ['data-checked', 'aria-checked', 'checked', 'class']
-            });
-            window.addEventListener('resize', scheduleGlassNav, { passive: true });
-        }
-
-        scheduleGlassNav();
-        window.setTimeout(scheduleGlassNav, 120);
-        window.setTimeout(scheduleGlassNav, 420);
-    })();
-    </script>
     <style>
     @media (max-width: 767px) {
         .stButton > button {
@@ -8930,7 +8880,203 @@ st.markdown(
 # -------------------------------
 # Creates the horizontal tab navigation with custom styling.
 # Each tab corresponds to a major feature area of the application.
+def hex_to_rgb_values(hex_color):
+    clean = str(hex_color or "#38bdf8").lstrip("#")
+    if len(clean) != 6:
+        clean = "38bdf8"
+    try:
+        return tuple(int(clean[index:index + 2], 16) for index in (0, 2, 4))
+    except ValueError:
+        return (56, 189, 248)
+
+
+def ensure_tab_glow_colors(tab_options):
+    """Assign each tab one random neon identity color and keep it across reruns."""
+    neon_palette = [
+        "#00E5FF", "#7C4DFF", "#FF4081", "#69F0AE", "#FFEA00", "#FF6D00",
+        "#18FFFF", "#B388FF", "#F50057", "#64FFDA", "#40C4FF", "#EEFF41",
+    ]
+    existing_colors = st.session_state.get("tab_colors")
+    if not isinstance(existing_colors, dict):
+        existing_colors = {}
+
+    assigned_colors = {
+        tab_name: existing_colors[tab_name]
+        for tab_name in tab_options
+        if tab_name in existing_colors and existing_colors[tab_name]
+    }
+    used_colors = set(assigned_colors.values())
+    available_colors = [color for color in neon_palette if color not in used_colors]
+    random.shuffle(available_colors)
+
+    for tab_name in tab_options:
+        if tab_name in assigned_colors:
+            continue
+        if available_colors:
+            assigned_colors[tab_name] = available_colors.pop()
+        else:
+            while True:
+                generated_color = "#{:06X}".format(random.randint(0x3030A0, 0xFFFFFF))
+                if generated_color not in used_colors:
+                    assigned_colors[tab_name] = generated_color
+                    break
+        used_colors.add(assigned_colors[tab_name])
+
+    st.session_state.tab_colors = assigned_colors
+    return assigned_colors
+
+
 main_tab_options = ["💬 Chat", "📊 Dashboard", "📂 Compare", "📡 CAPL"]
+tab_colors = ensure_tab_glow_colors(main_tab_options)
+tab_color_css = "\n".join(
+    (
+        ".st-key-active_main_tab div[role=\"radiogroup\"] > label:nth-of-type({index}) {{ "
+        "--tab-glow: {color}; --tab-glow-rgb: {red}, {green}, {blue}; }}"
+    ).format(
+        index=index,
+        color=tab_colors[tab_name],
+        red=hex_to_rgb_values(tab_colors[tab_name])[0],
+        green=hex_to_rgb_values(tab_colors[tab_name])[1],
+        blue=hex_to_rgb_values(tab_colors[tab_name])[2],
+    )
+    for index, tab_name in enumerate(main_tab_options, start=1)
+)
+
+st.markdown(
+    f"""
+    <style>
+    {tab_color_css}
+
+    .st-key-active_main_tab {{
+        --tab-neutral-bg: rgba(248, 250, 252, 0.72);
+        --tab-neutral-border: rgba(148, 163, 184, 0.22);
+    }}
+
+    .st-key-active_main_tab .ai-nav-indicator {{
+        display: none !important;
+    }}
+
+    .st-key-active_main_tab div[role="radiogroup"] {{
+        align-items: stretch !important;
+        border-bottom: none !important;
+        gap: clamp(10px, 1.6vw, 16px) !important;
+        padding: 4px 4px 12px !important;
+    }}
+
+    .st-key-active_main_tab div[role="radiogroup"] > label {{
+        background: var(--tab-neutral-bg) !important;
+        border: 1px solid var(--tab-neutral-border) !important;
+        border-left: 5px solid transparent !important;
+        border-radius: 12px !important;
+        box-shadow: 0 8px 22px rgba(15, 23, 42, 0.055) !important;
+        color: #64748b !important;
+        opacity: 0.86;
+        padding: 10px 18px 10px 15px !important;
+        transform: translateY(0) scale(1);
+        transition:
+            background-color 300ms ease-in-out,
+            border-color 300ms ease-in-out,
+            box-shadow 300ms ease-in-out,
+            color 300ms ease-in-out,
+            opacity 300ms ease-in-out,
+            transform 300ms ease-in-out !important;
+    }}
+
+    .st-key-active_main_tab div[role="radiogroup"] > label::before {{
+        background: var(--tab-glow, #38bdf8) !important;
+        border-radius: 999px !important;
+        bottom: 18% !important;
+        box-shadow:
+            0 0 0 rgba(var(--tab-glow-rgb, 56, 189, 248), 0),
+            0 0 0 rgba(var(--tab-glow-rgb, 56, 189, 248), 0) !important;
+        content: "" !important;
+        filter: none !important;
+        height: auto !important;
+        left: -5px !important;
+        opacity: 0 !important;
+        position: absolute !important;
+        top: 18% !important;
+        transform: scaleY(0.56) !important;
+        transition:
+            opacity 300ms ease-in-out,
+            transform 300ms ease-in-out,
+            box-shadow 300ms ease-in-out !important;
+        width: 5px !important;
+        z-index: 0 !important;
+    }}
+
+    .st-key-active_main_tab div[role="radiogroup"] > label:hover {{
+        background: rgba(248, 250, 252, 0.96) !important;
+        border-color: rgba(148, 163, 184, 0.38) !important;
+        color: #334155 !important;
+        opacity: 1;
+        transform: translateY(-1px) scale(1.01) !important;
+    }}
+
+    .st-key-active_main_tab div[role="radiogroup"] > label[data-checked="true"],
+    .st-key-active_main_tab div[role="radiogroup"] > label.ai-nav-active {{
+        animation: activeTabGlowIn 340ms ease-in-out both !important;
+        background:
+            linear-gradient(90deg,
+                rgba(var(--tab-glow-rgb, 56, 189, 248), 0.20),
+                rgba(var(--tab-glow-rgb, 56, 189, 248), 0.08) 58%,
+                rgba(255, 255, 255, 0.72)) !important;
+        border-color: rgba(var(--tab-glow-rgb, 56, 189, 248), 0.54) !important;
+        border-left-color: var(--tab-glow, #38bdf8) !important;
+        box-shadow:
+            0 0 0 1px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.20),
+            0 0 18px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.44),
+            0 0 36px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.18),
+            inset 0 0 18px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.10) !important;
+        color: #0f172a !important;
+        opacity: 1;
+        transform: translateY(-1px) scale(1.02) !important;
+    }}
+
+    .st-key-active_main_tab div[role="radiogroup"] > label[data-checked="true"]::before,
+    .st-key-active_main_tab div[role="radiogroup"] > label.ai-nav-active::before {{
+        animation: activeTabBorderPulse 2.8s ease-in-out infinite;
+        box-shadow:
+            0 0 9px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.78),
+            0 0 20px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.42) !important;
+        opacity: 1 !important;
+        transform: scaleY(1) !important;
+    }}
+
+    .st-key-active_main_tab div[role="radiogroup"] > label p {{
+        color: inherit !important;
+    }}
+
+    @keyframes activeTabGlowIn {{
+        from {{
+            opacity: 0.72;
+            box-shadow:
+                0 0 0 rgba(var(--tab-glow-rgb, 56, 189, 248), 0),
+                0 0 0 rgba(var(--tab-glow-rgb, 56, 189, 248), 0);
+            transform: translateY(1px) scale(0.99);
+        }}
+        to {{
+            opacity: 1;
+            transform: translateY(-1px) scale(1.02);
+        }}
+    }}
+
+    @keyframes activeTabBorderPulse {{
+        0%, 100% {{
+            box-shadow:
+                0 0 8px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.62),
+                0 0 18px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.32);
+        }}
+        50% {{
+            box-shadow:
+                0 0 12px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.92),
+                0 0 28px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.46);
+        }}
+    }}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 active_main_tab = st.radio("Open Section", main_tab_options, horizontal=True, key="active_main_tab", label_visibility="collapsed")
 
 # -------------------------------
@@ -9124,7 +9270,7 @@ if active_main_tab == "💬 Chat":
             combined_text = "\n".join([st.session_state.file_texts.get(f, "") for f in chat_files])
     
 
-            user_input = st.chat_input("Ask anything")
+            user_input = st.chat_input("Ask anything related to selected documents/files")
             if st.session_state.get("input_prefill"):
                 user_input = st.session_state.input_prefill
                 st.session_state.input_prefill = ""
@@ -9229,6 +9375,16 @@ if active_main_tab == "💬 Chat":
                                     else:
                                         response_blocks.append(f"📄 **{f}**\n\nNo readable content found in this document.")
                                 response = "\n\n---\n\n".join(response_blocks)
+                        elif extract_bare_item_name(processing_input):
+                            item_name = extract_bare_item_name(processing_input)
+                            response_blocks = []
+                            for f in chat_files:
+                                file_text = st.session_state.file_texts.get(f, "")
+                                if file_text.strip():
+                                    response_blocks.append(build_item_information_response(f, file_text, item_name))
+                                else:
+                                    response_blocks.append(f"ðŸ“„ **{f}**\n\nNo readable content found in this document.")
+                            response = "\n\n---\n\n".join(response_blocks)
                         elif any(term in user_input_lower for term in ["analyze", "summary", "summarize", "summarise"]):
                             result = []
                             summary_image_downloads = []
@@ -9279,15 +9435,20 @@ if active_main_tab == "💬 Chat":
                             if llm is not None:
                                 try:
                                     chain = ({"context": retriever | (lambda docs: '\n'.join(getattr(doc, "page_content", str(doc)) for doc in docs)),
-                                              "chat_history": chat_history,
+                                              "chat_history": lambda _: chat_history,
                                               "question": RunnablePassthrough()} | prompt | llm)
                                 except Exception as e:
                                     st.warning(f"Could not create LLM chain: {e}")
                                     chain = None
 
                             if chain is not None:
-                                response = str(chain.invoke(processing_input))
-                            else:
+                                try:
+                                    response = str(chain.invoke(processing_input))
+                                except Exception as e:
+                                    st.warning(f"Could not run LLM chain: {e}")
+                                    chain = None
+
+                            if chain is None:
                                 memory_hits = search_workspace_memory(processing_input, limit=4)
                                 if memory_hits:
                                     response = "AI model is unavailable, so I retrieved the closest workspace memory:\n\n" + "\n\n---\n\n".join(memory_hits)
@@ -9371,12 +9532,6 @@ if active_main_tab == "📊 Dashboard":
         f for f in st.session_state.selected_files
         if f.lower().endswith((".html", ".htm", ".xlsx"))
     ])
-
-    st.markdown("### Workspace Memory Snapshot")
-    st.markdown(f"- Indexed files: **{len(st.session_state.workspace_memory.get('indexed_files', []))}**")
-    st.markdown(f"- Chat history entries: **{len(st.session_state.workspace_memory.get('chat', []))}**")
-    st.markdown(f"- Autonomous CAPL runs: **{len(st.session_state.workspace_memory.get('agent_runs', []))}**")
-    render_workspace_intelligence_panel(st.session_state.selected_files)
 
     # Filter selected files for dashboard-compatible formats
     dashboard_files = [
