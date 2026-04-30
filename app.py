@@ -8969,26 +8969,6 @@ if active_main_tab == "💬 Chat":
                 ensure_files_processed(chat_files)
             combined_text = "\n".join([st.session_state.file_texts.get(f, "") for f in chat_files])
     
-            empty_state_suggestions = [
-                "Analyze data",
-                "Item details: VN1630A",
-                "Pin diagram: D-SUB9",
-                "Find keyword",
-                "Count signals",
-                "Overview",
-            ]
-            if not st.session_state.messages and not st.session_state.get("input_prefill"):
-                suggestion_cols = st.columns(len(empty_state_suggestions))
-                for suggestion_index, suggestion_text in enumerate(empty_state_suggestions):
-                    if suggestion_cols[suggestion_index].button(
-                        suggestion_text,
-                        key=f"chat_sugg_{suggestion_index}",
-                        use_container_width=True,
-                    ):
-                        st.session_state.input_prefill = suggestion_text
-                        st.rerun()
-
-            st.caption('Try: analyze • item details "VN1630A" • pin diagram "D-SUB9" • find keyword • count signal • overview')
 
             user_input = st.chat_input("Ask anything")
             if st.session_state.get("input_prefill"):
@@ -9132,15 +9112,20 @@ if active_main_tab == "💬 Chat":
                             combined_vs = get_workspace_vector_store(chat_files) or get_combined_vector_store(chat_files)
                             retriever = combined_vs.as_retriever(search_kwargs={"k": 3})
                             llm = load_llm()
+                            chat_history = "\n".join(
+                                f"{'User' if msg['role'] == 'user' else 'Assistant'}: {msg['content']}"
+                                for msg in st.session_state.messages[:-1]
+                            )
                             prompt = ChatPromptTemplate.from_messages([
                                 ("system",
-                                 "You are the conversational engine inside a unified AI workspace. Use uploaded document context, prior chat memory, agent memory, and workspace logs when relevant.\nIf information is not found in shared memory, say 'This information is not available in the uploaded documents or workspace memory.'\nContext:\n{context}"),
+                                 "You are a helpful AI assistant that analyzes user-uploaded documents and responds like ChatGPT.\n\nYour goals:\n- Understand the document content\n- Answer user questions clearly and naturally\n- Provide useful insights (not just raw answers)\n- Suggest helpful next actions when relevant\n\nDOCUMENT UNDERSTANDING:\n- Identify what kind of document this is (data, report, invoice, technical, etc.)\n- Notice structure (tables, lists, sections, numbers)\n- Focus on the most important information\n\nRESPONSE STYLE:\n- Be clear, natural, and conversational\n- Keep answers concise but informative\n- Do not sound robotic or overly formal\n- If unsure, say what is missing instead of guessing\n\nWHEN DATA/TABLES ARE PRESENT:\n- Summarize key patterns or trends\n- Mention missing values or anomalies if visible\n- Do not hallucinate numbers\n\nWHEN NO USER QUESTION IS PROVIDED:\n- Give a short overview of the document\n- Highlight key points or structure\n\nSUGGESTIONS:\nAt the end of your response, suggest 3–5 useful next actions.\nRules for suggestions:\n- Each must be short (2–5 words)\n- Must be relevant to the document\n- Avoid generic phrases like \"Analyze document\"\n\nCONVERSATION:\nUse previous messages to maintain context and continuity.\n\nDOCUMENT:\n{context}\n\nCONVERSATION HISTORY:\n{chat_history}\n\nUSER MESSAGE:\n{question}"),
                                 ("human", "{question}")
                             ])
                             chain = None
                             if llm is not None:
                                 try:
                                     chain = ({"context": retriever | (lambda docs: '\n'.join(getattr(doc, "page_content", str(doc)) for doc in docs)),
+                                              "chat_history": chat_history,
                                               "question": RunnablePassthrough()} | prompt | llm)
                                 except Exception as e:
                                     st.warning(f"Could not create LLM chain: {e}")
