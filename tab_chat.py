@@ -213,6 +213,7 @@ def render_chat_tab():
                         st.session_state.chat_summary_downloads = empty_chat_summary_downloads()
                         user_input_lower = processing_input.lower()
                         chat_intent = classify_document_chat_intent(processing_input)
+                        technical_request_type = classify_technical_document_request(processing_input)
                         document_profile = detect_document_chat_profile(chat_files, combined_text)
                         # Word count queries
                         if any(t in user_input_lower for t in ["how many", "count", "number of", "occurrences"]):
@@ -239,111 +240,33 @@ def render_chat_tab():
                                 response = "".join(response_blocks)
                             else:
                                 response = "⚠️ Specify the search word or phrase in quotes. Example: find('keyword') or search(\"keyword\")"
-                        elif "overview" in user_input_lower:
-                            response_lines = []
-                            for f in chat_files:
-                                file_text = st.session_state.file_texts.get(f, "")
-                                if file_text.strip():
-                                    toc_entries = extract_toc_with_page_numbers(file_text)
-                                    all_headings = extract_document_headings(file_text)
-                                    if all_headings:
-                                        response_lines.append(f"📄 **{f}**")
-                                        response_lines.append("### Document Headings")
-                                        for num, title in all_headings:
-                                            content_str = f"{num} {title}" if num else title
-                                            page_num = resolve_heading_page_number(file_text, title, toc_entries)
-                                            display_text = f"{content_str} (Page {page_num})" if page_num else content_str
-                                            preview_link = create_preview_link(f, highlight_term=title, page_num=page_num)
-                                            if preview_link:
-                                                anchor_id = create_heading_anchor(title)
-                                                response_lines.append(f"- <a href='{preview_link}#{anchor_id}' target='_blank'>{html.escape(display_text)}</a>")
-                                            else:
-                                                response_lines.append(f"- {html.escape(display_text)}")
-                                    else:
-                                        response_lines.append(f"📄 **{f}**\n\nNo document headings were detected.")
-                                else:
-                                    response_lines.append(f"📄 **{f}**\n\nNo readable content found in this document.")
-                            response = "\n\n".join(response_lines)
-                        elif any(term in user_input_lower for term in ["pin diagram", "pin table", "pin configuration", "visual reference", "visual and structural", "connector details", "technical tables"]):
-                            item_name = extract_quoted_item_name(processing_input)
-                            if not item_name:
-                                response = "⚠️ Specify the item name in quotes. Example: pin diagram \"D-SUB9\" or visual reference \"VN1640A\""
-                            else:
-                                response_blocks = []
-                                pin_csv_downloads = []
-                                ascii_diagram_downloads = []
-                                for f in chat_files:
-                                    file_text = st.session_state.file_texts.get(f, "")
-                                    if file_text.strip():
-                                        response_blocks.append(build_item_visual_response(f, file_text, item_name))
-                                        visual_assets = build_item_visual_assets(f, file_text, item_name)
-                                        pin_csv_downloads.extend(visual_assets.get("csv", []))
-                                        ascii_diagram_downloads.extend(visual_assets.get("diagrams", []))
-                                    else:
-                                        response_blocks.append(f"📄 **{f}**\n\nNo readable content found in this document.")
-                                st.session_state.chat_summary_downloads = {
-                                    "images": [],
-                                    "tables": [],
-                                    "csv": pin_csv_downloads,
-                                    "diagrams": ascii_diagram_downloads,
-                                }
-                                response = "\n\n---\n\n".join(response_blocks)
-                        elif any(term in user_input_lower for term in ["item details", "item information", "extract item", "about item", "information about", "details about"]):
-                            item_name = extract_quoted_item_name(processing_input)
-                            if not item_name:
-                                response = "⚠️ Specify the item name in quotes. Example: item details \"VN1630A\" or information about \"D-SUB9\""
-                            else:
-                                response_blocks = []
-                                for f in chat_files:
-                                    file_text = st.session_state.file_texts.get(f, "")
-                                    if file_text.strip():
-                                        response_blocks.append(build_item_information_response(f, file_text, item_name))
-                                    else:
-                                        response_blocks.append(f"📄 **{f}**\n\nNo readable content found in this document.")
-                                response = "\n\n---\n\n".join(response_blocks)
-                        elif extract_bare_item_name(processing_input):
-                            item_name = extract_bare_item_name(processing_input)
-                            response_blocks = []
-                            for f in chat_files:
-                                file_text = st.session_state.file_texts.get(f, "")
-                                if file_text.strip():
-                                    response_blocks.append(build_item_information_response(f, file_text, item_name))
-                                else:
-                                    response_blocks.append(f"ðŸ“„ **{f}**\n\nNo readable content found in this document.")
-                            response = "\n\n---\n\n".join(response_blocks)
-                        elif any(term in user_input_lower for term in ["analyze", "summary", "summarize", "summarise"]):
-                            result = []
-                            summary_image_downloads = []
-                            summary_table_downloads = []
-                            for f in chat_files:
-                                file_text = st.session_state.file_texts.get(f, "")
-                                file_entry = get_uploaded_file_entry(f)
-                                if file_text.strip():
-                                    file_bytes = file_entry["bytes"] if file_entry else b""
-                                    result.append(build_detailed_document_summary(f, file_bytes, file_text))
-                                    page_match = re.search(r"Total Pages:\s*(\d+)", file_text)
-                                    page_count = int(page_match.group(1)) if page_match else 0
-                                    is_large_pdf = f.lower().endswith(".pdf") and page_count > PDF_ASSET_SCAN_PAGE_LIMIT
-                                    if not is_large_pdf:
-                                        summary_assets = build_summary_download_assets(f, file_bytes)
-                                        summary_image_downloads.extend(summary_assets.get("images", []))
-                                        summary_table_downloads.extend(summary_assets.get("tables", []))
-                                else:
-                                    result.append(f"📄 **{f}**\n\nNo readable content found in this document.")
-
+                        elif technical_request_type == "FULL_DOCUMENT_SUMMARY":
+                            response = build_full_document_summary_response(selected_file_texts)
+                        elif technical_request_type == "DIAGRAMS_PIN_DETAILS_TABLES":
+                            response, pin_csv_downloads, ascii_diagram_downloads = build_diagram_pin_details_response(selected_file_texts, processing_input)
                             st.session_state.chat_summary_downloads = {
-                                "images": summary_image_downloads,
-                                "tables": summary_table_downloads,
-                                "csv": [],
-                                "diagrams": [],
+                                "images": [],
+                                "tables": [],
+                                "csv": pin_csv_downloads,
+                                "diagrams": ascii_diagram_downloads,
                             }
-                            response = "\n\n---\n\n".join(result)
-                        elif "compare" in user_input_lower:
-                            if len(chat_files) >= 2:
+                        elif technical_request_type == "FEATURES_WORKFLOW_USE_CASES":
+                            response = build_features_workflow_response(selected_file_texts)
+                        elif any(term in user_input_lower for term in ["item details", "item information", "extract item", "about item", "information about", "details about"]):
+                            response = build_specific_component_response(selected_file_texts, processing_input)
+                        elif technical_request_type == "SPECIFIC_COMPONENT":
+                            response = build_specific_component_response(selected_file_texts, processing_input)
+                        elif any(term in user_input_lower for term in ["analyze", "summary", "summarize", "summarise"]):
+                            response = build_full_document_summary_response(selected_file_texts)
+                        elif technical_request_type == "COMPARISON":
+                            compared_items = extract_multiple_component_names(processing_input)
+                            if len(compared_items) >= 2:
+                                response = build_component_comparison_response(selected_file_texts, processing_input)
+                            elif len(chat_files) >= 2:
                                 selected_texts = {f: st.session_state.file_texts[f] for f in chat_files}
                                 response = highlight_multi_file_differences(selected_texts)
                             else:
-                                response = "⚠️ Please select at least 2 files to compare documents."
+                                response = "⚠️ Please mention two items/components or select at least 2 files to compare."
                         elif chat_intent == "EXTRACTION":
                             response = build_extraction_response_for_query(processing_input, selected_file_texts)
                         elif chat_intent == "UNKNOWN":
@@ -361,15 +284,24 @@ def render_chat_tab():
                             )
                             prompt = ChatPromptTemplate.from_messages([
                                 ("system",
-                                 "You are a document-aware reasoning assistant for technical and mixed files.\n\n"
-                                 "First identify intent: EXTRACTION, ANALYSIS, COMPARISON, SUMMARY, or UNKNOWN.\n"
+                                 "You are an expert technical analyst and document intelligence system.\n\n"
+                                 "Classify the user's request into exactly one response type:\n"
+                                 "FULL_DOCUMENT_SUMMARY, SPECIFIC_COMPONENT, DIAGRAMS / PIN DETAILS / TABLES, "
+                                 "FEATURES / WORKFLOW / USE CASES, or COMPARISON.\n\n"
                                  "Document profile for this request: {document_profile}.\n\n"
-                                 "STRICT RESPONSE RULES:\n"
-                                 "- If intent is EXTRACTION, return only the extracted answer. Do not include suggestions.\n"
-                                 "- If intent is UNKNOWN, ask one concise clarifying question only.\n"
-                                 "- If intent is ANALYSIS, provide explanation and relevant insight. Do not add generic next steps.\n"
-                                 "- Do not output a 'Suggestions:' section unless the user explicitly asks for guidance.\n"
-                                 "- Never use generic suggestions such as 'Inspect table data' or 'Suggested next steps'.\n\n"
+                                 "RESPONSE RULES:\n"
+                                 "- FULL_DOCUMENT_SUMMARY: provide Overview, Core Concept, Architecture, Capabilities, Workflow, Use Cases, Key Takeaways. Do not copy page-wise text.\n"
+                                 "- SPECIFIC_COMPONENT: focus only on the requested item and include Overview, Purpose, Features, Technical Details, Interfaces, Configuration, Key Notes.\n"
+                                 "- DIAGRAMS / PIN DETAILS / TABLES: extract or reconstruct Pin Table, Diagram, and Connector Mapping. Keep tables CSV-ready.\n"
+                                 "- FEATURES / WORKFLOW / USE CASES: extract functional behavior and convert it into Capabilities, Process Flow, and Real Usage.\n"
+                                 "- COMPARISON: compare only the requested items/files without repeating shared content.\n\n"
+                                 "STRICT RULES:\n"
+                                 "- Do not copy raw text.\n"
+                                 "- Do not show Page X Text.\n"
+                                 "- Do not repeat the same content in multiple sections.\n"
+                                 "- Do not mix full document summary with component details unless explicitly asked.\n"
+                                 "- Do not output Suggestions or generic next steps.\n"
+                                 "- Always tailor depth and structure to the exact user query, not the entire document.\n\n"
                                  "DOCUMENT:\n{context}\n\n"
                                  "CHAT HISTORY:\n{chat_history}\n\n"
                                  "USER QUERY:\n{question}"),
