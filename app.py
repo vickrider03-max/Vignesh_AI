@@ -862,7 +862,7 @@ if st.session_state.is_authenticated:
                     "📡 CAPL": "capl"
                 }
                 current_helper_tab = helper_tab_map.get(st.session_state.get("active_main_tab", "💬 Chat"), "chat")
-                state_key = _help_state_key(current_helper_tab)
+                state_key = fn._help_state_key(current_helper_tab)
                 st.session_state[state_key] = not st.session_state.get(state_key, False)
         with title_col:
             st.markdown(
@@ -949,7 +949,7 @@ if st.session_state.is_authenticated:
                 "capl": {"queries": 0, "actions": []}
             }
             for helper_tab in ["chat", "dashboard", "compare", "capl"]:
-                st.session_state[_help_state_key(helper_tab)] = False
+                st.session_state[fn._help_state_key(helper_tab)] = False
             st.session_state.workspace_memory = {
                 "chat": [],
                 "agent_runs": [],
