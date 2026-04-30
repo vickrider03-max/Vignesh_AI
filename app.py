@@ -3303,6 +3303,20 @@ st.markdown(
 
 
 main_tab_options = ["💬 Chat", "📊 Dashboard", "📂 Compare", "📡 CAPL"]
+
+# ==============================
+# AUTO TAB SUGGESTION STATE
+# Uses lightweight keyword matching over chat, recent actions, and CAPL context.
+# ==============================
+if "active_main_tab" not in st.session_state:
+    st.session_state.active_main_tab = main_tab_options[0]
+ensure_context_memory()
+apply_auto_tab_suggestion(main_tab_options)
+
+# ==============================
+# ANIMATED TAB COLOR SYSTEM
+# Colors are generated once, stored in session_state.tab_colors, and reused.
+# ==============================
 tab_colors = ensure_tab_glow_colors(main_tab_options)
 tab_color_css = "\n".join(
     (
@@ -3324,8 +3338,10 @@ st.markdown(
     {tab_color_css}
 
     .st-key-active_main_tab {{
-        --tab-neutral-bg: rgba(248, 250, 252, 0.72);
-        --tab-neutral-border: rgba(148, 163, 184, 0.22);
+        --tab-neutral-bg: rgba(248, 250, 252, 0.76);
+        --tab-neutral-border: rgba(148, 163, 184, 0.24);
+        margin-top: 10px !important;
+        margin-bottom: 10px !important;
     }}
 
     .st-key-active_main_tab .ai-nav-indicator {{
@@ -3335,118 +3351,212 @@ st.markdown(
     .st-key-active_main_tab div[role="radiogroup"] {{
         align-items: stretch !important;
         border-bottom: none !important;
+        display: flex !important;
         gap: clamp(10px, 1.6vw, 16px) !important;
-        padding: 4px 4px 12px !important;
+        justify-content: center !important;
+        overflow: visible !important;
+        padding: 5px 4px 14px !important;
+    }}
+
+    .st-key-active_main_tab div[role="radiogroup"] > label > div:first-child {{
+        display: none !important;
     }}
 
     .st-key-active_main_tab div[role="radiogroup"] > label {{
+        isolation: isolate !important;
+        overflow: hidden !important;
+        position: relative !important;
         background: var(--tab-neutral-bg) !important;
         border: 1px solid var(--tab-neutral-border) !important;
         border-left: 5px solid transparent !important;
         border-radius: 12px !important;
-        box-shadow: 0 8px 22px rgba(15, 23, 42, 0.055) !important;
+        box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06) !important;
         color: #64748b !important;
-        opacity: 0.86;
-        padding: 10px 18px 10px 15px !important;
-        transform: translateY(0) scale(1);
+        cursor: pointer !important;
+        opacity: 0.9;
+        padding: 11px 20px 11px 16px !important;
+        transform: translate3d(0, 0, 0) scale(1);
         transition:
-            background-color 300ms ease-in-out,
-            border-color 300ms ease-in-out,
-            box-shadow 300ms ease-in-out,
-            color 300ms ease-in-out,
-            opacity 300ms ease-in-out,
-            transform 300ms ease-in-out !important;
+            background 260ms ease-out,
+            border-color 260ms ease-out,
+            box-shadow 260ms ease-out,
+            color 260ms ease-out,
+            opacity 260ms ease-out,
+            transform 260ms cubic-bezier(0.16, 1, 0.3, 1) !important;
     }}
 
     .st-key-active_main_tab div[role="radiogroup"] > label::before {{
+        animation: activeTabIndicatorIn 280ms ease-out both;
         background: var(--tab-glow, #38bdf8) !important;
         border-radius: 999px !important;
         bottom: 18% !important;
-        box-shadow:
-            0 0 0 rgba(var(--tab-glow-rgb, 56, 189, 248), 0),
-            0 0 0 rgba(var(--tab-glow-rgb, 56, 189, 248), 0) !important;
+        box-shadow: none !important;
         content: "" !important;
         filter: none !important;
-        height: auto !important;
         left: -5px !important;
         opacity: 0 !important;
         position: absolute !important;
         top: 18% !important;
-        transform: scaleY(0.56) !important;
-        transition:
-            opacity 300ms ease-in-out,
-            transform 300ms ease-in-out,
-            box-shadow 300ms ease-in-out !important;
+        transform: scaleY(0.52) !important;
+        transition: opacity 260ms ease-out, transform 260ms ease-out !important;
         width: 5px !important;
+        z-index: 2 !important;
+    }}
+
+    .st-key-active_main_tab div[role="radiogroup"] > label::after {{
+        animation: activeTabLightSweep 4.2s linear infinite;
+        background:
+            linear-gradient(115deg,
+                transparent 0%,
+                transparent 33%,
+                rgba(255, 255, 255, 0.14) 42%,
+                rgba(255, 255, 255, 0.72) 50%,
+                rgba(255, 255, 255, 0.16) 58%,
+                transparent 68%,
+                transparent 100%) !important;
+        content: "" !important;
+        display: block !important;
+        inset: -45% -70% !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        position: absolute !important;
+        transform: translateX(-68%) rotate(0.001deg);
         z-index: 0 !important;
     }}
 
     .st-key-active_main_tab div[role="radiogroup"] > label:hover {{
-        background: rgba(248, 250, 252, 0.96) !important;
-        border-color: rgba(148, 163, 184, 0.38) !important;
-        color: #334155 !important;
+        background: rgba(255, 255, 255, 0.94) !important;
+        border-color: rgba(var(--tab-glow-rgb, 56, 189, 248), 0.34) !important;
+        box-shadow:
+            0 10px 24px rgba(15, 23, 42, 0.08),
+            0 0 18px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.18) !important;
+        color: #1e293b !important;
         opacity: 1;
-        transform: translateY(-1px) scale(1.01) !important;
+        transform: translate3d(3px, -2px, 0) scale(1.045) !important;
+    }}
+
+    .st-key-active_main_tab div[role="radiogroup"] > label:nth-of-type(even):hover {{
+        transform: translate3d(-3px, -2px, 0) scale(1.045) !important;
     }}
 
     .st-key-active_main_tab div[role="radiogroup"] > label[data-checked="true"],
     .st-key-active_main_tab div[role="radiogroup"] > label.ai-nav-active {{
-        animation: activeTabGlowIn 340ms ease-in-out both !important;
+        animation:
+            activeTabGlowIn 320ms ease-out both,
+            activeTabNeonBreath 4.8s ease-in-out infinite,
+            activeTabGradientDrift 5.2s linear infinite !important;
         background:
-            linear-gradient(90deg,
-                rgba(var(--tab-glow-rgb, 56, 189, 248), 0.20),
-                rgba(var(--tab-glow-rgb, 56, 189, 248), 0.08) 58%,
-                rgba(255, 255, 255, 0.72)) !important;
-        border-color: rgba(var(--tab-glow-rgb, 56, 189, 248), 0.54) !important;
+            linear-gradient(110deg,
+                rgba(var(--tab-glow-rgb, 56, 189, 248), 0.30) 0%,
+                rgba(var(--tab-glow-rgb, 56, 189, 248), 0.13) 34%,
+                rgba(255, 255, 255, 0.82) 50%,
+                rgba(var(--tab-glow-rgb, 56, 189, 248), 0.18) 66%,
+                rgba(var(--tab-glow-rgb, 56, 189, 248), 0.32) 100%) !important;
+        background-size: 240% 100% !important;
+        border-color: rgba(var(--tab-glow-rgb, 56, 189, 248), 0.72) !important;
         border-left-color: var(--tab-glow, #38bdf8) !important;
         box-shadow:
-            0 0 0 1px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.20),
-            0 0 18px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.44),
-            0 0 36px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.18),
-            inset 0 0 18px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.10) !important;
+            0 0 0 1px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.26),
+            0 0 20px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.50),
+            0 0 44px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.24),
+            inset 0 0 24px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.16) !important;
         color: #0f172a !important;
         opacity: 1;
-        transform: translateY(-1px) scale(1.02) !important;
+        transform: translate3d(0, -1px, 0) scale(1.035) !important;
     }}
 
     .st-key-active_main_tab div[role="radiogroup"] > label[data-checked="true"]::before,
     .st-key-active_main_tab div[role="radiogroup"] > label.ai-nav-active::before {{
-        animation: activeTabBorderPulse 2.8s ease-in-out infinite;
+        animation:
+            activeTabIndicatorIn 280ms ease-out both,
+            activeTabIndicatorPulse 3.2s ease-in-out infinite !important;
         box-shadow:
-            0 0 9px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.78),
-            0 0 20px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.42) !important;
+            0 0 11px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.88),
+            0 0 24px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.46) !important;
         opacity: 1 !important;
         transform: scaleY(1) !important;
     }}
 
+    .st-key-active_main_tab div[role="radiogroup"] > label[data-checked="true"]::after,
+    .st-key-active_main_tab div[role="radiogroup"] > label.ai-nav-active::after {{
+        opacity: 1 !important;
+    }}
+
     .st-key-active_main_tab div[role="radiogroup"] > label p {{
         color: inherit !important;
+        font-weight: 800 !important;
+        position: relative !important;
+        z-index: 1 !important;
     }}
 
     @keyframes activeTabGlowIn {{
         from {{
-            opacity: 0.72;
-            box-shadow:
-                0 0 0 rgba(var(--tab-glow-rgb, 56, 189, 248), 0),
-                0 0 0 rgba(var(--tab-glow-rgb, 56, 189, 248), 0);
-            transform: translateY(1px) scale(0.99);
+            opacity: 0.68;
+            transform: translate3d(0, 2px, 0) scale(0.985);
         }}
         to {{
             opacity: 1;
-            transform: translateY(-1px) scale(1.02);
+            transform: translate3d(0, -1px, 0) scale(1.035);
         }}
     }}
 
-    @keyframes activeTabBorderPulse {{
+    @keyframes activeTabGradientDrift {{
+        0% {{ background-position: 0% 50%; }}
+        100% {{ background-position: 240% 50%; }}
+    }}
+
+    @keyframes activeTabLightSweep {{
+        0% {{ transform: translateX(-68%) skewX(-16deg); }}
+        46% {{ transform: translateX(68%) skewX(-16deg); }}
+        100% {{ transform: translateX(68%) skewX(-16deg); }}
+    }}
+
+    @keyframes activeTabNeonBreath {{
         0%, 100% {{
             box-shadow:
-                0 0 8px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.62),
-                0 0 18px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.32);
+                0 0 0 1px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.22),
+                0 0 16px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.38),
+                0 0 34px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.18),
+                inset 0 0 18px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.12);
         }}
         50% {{
             box-shadow:
-                0 0 12px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.92),
-                0 0 28px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.46);
+                0 0 0 1px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.36),
+                0 0 26px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.62),
+                0 0 56px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.32),
+                inset 0 0 26px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.22);
+        }}
+    }}
+
+    @keyframes activeTabIndicatorIn {{
+        from {{ opacity: 0; transform: scaleY(0.35); }}
+        to {{ opacity: 1; transform: scaleY(1); }}
+    }}
+
+    @keyframes activeTabIndicatorPulse {{
+        0%, 100% {{
+            top: 20%;
+            bottom: 20%;
+            box-shadow:
+                0 0 8px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.66),
+                0 0 18px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.34);
+        }}
+        50% {{
+            top: 12%;
+            bottom: 12%;
+            box-shadow:
+                0 0 14px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.96),
+                0 0 30px rgba(var(--tab-glow-rgb, 56, 189, 248), 0.54);
+        }}
+    }}
+
+    @media (max-width: 767px) {{
+        .st-key-active_main_tab div[role="radiogroup"] {{
+            flex-direction: column !important;
+            gap: 10px !important;
+        }}
+        .st-key-active_main_tab div[role="radiogroup"] > label {{
+            width: 100% !important;
         }}
     }}
     </style>
