@@ -7713,8 +7713,14 @@ def show_help_popup(tab_name, selected_files):
     helper_defs = {
         "chat": {
             "title": "Chat Helper",
-            "text": "You are a ChatGPT-like assistant specialized in analyzing user-uploaded documents. Use selected files and workspace memory to answer questions naturally, summarize content, and provide useful insights.",
+            "text": "Use Chat for natural-language Q&A over selected documents and workspace memory.",
             "hint": "Ask a question, request an overview, or use direct commands like summarize, overview, find \"keyword\", count \"phrase\", item details \"VN1630A\".",
+            "workflow": [
+                "Select one or more sidebar files, then choose them in Chat.",
+                "Ask a normal question or use focused commands for summary, search, count, overview, and item details.",
+                "Use generated suggestions to continue the conversation without retyping context."
+            ],
+            "outputs": ["Document answers", "Highlights/search matches", "Summaries", "Downloadable assets"],
             "shortcuts": [
                 ("/analyze", "Run focused analysis on selected files."),
                 ("/find", "Search uploaded content and workspace memory."),
@@ -7723,32 +7729,50 @@ def show_help_popup(tab_name, selected_files):
         },
         "dashboard": {
             "title": "Dashboard Helper",
-            "text": "Dashboard visualizes data from Excel/CSV files with interactive charts, trends, statistics, and exportable insights using Plotly.",
-            "hint": "Upload data files, select visualization options, and export charts or data summaries.",
+            "text": "Use Dashboard to inspect workspace memory, extracted entities, risk signals, and structured report data.",
+            "hint": "Select an HTML or Excel report, review the memory snapshot, then use charts and tables to explore test results or metrics.",
+            "workflow": [
+                "Select dashboard-compatible files from the sidebar: HTML, HTM, or XLSX.",
+                "Review the workspace memory snapshot to confirm indexed files, chat history, and agent runs.",
+                "Choose chart options or report groupings, then export visuals or filtered data."
+            ],
+            "outputs": ["Memory snapshot", "Themes/entities/risks", "Interactive charts", "Report tables"],
             "shortcuts": [
-                ("/analyze", "Run focused analysis on selected files."),
-                ("/find", "Search uploaded content and workspace memory."),
-                ("/overview", "Get a document overview with headings and structure.")
+                ("Select file", "Choose the active report or workbook."),
+                ("Chart type", "Switch between pie, bar, and other report views."),
+                ("Export", "Download chart data or summarized report results.")
             ]
         },
         "compare": {
             "title": "Compare Helper",
-            "text": "Compare multiple files with word-level diffs, semantic summaries, and Excel export for detailed analysis.",
-            "hint": "Select two or more files, choose a comparison mode, run the comparison, then review the semantic summary and download workbook.",
+            "text": "Use Compare to find exact, line-level, word-level, and semantic differences across selected files.",
+            "hint": "Select at least two files, choose the comparison mode, run comparison, then review the semantic summary and exported workbook.",
+            "workflow": [
+                "Select two or more comparable files from the sidebar.",
+                "Choose exact inline diff, side-by-side line diff, or word presence summary.",
+                "Review semantic summary and download the Excel comparison workbook for traceability."
+            ],
+            "outputs": ["Inline differences", "Line-by-line comparison", "Word presence summary", "Excel workbook"],
             "shortcuts": [
-                ("/compare", "Compare selected documents and review differences."),
-                ("/find", "Search uploaded content and workspace memory."),
-                ("/overview", "Get a document overview with headings and structure.")
+                ("Select 2+ files", "Comparison starts after at least two files are available."),
+                ("Compare mode", "Pick the diff style that matches your review task."),
+                ("Download Excel", "Export differences for offline review.")
             ]
         },
         "capl": {
             "title": "CAPL Helper",
-            "text": "CAPL is an advanced AI IDE assistant for CANoe/CANalyzer scripts. It acts as a static analyzer, debugger, refactoring engine, test generator, and execution simulator. Analyze code, detect issues, get fixes, and simulate execution.",
-            "hint": "Upload or edit CAPL scripts, analyze for syntax/logical errors, apply AI-powered fixes, or run autonomous agents for goal-driven workflows.",
+            "text": "Use CAPL for CANoe/CANalyzer script analysis, issue detection, AI fixes, and autonomous agent workflows.",
+            "hint": "Select a .can or text CAPL file, run analysis, inspect issues, then generate fixes or launch a goal-driven agent run.",
+            "workflow": [
+                "Select a CAPL file or edit code directly in the live editor.",
+                "Run analysis to detect syntax issues, risky patterns, unused variables, and missing handlers.",
+                "Use AI fix suggestions or autonomous goals when you need a planned multi-step repair."
+            ],
+            "outputs": ["Issue table", "Highlighted CAPL preview", "Suggested fixes", "Agent run history"],
             "shortcuts": [
-                ("/analyze", "Run focused analysis on selected files."),
-                ("/find", "Search uploaded content and workspace memory."),
-                ("/overview", "Get a document overview with headings and structure.")
+                ("Analyze", "Scan the current CAPL code for problems."),
+                ("AI fix", "Generate corrected code or targeted suggestions."),
+                ("Agent goal", "Run a coordinated autonomous CAPL task.")
             ]
         }
     }
@@ -7919,8 +7943,97 @@ def show_help_popup(tab_name, selected_files):
                 st.rerun()
 
         suggestion_tags = "".join(f"<span>{html.escape(s)}</span>" for s in suggestions)
-        st.markdown(
+        workflow_items = "".join(f"<li>{html.escape(item)}</li>" for item in helper_def.get("workflow", []))
+        output_tags = "".join(f"<span>{html.escape(item)}</span>" for item in helper_def.get("outputs", []))
+        render_html_frame(
             f"""
+            <style>
+                body {{
+                    margin: 0;
+                    background: transparent;
+                    font-family: "Segoe UI", Tahoma, sans-serif;
+                    color: #374151;
+                }}
+                .helper-modal-body {{
+                    padding: 14px 18px 18px;
+                }}
+                .helper-info-row {{
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 8px;
+                    margin: 4px 0 10px;
+                }}
+                .helper-chip {{
+                    display: inline-flex;
+                    align-items: center;
+                    border-radius: 999px;
+                    padding: 5px 9px;
+                    background: #f3f4f6;
+                    color: #374151;
+                    border: 1px solid rgba(15, 23, 42, 0.06);
+                    font-size: 0.78rem;
+                    font-weight: 650;
+                }}
+                h4 {{
+                    margin: 14px 0 6px;
+                    color: #1f2937;
+                    font-size: 0.94rem;
+                }}
+                li {{
+                    color: #4b5563;
+                    font-size: 0.92rem;
+                    line-height: 1.45;
+                    margin-bottom: 4px;
+                }}
+                .helper-callout {{
+                    padding: 10px 12px;
+                    border-radius: 10px;
+                    background: #f8fbff;
+                    border: 1px solid #dbeafe;
+                    color: #1f3b57;
+                    font-size: 0.9rem;
+                    line-height: 1.45;
+                    margin: 8px 0 12px;
+                }}
+                .helper-shortcut {{
+                    display: grid;
+                    grid-template-columns: 88px 1fr;
+                    gap: 8px;
+                    padding: 7px 0;
+                    border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+                    color: #4b5563;
+                    font-size: 0.9rem;
+                }}
+                .helper-shortcut code {{
+                    color: #111827;
+                    background: #f3f4f6;
+                    border-radius: 6px;
+                    padding: 2px 6px;
+                    font-size: 0.82rem;
+                }}
+                .helper-suggestions,
+                .helper-outputs {{
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 8px;
+                    margin-top: 8px;
+                }}
+                .helper-suggestions span,
+                .helper-outputs span {{
+                    background: #fff7ed;
+                    color: #9a3412;
+                    border: 1px solid #fed7aa;
+                    border-radius: 999px;
+                    padding: 6px 10px;
+                    font-size: 0.82rem;
+                    line-height: 1.3;
+                }}
+                .helper-outputs span {{
+                    background: #eef2ff;
+                    color: #3730a3;
+                    border-color: #c7d2fe;
+                }}
+            </style>
             <div class="helper-modal-body">
                 <div class="helper-info-row">
                     <span class="helper-chip">Skill: {html.escape(skill_level.title())}</span>
@@ -7930,6 +8043,11 @@ def show_help_popup(tab_name, selected_files):
 
                 <h4>💡 Quick Guide</h4>
                 <div class="helper-callout">{html.escape(helper_def['text'])}</div>
+
+                <h4>Workflow</h4>
+                <ul>
+                    {workflow_items}
+                </ul>
 
                 <h4>⚡ Shortcuts</h4>
                 {shortcuts_html}
@@ -7941,11 +8059,14 @@ def show_help_popup(tab_name, selected_files):
                     <li>Click suggestions for faster input when available.</li>
                 </ul>
 
+                <h4>Outputs</h4>
+                <div class="helper-outputs">{output_tags}</div>
+
                 <h4>Suggestions</h4>
                 <div class="helper-suggestions">{suggestion_tags}</div>
             </div>
             """,
-            unsafe_allow_html=True,
+            height=390,
         )
 
 
