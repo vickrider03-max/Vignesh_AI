@@ -210,6 +210,56 @@ def render_html_frame(html_content, height="content", width="stretch"):
     components.html(str(html_content), width=component_width, height=height, scrolling=True)
 
 
+# ==============================
+# PAGINATION SCROLL ANCHOR HELPERS
+# Streamlit-safe scroll reset for paginated viewers across all tabs.
+# Stores the requested anchor in session_state before rerun, then scrolls after
+# the next render using a tiny same-page script.
+# ==============================
+def request_scroll_to_anchor(anchor_id):
+    """Ask the next Streamlit rerun to smoothly scroll to an anchor."""
+    st.session_state.pending_scroll_anchor = str(anchor_id or "page-viewer-top")
+
+
+def render_scroll_anchor(anchor_id):
+    """Render a scroll target and consume pending scroll state if it matches."""
+    anchor_id = str(anchor_id or "page-viewer-top")
+    pending_anchor = st.session_state.get("pending_scroll_anchor")
+    st.markdown(
+        f"<div id='{html.escape(anchor_id)}' style='position:relative; top:-12px; height:1px;'></div>",
+        unsafe_allow_html=True,
+    )
+    if pending_anchor == anchor_id:
+        render_html_frame(
+            f"""
+            <script>
+            const scrollTargetId = {json.dumps(anchor_id)};
+            const scrollToAnchor = () => {{
+                const root = window.parent ? window.parent.document : document;
+                const target = root.getElementById(scrollTargetId);
+                if (target) {{
+                    target.scrollIntoView({{ behavior: "smooth", block: "start", inline: "nearest" }});
+                }}
+            }};
+            requestAnimationFrame(scrollToAnchor);
+            setTimeout(scrollToAnchor, 80);
+            </script>
+            """,
+            height=1,
+        )
+        st.session_state.pending_scroll_anchor = None
+
+
+def set_paginated_index(state_key, value, minimum, maximum, scroll_anchor_id):
+    """Update a page index safely and request a top-of-viewer scroll."""
+    bounded_value = max(minimum, min(int(value), maximum))
+    if int(st.session_state.get(state_key, minimum)) != bounded_value:
+        st.session_state[state_key] = bounded_value
+        request_scroll_to_anchor(scroll_anchor_id)
+    else:
+        st.session_state[state_key] = bounded_value
+
+
 @st.cache_data(show_spinner=False)
 def get_needle_minimalist_logo():
     frames = []
@@ -1419,6 +1469,7 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None, hig
                 
                 preview_key_base = hashlib.md5(file_name.encode("utf-8")).hexdigest()[:12]
                 batch_key = f"pdf_preview_batch_{preview_key_base}"
+                scroll_anchor_id = f"pdf-viewer-top-{preview_key_base}"
                 batch_size = 5
                 max_batch = max(0, (total_pages - 1) // batch_size)
                 default_batch = 0
@@ -1435,6 +1486,7 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None, hig
                 batch_end = min(total_pages, batch_start + batch_size)
                 pages_to_show = range(batch_start, batch_end)
 
+                render_scroll_anchor(scroll_anchor_id)
                 render_tables = st.checkbox(
                     "Detect tables on previewed pages",
                     value=False,
@@ -1526,7 +1578,7 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None, hig
                         use_container_width=True,
                         disabled=st.session_state[batch_key] <= 0,
                     ):
-                        st.session_state[batch_key] = max(0, int(st.session_state[batch_key]) - 1)
+                        set_paginated_index(batch_key, int(st.session_state[batch_key]) - 1, 0, max_batch, scroll_anchor_id)
                         st.rerun()
                 with nav_cols[1]:
                     if st.button(
@@ -1535,7 +1587,7 @@ def render_document_preview(file_name, file_entry=None, highlight_term=None, hig
                         use_container_width=True,
                         disabled=batch_end >= total_pages,
                     ):
-                        st.session_state[batch_key] = min(max_batch, int(st.session_state[batch_key]) + 1)
+                        set_paginated_index(batch_key, int(st.session_state[batch_key]) + 1, 0, max_batch, scroll_anchor_id)
                         st.rerun()
                 
                 # Download sections
@@ -2356,7 +2408,9 @@ def render_paginated_text_document_viewer(file_name, extracted_text, page_size=9
             return
 
         base_key = hashlib.md5(file_name.encode("utf-8")).hexdigest()[:12]
+        scroll_anchor_id = f"text-viewer-top-{base_key}"
         full_key = f"text_full_view_{base_key}"
+        render_scroll_anchor(scroll_anchor_id)
         st.checkbox("Load full document", key=full_key, help="Shows all extracted text. For very large files this may be slower.")
 
         if st.session_state.get(full_key):
@@ -2373,11 +2427,11 @@ def render_paginated_text_document_viewer(file_name, extracted_text, page_size=9
             st.session_state[page_key] = 1
         with nav_cols[0]:
             if st.button("Previous section", key=f"text_prev_{base_key}", use_container_width=True):
-                st.session_state[page_key] = max(1, int(st.session_state[page_key]) - 1)
+                set_paginated_index(page_key, int(st.session_state[page_key]) - 1, 1, total_sections, scroll_anchor_id)
                 st.rerun()
         with nav_cols[1]:
             if st.button("Next section", key=f"text_next_{base_key}", use_container_width=True):
-                st.session_state[page_key] = min(total_sections, int(st.session_state[page_key]) + 1)
+                set_paginated_index(page_key, int(st.session_state[page_key]) + 1, 1, total_sections, scroll_anchor_id)
                 st.rerun()
         with nav_cols[2]:
             section_number = st.number_input(
@@ -2387,7 +2441,9 @@ def render_paginated_text_document_viewer(file_name, extracted_text, page_size=9
                 value=int(st.session_state[page_key]),
                 key=f"text_jump_{base_key}",
             )
-            st.session_state[page_key] = int(section_number)
+            if int(section_number) != int(st.session_state[page_key]):
+                set_paginated_index(page_key, int(section_number), 1, total_sections, scroll_anchor_id)
+                st.rerun()
 
         start = (int(st.session_state[page_key]) - 1) * page_size
         end = min(len(text), start + page_size)
@@ -2402,6 +2458,8 @@ def render_spreadsheet_document_viewer(file_name, file_bytes):
     try:
         file_name_lower = file_name.lower()
         base_key = hashlib.md5(file_name.encode("utf-8")).hexdigest()[:12]
+        scroll_anchor_id = f"sheet-viewer-top-{base_key}"
+        render_scroll_anchor(scroll_anchor_id)
 
         if file_name_lower.endswith(".csv"):
             sheets = {"CSV Data": pd.read_csv(BytesIO(file_bytes))}
@@ -2430,11 +2488,11 @@ def render_spreadsheet_document_viewer(file_name, file_bytes):
         nav_cols = st.columns([1, 1, 2], vertical_alignment="center")
         with nav_cols[0]:
             if st.button("Previous rows", key=f"sheet_prev_{base_key}", use_container_width=True):
-                st.session_state[page_key] = max(1, int(st.session_state[page_key]) - 1)
+                set_paginated_index(page_key, int(st.session_state[page_key]) - 1, 1, total_pages, scroll_anchor_id)
                 st.rerun()
         with nav_cols[1]:
             if st.button("Next rows", key=f"sheet_next_{base_key}", use_container_width=True):
-                st.session_state[page_key] = min(total_pages, int(st.session_state[page_key]) + 1)
+                set_paginated_index(page_key, int(st.session_state[page_key]) + 1, 1, total_pages, scroll_anchor_id)
                 st.rerun()
         with nav_cols[2]:
             jump_page = st.number_input(
@@ -2444,7 +2502,9 @@ def render_spreadsheet_document_viewer(file_name, file_bytes):
                 value=int(st.session_state[page_key]),
                 key=f"sheet_jump_{base_key}",
             )
-            st.session_state[page_key] = int(jump_page)
+            if int(jump_page) != int(st.session_state[page_key]):
+                set_paginated_index(page_key, int(jump_page), 1, total_pages, scroll_anchor_id)
+                st.rerun()
 
         start = (int(st.session_state[page_key]) - 1) * rows_per_page
         end = min(total_rows, start + rows_per_page)
@@ -2458,6 +2518,8 @@ def render_presentation_document_viewer(file_name, file_bytes, extracted_text):
     """Render PPTX slides on demand, with best-effort text pagination for PPT."""
     try:
         base_key = hashlib.md5(file_name.encode("utf-8")).hexdigest()[:12]
+        scroll_anchor_id = f"slide-viewer-top-{base_key}"
+        render_scroll_anchor(scroll_anchor_id)
         if file_name.lower().endswith(".pptx"):
             prs = Presentation(BytesIO(file_bytes))
             total_slides = len(prs.slides)
@@ -2472,11 +2534,11 @@ def render_presentation_document_viewer(file_name, file_bytes, extracted_text):
             nav_cols = st.columns([1, 1, 2], vertical_alignment="center")
             with nav_cols[0]:
                 if st.button("Previous slide", key=f"slide_prev_{base_key}", use_container_width=True):
-                    st.session_state[slide_key] = max(1, int(st.session_state[slide_key]) - 1)
+                    set_paginated_index(slide_key, int(st.session_state[slide_key]) - 1, 1, total_slides, scroll_anchor_id)
                     st.rerun()
             with nav_cols[1]:
                 if st.button("Next slide", key=f"slide_next_{base_key}", use_container_width=True):
-                    st.session_state[slide_key] = min(total_slides, int(st.session_state[slide_key]) + 1)
+                    set_paginated_index(slide_key, int(st.session_state[slide_key]) + 1, 1, total_slides, scroll_anchor_id)
                     st.rerun()
             with nav_cols[2]:
                 slide_number = st.number_input(
@@ -2486,7 +2548,9 @@ def render_presentation_document_viewer(file_name, file_bytes, extracted_text):
                     value=int(st.session_state[slide_key]),
                     key=f"slide_jump_{base_key}",
                 )
-                st.session_state[slide_key] = int(slide_number)
+                if int(slide_number) != int(st.session_state[slide_key]):
+                    set_paginated_index(slide_key, int(slide_number), 1, total_slides, scroll_anchor_id)
+                    st.rerun()
 
             slide = prs.slides[int(st.session_state[slide_key]) - 1]
             st.caption(f"Showing slide {st.session_state[slide_key]} of {total_slides}. Slides are rendered on demand.")
@@ -3564,9 +3628,12 @@ def detect_document_chat_profile(file_names, document_context):
 
 def normalize_technical_identifier(value):
     """Normalize identifiers such as 'VN 1630A' to 'VN1630A'."""
-    value = normalize_extracted_line(value)
-    value = re.sub(r"\b(VN)\s*[- ]?\s*(\d{3,5}[A-Za-z]?)\b", lambda m: f"{m.group(1).upper()}{m.group(2).upper()}", value)
-    return value.strip()
+    raw_value = str(value or "").strip(" .,:;()[]{}")
+    raw_value = re.sub(r"\s+", " ", raw_value)
+    raw_value = re.sub(r"\b(VN)\s*[- ]?\s*(\d{3,5}[A-Za-z]?)\b", lambda m: f"{m.group(1).upper()}{m.group(2).upper()}", raw_value, flags=re.IGNORECASE)
+    raw_value = re.sub(r"\b([A-Z]{1,6})\s+(\d{2,}[A-Z0-9]*)\b", lambda m: f"{m.group(1).upper()}{m.group(2).upper()}", raw_value, flags=re.IGNORECASE)
+    raw_value = re.sub(r"\b(D-SUB)\s*(\d+)\b", lambda m: f"{m.group(1).upper()}{m.group(2)}", raw_value, flags=re.IGNORECASE)
+    return raw_value.strip()
 
 
 def extract_vn_devices_from_text(text):
@@ -3684,6 +3751,248 @@ def should_show_chat_suggestions(intent, user_query):
     if any(term in query for term in ["suggest", "next step", "what can i ask", "guide me"]):
         return True
     return False
+
+
+# ==============================
+# PREMIUM TECHNICAL DOCUMENT RESPONSE ROUTER
+# Classifies user requests into documentation-grade response types and builds
+# concise, structured answers without raw page-wise extraction.
+# ==============================
+def extract_specific_component_name(user_query):
+    """Detect a requested component/module/item name from a technical query."""
+    quoted = extract_quoted_item_name(user_query)
+    if quoted:
+        return normalize_technical_identifier(quoted)
+
+    bare_item = extract_bare_item_name(user_query)
+    if bare_item:
+        return normalize_technical_identifier(bare_item)
+
+    component_patterns = [
+        r"\b(?:component|module|device|item|part|interface|connector)\s+([A-Za-z][A-Za-z0-9_+\-/]{2,40})\b",
+        r"\b(?:about|details(?:\s+about)?|information(?:\s+about)?|explain)\s+([A-Za-z][A-Za-z0-9_+\-/]{2,40})\b",
+    ]
+    for pattern in component_patterns:
+        match = re.search(pattern, str(user_query or ""), re.IGNORECASE)
+        if match:
+            candidate = normalize_technical_identifier(match.group(1))
+            if candidate.lower() not in {"component", "module", "device", "item", "part", "document"}:
+                return candidate
+
+    identifiers = re.findall(r"\b[A-Z]{1,6}[-_ ]?\d{2,}[A-Z0-9_+\-/]*\b", str(user_query or ""))
+    ignored = {"PDF", "DOCX", "PPTX", "XLSX", "HTML", "CSV"}
+    for identifier in identifiers:
+        candidate = normalize_technical_identifier(identifier)
+        if candidate.upper() not in ignored:
+            return candidate
+    return ""
+
+
+def extract_multiple_component_names(user_query):
+    """Detect multiple named items for comparison-style prompts."""
+    text = str(user_query or "")
+    quoted_items = [normalize_technical_identifier(item) for match in re.findall(r"'(.*?)'|\"(.*?)\"", text) for item in match if item]
+    identifiers = [normalize_technical_identifier(item) for item in re.findall(r"\b[A-Z]{1,6}[-_ ]?\d{2,}[A-Z0-9_+\-/]*\b", text)]
+    ignored = {"PDF", "DOCX", "PPTX", "XLSX", "HTML", "CSV"}
+    items = [item for item in quoted_items + identifiers if item and item.upper() not in ignored]
+    return list(dict.fromkeys(items))
+
+
+def classify_technical_document_request(user_query):
+    """Classify into the five premium document-response types requested by the user."""
+    query = str(user_query or "").strip().lower()
+    if not query:
+        return "UNKNOWN"
+
+    multiple_items = extract_multiple_component_names(user_query)
+    if any(term in query for term in ["compare", "difference", "differences", " vs ", " versus "]):
+        return "COMPARISON"
+    if len(multiple_items) >= 2 and any(term in query for term in ["between", "which", "better", "different"]):
+        return "COMPARISON"
+    if any(term in query for term in ["pin", "diagram", "connector", "mapping", "pinout", "visual structure", "technical table"]):
+        return "DIAGRAMS_PIN_DETAILS_TABLES"
+    if any(term in query for term in ["feature", "features", "workflow", "use case", "use cases", "capability", "capabilities", "process flow", "real usage", "functional behavior"]):
+        return "FEATURES_WORKFLOW_USE_CASES"
+    if extract_specific_component_name(user_query):
+        return "SPECIFIC_COMPONENT"
+    if any(term in query for term in ["summary", "summarize", "summarise", "overview", "analyze document", "analyse document", "full document", "explain document"]):
+        return "FULL_DOCUMENT_SUMMARY"
+    return "UNKNOWN"
+
+
+def join_response_blocks(blocks):
+    """Join non-empty response blocks with a clean divider."""
+    return "\n\n---\n\n".join(block for block in blocks if str(block or "").strip())
+
+
+def build_full_document_summary_response(file_texts):
+    """Build premium product-documentation style summaries for selected files."""
+    blocks = []
+    for file_name, file_text in (file_texts or {}).items():
+        file_entry = get_uploaded_file_entry(file_name)
+        if file_text and str(file_text).strip():
+            file_bytes = file_entry["bytes"] if file_entry else b""
+            blocks.append(build_detailed_document_summary(file_name, file_bytes, file_text))
+        else:
+            blocks.append(f"**{html.escape(file_name)}**\n\nNo readable content found in this document.")
+    return join_response_blocks(blocks)
+
+
+def build_specific_component_response(file_texts, user_query):
+    """Answer only for the requested component, ignoring unrelated document content."""
+    component_name = extract_specific_component_name(user_query)
+    if not component_name:
+        return "Which specific component, module, device, or item should I focus on?"
+
+    blocks = []
+    for file_name, file_text in (file_texts or {}).items():
+        if file_text and str(file_text).strip():
+            blocks.append(build_item_information_response(file_name, file_text, component_name))
+        else:
+            blocks.append(f"**{html.escape(file_name)}**\n\nNo readable content found in this document.")
+    return join_response_blocks(blocks)
+
+
+def build_document_visual_response(file_name, text, item_name=None):
+    """Build document-wide pin/connector/table output when no exact item is supplied."""
+    context_lines = [normalize_extracted_line(line) for line in str(text or "").splitlines() if line.strip()]
+    if item_name:
+        context_lines = collect_item_context_lines(text, item_name, window=8, limit=160) or context_lines
+
+    pin_rows = extract_pin_rows(context_lines)
+    connector_lines = select_relevant_lines(context_lines, ["connector", "port", "d-sub", "usb", "channel", "plug", "socket", "interface"], limit=14)
+    table_lines = select_relevant_lines(context_lines, ["table", "pin", "signal", "configuration", "mapping", "assignment"], limit=14)
+    visual_lines = select_relevant_lines(context_lines, ["figure", "image", "diagram", "layout", "visual", "pin assignment"], limit=10)
+    display_name = item_name or os.path.splitext(file_name)[0]
+    ascii_diagram = build_ascii_pin_diagram(pin_rows, display_name)
+    pin_table_rows = [[row["pin"], row["signal"], row["description"], row.get("notes", "")] for row in pin_rows]
+
+    sections = [
+        f"<h3 style='margin:0 0 10px 0; color:#173152;'>Diagrams / Pin Details: {html.escape(display_name)}</h3>",
+        f"<p><b>Source:</b> {html.escape(file_name)}</p>",
+        "<h4 style='margin:16px 0 6px 0; color:#173152;'>Pin Table</h4>",
+        html_table(["Pin Number", "Signal Name", "Description", "Notes"], pin_table_rows) if pin_rows else "<p>No explicit pin rows were found in the extracted text.</p>",
+        "<h4 style='margin:16px 0 6px 0; color:#173152;'>Diagram</h4>",
+        f"<pre style='white-space:pre-wrap; background:#f4f7fb; padding:12px; border-radius:8px;'>{html.escape(ascii_diagram)}</pre>",
+        html_section("Connector Mapping", connector_lines),
+        html_section("Tables / Structured References", table_lines),
+        html_section("Visual Structure", visual_lines),
+    ]
+    return "<div style='margin-bottom:18px; line-height:1.5;'>" + "".join(section for section in sections if section) + "</div>"
+
+
+def build_diagram_pin_details_response(file_texts, user_query):
+    """Build pin/diagram/table focused output and CSV/diagram downloads."""
+    item_name = extract_specific_component_name(user_query) or extract_quoted_item_name(user_query)
+    blocks = []
+    csv_downloads = []
+    diagram_downloads = []
+    for file_name, file_text in (file_texts or {}).items():
+        if not str(file_text or "").strip():
+            blocks.append(f"**{html.escape(file_name)}**\n\nNo readable content found in this document.")
+            continue
+        if item_name:
+            blocks.append(build_item_visual_response(file_name, file_text, item_name))
+            visual_assets = build_item_visual_assets(file_name, file_text, item_name)
+        else:
+            blocks.append(build_document_visual_response(file_name, file_text))
+            pin_rows = extract_pin_rows([normalize_extracted_line(line) for line in str(file_text).splitlines() if line.strip()])
+            safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", os.path.splitext(file_name)[0]).strip("_") or "document"
+            visual_assets = {
+                "csv": [{
+                    "label": f"{file_name} - pin table CSV",
+                    "data": build_pin_csv(pin_rows).encode("utf-8"),
+                    "file_name": f"{safe_name}_pin_table.csv",
+                    "mime": "text/csv",
+                }] if pin_rows else [],
+                "diagrams": [{
+                    "label": f"{file_name} - ASCII diagram",
+                    "data": build_ascii_pin_diagram(pin_rows, safe_name).encode("utf-8"),
+                    "file_name": f"{safe_name}_diagram.txt",
+                    "mime": "text/plain",
+                }] if pin_rows else [],
+            }
+        csv_downloads.extend(visual_assets.get("csv", []))
+        diagram_downloads.extend(visual_assets.get("diagrams", []))
+    return join_response_blocks(blocks), csv_downloads, diagram_downloads
+
+
+def build_features_workflow_response(file_texts):
+    """Build a concise functional behavior response: capabilities, process flow, usage."""
+    blocks = []
+    for file_name, text in (file_texts or {}).items():
+        lower_text = str(text or "").lower()
+        lines = [normalize_extracted_line(line) for line in str(text or "").splitlines() if line.strip()]
+        meaningful = [line for line in lines if 12 <= len(line) <= 220]
+
+        def collect(terms, fallback, limit=7):
+            selected = []
+            seen = set()
+            for line in meaningful:
+                lower_line = line.lower()
+                if any(term in lower_line for term in terms) and lower_line not in seen:
+                    selected.append(line)
+                    seen.add(lower_line)
+                if len(selected) >= limit:
+                    break
+            return selected or fallback
+
+        capabilities = collect(
+            ["support", "feature", "function", "capability", "enable", "allows", "provide", "interface", "communication", "diagnostic", "configuration"],
+            ["Provides functional reference information for understanding and using the documented system."],
+        )
+        workflow = collect(
+            ["install", "configure", "connect", "select", "execute", "run", "start", "use", "download", "export", "review"],
+            ["Identify the relevant function, configure required inputs, execute the workflow, then review or export results."],
+        )
+        use_cases = collect(
+            ["application", "used for", "used to", "use case", "measurement", "testing", "diagnostic", "monitoring", "analysis", "report"],
+            ["Technical reference, configuration planning, validation, troubleshooting, and documentation support."],
+        )
+
+        blocks.append(
+            "<div style='margin-bottom:18px; line-height:1.5;'>"
+            f"<h3 style='margin:0 0 10px 0; color:#173152;'>Features / Workflow / Use Cases: {html.escape(file_name)}</h3>"
+            + html_section("Capabilities", capabilities[:7])
+            + html_section("Process Flow", workflow[:7])
+            + html_section("Real Usage", use_cases[:7])
+            + "</div>"
+        )
+    return join_response_blocks(blocks)
+
+
+def build_component_comparison_response(file_texts, user_query):
+    """Compare named components/items inside selected documents without repeating shared content."""
+    items = extract_multiple_component_names(user_query)
+    if len(items) < 2:
+        return "Which two or more components/items should I compare?"
+
+    sections = [
+        "<div style='margin-bottom:18px; line-height:1.5;'>",
+        "<h3 style='margin:0 0 10px 0; color:#173152;'>Component Comparison</h3>",
+        "<table style='border-collapse:collapse; width:100%; margin:8px 0;'>",
+        "<thead><tr><th>Item</th><th>Purpose / Context</th><th>Technical Signals</th><th>Interfaces / Notes</th></tr></thead><tbody>",
+    ]
+
+    for item in items:
+        item_lines = []
+        for file_text in (file_texts or {}).values():
+            item_lines.extend(collect_item_context_lines(file_text, item, window=5, limit=60))
+        item_lines = list(dict.fromkeys(item_lines))
+        purpose = select_relevant_lines(item_lines, ["used", "purpose", "application", "support", "provide", "allows"], limit=3) or item_lines[:3]
+        technical = select_relevant_lines(item_lines, ["channel", "protocol", "mbit", "kbit", "volt", "can", "lin", "flexray", "ethernet", "diagnostic"], limit=4)
+        interfaces = select_relevant_lines(item_lines, ["connector", "interface", "port", "pin", "d-sub", "usb", "configuration"], limit=4)
+        sections.append(
+            "<tr>"
+            f"<td><b>{html.escape(item)}</b></td>"
+            f"<td>{html.escape('; '.join(purpose[:3]) if purpose else 'No focused purpose context found.')}</td>"
+            f"<td>{html.escape('; '.join(technical[:4]) if technical else 'No focused technical signal found.')}</td>"
+            f"<td>{html.escape('; '.join(interfaces[:4]) if interfaces else 'No focused interface note found.')}</td>"
+            "</tr>"
+        )
+
+    sections.extend(["</tbody></table>", "<p><b>Key takeaway:</b> Shared wording is intentionally collapsed; the table highlights only item-specific context found near each component.</p>", "</div>"])
+    return "".join(sections)
 
 
 def build_adaptive_document_analysis(file_name, file_bytes, text):
