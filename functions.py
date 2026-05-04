@@ -3799,14 +3799,15 @@ def extract_multiple_component_names(user_query):
 
 
 def classify_technical_document_request(user_query):
-    """Classify user queries into the exact premium response categories requested by the user."""
+    """Classify user queries into the exact enterprise document intent categories requested by the user."""
     query = str(user_query or "").strip().lower()
     if not query:
         return "SUMMARY"  # Default to SUMMARY if unclear
 
-    # Priority: Component > Comparison > Extraction > Structured Data > Functional > Summary > Full Analysis
+    # Priority: Component > Comparison > Full Analysis > Functional > Summary
+    # Explicit extraction and structured requests still map to their own intents when present.
 
-    # Check for specific component first (highest priority)
+    # Check for specific component first
     if extract_specific_component_name(user_query):
         return "COMPONENT"
 
@@ -3817,29 +3818,29 @@ def classify_technical_document_request(user_query):
     if len(multiple_items) >= 2 and any(term in query for term in ["between", "which", "better", "different"]):
         return "COMPARISON"
 
-    # Check for extraction (tables, images, raw content)
-    if any(term in query for term in ["table extract", "extract table", "table data", "table rows", "csv extract", "spreadsheet", "table only", "image", "diagram", "visual", "figure", "schematic", "illustration", "drawing", "visual extraction", "extract"]):
-        return "EXTRACTION"
-
-    # Check for structured data (pins, diagrams, tables)
-    if any(term in query for term in ["pin", "diagram", "connector", "mapping", "pinout", "visual structure", "technical table", "structured data"]):
-        return "STRUCTURED_DATA"
-
-    # Check for functional (features, workflow, use cases)
-    if any(term in query for term in ["feature", "features", "workflow", "use case", "use cases", "capability", "capabilities", "process flow", "real usage", "functional behavior", "how does", "how it works"]):
-        return "FUNCTIONAL"
-
-    # Check for summary
-    if any(term in query for term in ["short summary", "brief summary", "concise summary", "main points", "key points", "3 key takeaways", "summary", "summarize", "summarise", "overview"]):
-        return "SUMMARY"
-
-    # Check for full analysis
-    if any(term in query for term in ["full analysis", "complete document", "analyze document", "analyse document", "full document", "explain document", "detailed analysis"]):
-        return "FULL_ANALYSIS"
-
     # Check for report
     if any(term in query for term in ["downloadable report", "export report", "generate report", "report download", "create report", "report"]):
         return "REPORT"
+
+    # Check for extraction explicitly
+    if any(term in query for term in ["table extract", "extract table", "extract data", "table data", "table rows", "csv extract", "spreadsheet", "table only", "image", "diagram", "visual", "figure", "schematic", "illustration", "drawing", "visual extraction", "extract"]):
+        return "EXTRACTION"
+
+    # Check for structured data explicitly
+    if any(term in query for term in ["pin", "diagram", "connector", "mapping", "pinout", "visual structure", "technical table", "structured data"]):
+        return "STRUCTURED_DATA"
+
+    # Check for functional intent
+    if any(term in query for term in ["feature", "features", "workflow", "use case", "use cases", "capability", "capabilities", "process flow", "real usage", "functional behavior", "how does", "how it works"]):
+        return "FUNCTIONAL"
+
+    # Check for full document analysis requests
+    if any(term in query for term in ["full analysis", "complete document", "analyze document", "analyse document", "full document", "explain document", "detailed analysis"]):
+        return "FULL_ANALYSIS"
+
+    # Check for summary requests
+    if any(term in query for term in ["short summary", "brief summary", "concise summary", "main points", "key points", "3 key takeaways", "summary", "summarize", "summarise", "overview"]):
+        return "SUMMARY"
 
     # Default to SUMMARY if unclear
     return "SUMMARY"
@@ -3867,7 +3868,7 @@ def build_short_document_summary(file_name, file_bytes, text):
     raw_text = str(text or "")
     lines = [normalize_extracted_line(line) for line in raw_text.splitlines() if line.strip()]
     if not lines:
-        return f"**{html.escape(file_name)}**\n\nNo readable content found in this document."
+        return f"No readable content found in {html.escape(file_name)}."
 
     title = file_name
     for line in lines[:20]:
@@ -3893,24 +3894,21 @@ def build_short_document_summary(file_name, file_bytes, text):
             if cleaned.lower() not in seen:
                 key_points.append(cleaned)
                 seen.add(cleaned.lower())
-        if len(key_points) >= 7:
+        if len(key_points) >= 5:
             break
     if not key_points:
-        key_points = lines[:7]
+        key_points = lines[:5]
 
     key_takeaways = [html.escape(point) for point in key_points[:3]]
-    key_points_html = "".join(f"<li>{html.escape(point)}</li>" for point in key_points[:7])
+    key_points_html = "".join(f"<li>{html.escape(point)}</li>" for point in key_points[:5])
     takeaways_html = "".join(f"<li>{point}</li>" for point in key_takeaways)
 
     return (
         f"<div style='margin-bottom:18px; line-height:1.5;'>"
-        f"<h3 style='margin:0 0 10px 0; color:#173152;'>Short Summary: {html.escape(file_name)}</h3>"
-        f"<p><b>What the document is about:</b> {html.escape(title)}</p>"
-        f"<p><b>Main purpose:</b> {html.escape(main_purpose)}</p>"
-        f"<h4 style='margin:16px 0 6px 0; color:#173152;'>Key Points</h4>"
-        f"<ul>{key_points_html}</ul>"
-        f"<h4 style='margin:16px 0 6px 0; color:#173152;'>Key Takeaways</h4>"
-        f"<ul>{takeaways_html}</ul>"
+        f"<p><b>What it is:</b> {html.escape(title)}</p>"
+        f"<p><b>Purpose:</b> {html.escape(main_purpose)}</p>"
+        f"<p><b>Key insights:</b></p><ul>{key_points_html}</ul>"
+        f"<p><b>Key takeaways:</b></p><ul>{takeaways_html}</ul>"
         f"</div>"
     )
 
@@ -3966,6 +3964,31 @@ def build_image_or_diagram_extraction_response(file_texts, user_query):
         else:
             blocks.append(f"**{html.escape(file_name)}**\n\nNo image or diagram references were found in the extracted text.")
     return join_response_blocks(blocks)
+
+
+def build_strict_extraction_response(file_texts, user_query):
+    """Return direct verbatim extraction output with no explanation or added structure."""
+    blocks = []
+    query_lower = str(user_query or "").lower()
+    for file_name, text in (file_texts or {}).items():
+        raw_lines = [line.rstrip() for line in str(text or "").splitlines()]
+        if not raw_lines:
+            blocks.append("Not available in the document")
+            continue
+
+        if any(term in query_lower for term in ["table", "csv", "spreadsheet", "tabular", "rows", "columns", "column"]):
+            selected = [line for line in raw_lines if any(keyword in line.lower() for keyword in ["table", "row", "column", "csv", "spreadsheet", "cell", "header", "|", ","]) ]
+        elif any(term in query_lower for term in ["image", "diagram", "visual", "figure", "schematic", "illustration", "drawing", "pin", "connector"]):
+            selected = [line for line in raw_lines if any(keyword in line.lower() for keyword in ["figure", "image", "diagram", "schematic", "illustration", "drawing", "pin", "connector", "socket", "port", "cable"])]
+        else:
+            selected = raw_lines
+
+        if not selected:
+            blocks.append("Not available in the document")
+        else:
+            blocks.append("\n".join(selected).strip())
+
+    return "\n\n".join(blocks)
 
 
 def build_downloadable_report_response(file_texts):
