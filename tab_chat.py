@@ -189,8 +189,46 @@ def render_chat_tab():
             selected_file_texts = {f: st.session_state.file_texts.get(f, "") for f in chat_files}
             combined_text = "\n".join(selected_file_texts.values())
 
+            # Quick Analysis Buttons
+            if 'chat_analysis_type' not in st.session_state:
+                st.session_state.chat_analysis_type = None
+
+            st.markdown('### Quick Analysis')
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                if st.button('🔍 Analyze', key='chat_analyze_btn'):
+                    st.session_state.chat_analysis_type = 'analyze'
+                    st.session_state.messages.clear()
+                    st.session_state.chat_summary_downloads = empty_chat_summary_downloads()
+                    st.rerun()
+            with col2:
+                if st.button('📋 Summary', key='chat_summary_btn'):
+                    st.session_state.chat_analysis_type = 'summary'
+                    st.session_state.messages.clear()
+                    st.session_state.chat_summary_downloads = empty_chat_summary_downloads()
+                    st.rerun()
+            with col3:
+                if st.button('👁️ Overview', key='chat_overview_btn'):
+                    st.session_state.chat_analysis_type = 'overview'
+                    st.session_state.messages.clear()
+                    st.session_state.chat_summary_downloads = empty_chat_summary_downloads()
+                    st.rerun()
+            with col4:
+                if st.button('⭐ Features', key='chat_features_btn'):
+                    st.session_state.chat_analysis_type = 'features'
+                    st.session_state.messages.clear()
+                    st.session_state.chat_summary_downloads = empty_chat_summary_downloads()
+                    st.rerun()
+
+            # Trigger analysis
+            if st.session_state.chat_analysis_type:
+                response = generate_analysis_response(chat_files, st.session_state.chat_analysis_type)
+                st.session_state.messages.append({'role': 'assistant', 'content': f'## {st.session_state.chat_analysis_type.upper()}\\n\\n{response}'})
+                st.session_state.chat_analysis_type = None
+                st.rerun()
 
             user_input = st.chat_input("Ask anything related to selected documents/files")
+"""
             if st.session_state.get("input_prefill"):
                 user_input = st.session_state.input_prefill
                 st.session_state.input_prefill = ""
