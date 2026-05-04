@@ -2651,7 +2651,7 @@ def render_professional_document_preview(file_name, file_entry=None, highlight_t
         st.sidebar.markdown("### Preview Controls")
         zoom_percent = st.sidebar.slider("PDF render zoom", 80, 180, 100, 10)
         PDF_PREVIEW_RESOLUTION = max(72, int(zoom_percent))
-        quick_search = st.sidebar.text_input("Search in this document", value=highlight_term or "")
+        quick_search = st.sidebar.text_input("What ", value=highlight_term or "")
         st.sidebar.caption("Large files are rendered in pages, chunks, and cached extraction layers.")
 
         st.markdown(f"## {html.escape(file_name)}")
@@ -3802,30 +3802,47 @@ def classify_technical_document_request(user_query):
     """Classify user queries into the exact premium response categories requested by the user."""
     query = str(user_query or "").strip().lower()
     if not query:
-        return "UNKNOWN"
+        return "SUMMARY"  # Default to SUMMARY if unclear
 
+    # Priority: Component > Comparison > Extraction > Structured Data > Functional > Summary > Full Analysis
+
+    # Check for specific component first (highest priority)
+    if extract_specific_component_name(user_query):
+        return "COMPONENT"
+
+    # Check for comparison
     multiple_items = extract_multiple_component_names(user_query)
     if any(term in query for term in ["compare", "difference", "differences", " vs ", " versus "]):
         return "COMPARISON"
     if len(multiple_items) >= 2 and any(term in query for term in ["between", "which", "better", "different"]):
         return "COMPARISON"
-    if any(term in query for term in ["pin", "diagram", "connector", "mapping", "pinout", "visual structure", "technical table"]):
-        return "PIN_DIAGRAMS_CONNECTORS_TABLES"
-    if any(term in query for term in ["feature", "features", "workflow", "use case", "use cases", "capability", "capabilities", "process flow", "real usage", "functional behavior"]):
-        return "FEATURES_WORKFLOW_USE_CASES"
-    if any(term in query for term in ["short summary", "brief summary", "concise summary", "main points", "key points", "3 key takeaways"]):
-        return "SHORT_SUMMARY"
-    if any(term in query for term in ["table extract", "extract table", "table data", "table rows", "csv extract", "spreadsheet", "table only"]):
-        return "TABLE_EXTRACTION"
-    if any(term in query for term in ["image", "diagram", "visual", "figure", "schematic", "illustration", "drawing", "visual extraction"]):
-        return "IMAGE_OR_DIAGRAM_EXTRACTION"
-    if any(term in query for term in ["downloadable report", "export report", "generate report", "report download", "create report"]):
-        return "DOWNLOADABLE_REPORT"
-    if extract_specific_component_name(user_query):
-        return "SPECIFIC_COMPONENT_DETAILS"
-    if any(term in query for term in ["summary", "summarize", "summarise", "overview", "analyze document", "analyse document", "full document", "explain document"]):
-        return "FULL_DOCUMENT_ANALYSIS"
-    return "UNKNOWN"
+
+    # Check for extraction (tables, images, raw content)
+    if any(term in query for term in ["table extract", "extract table", "table data", "table rows", "csv extract", "spreadsheet", "table only", "image", "diagram", "visual", "figure", "schematic", "illustration", "drawing", "visual extraction", "extract"]):
+        return "EXTRACTION"
+
+    # Check for structured data (pins, diagrams, tables)
+    if any(term in query for term in ["pin", "diagram", "connector", "mapping", "pinout", "visual structure", "technical table", "structured data"]):
+        return "STRUCTURED_DATA"
+
+    # Check for functional (features, workflow, use cases)
+    if any(term in query for term in ["feature", "features", "workflow", "use case", "use cases", "capability", "capabilities", "process flow", "real usage", "functional behavior", "how does", "how it works"]):
+        return "FUNCTIONAL"
+
+    # Check for summary
+    if any(term in query for term in ["short summary", "brief summary", "concise summary", "main points", "key points", "3 key takeaways", "summary", "summarize", "summarise", "overview"]):
+        return "SUMMARY"
+
+    # Check for full analysis
+    if any(term in query for term in ["full analysis", "complete document", "analyze document", "analyse document", "full document", "explain document", "detailed analysis"]):
+        return "FULL_ANALYSIS"
+
+    # Check for report
+    if any(term in query for term in ["downloadable report", "export report", "generate report", "report download", "create report", "report"]):
+        return "REPORT"
+
+    # Default to SUMMARY if unclear
+    return "SUMMARY"
 
 
 def join_response_blocks(blocks):
@@ -4046,7 +4063,7 @@ def build_diagram_pin_details_response(file_texts, user_query):
 
 
 def build_features_workflow_response(file_texts):
-    """Build a concise functional behavior response: capabilities, process flow, usage."""
+    """Build a functional response: features, capabilities, workflow, inputs/outputs, applications, benefits."""
     blocks = []
     for file_name, text in (file_texts or {}).items():
         lower_text = str(text or "").lower()
@@ -4065,25 +4082,40 @@ def build_features_workflow_response(file_texts):
                     break
             return selected or fallback
 
-        capabilities = collect(
-            ["support", "feature", "function", "capability", "enable", "allows", "provide", "interface", "communication", "diagnostic", "configuration"],
+        features = collect(
+            ["feature", "function", "capability", "enable", "allows", "provide", "interface", "communication", "diagnostic"],
             ["Provides functional reference information for understanding and using the documented system."],
+        )
+        capabilities = collect(
+            ["support", "capability", "function", "enable", "allows", "provide", "interface", "communication", "diagnostic", "configuration"],
+            ["Supports technical reference and operational guidance."],
         )
         workflow = collect(
             ["install", "configure", "connect", "select", "execute", "run", "start", "use", "download", "export", "review"],
             ["Identify the relevant function, configure required inputs, execute the workflow, then review or export results."],
         )
-        use_cases = collect(
+        inputs_outputs = collect(
+            ["input", "output", "signal", "data", "channel", "port", "interface", "protocol", "format"],
+            ["Accepts configuration inputs and produces structured outputs or reports."],
+        )
+        applications = collect(
             ["application", "used for", "used to", "use case", "measurement", "testing", "diagnostic", "monitoring", "analysis", "report"],
             ["Technical reference, configuration planning, validation, troubleshooting, and documentation support."],
+        )
+        benefits = collect(
+            ["benefit", "advantage", "improve", "enhance", "optimize", "efficient", "reliable", "accurate", "fast", "easy"],
+            ["Provides reliable technical reference and operational efficiency."],
         )
 
         blocks.append(
             "<div style='margin-bottom:18px; line-height:1.5;'>"
-            f"<h3 style='margin:0 0 10px 0; color:#173152;'>Features / Workflow / Use Cases: {html.escape(file_name)}</h3>"
+            f"<h3 style='margin:0 0 10px 0; color:#173152;'>Functional Analysis: {html.escape(file_name)}</h3>"
+            + html_section("Features", features[:7])
             + html_section("Capabilities", capabilities[:7])
-            + html_section("Process Flow", workflow[:7])
-            + html_section("Real Usage", use_cases[:7])
+            + html_section("Workflow", workflow[:7])
+            + html_section("Inputs/Outputs", inputs_outputs[:7])
+            + html_section("Applications", applications[:7])
+            + html_section("Benefits", benefits[:7])
             + "</div>"
         )
     return join_response_blocks(blocks)
@@ -4097,7 +4129,7 @@ def build_component_comparison_response(file_texts, user_query):
 
     sections = [
         "<div style='margin-bottom:18px; line-height:1.5;'>",
-        "<h3 style='margin:0 0 10px 0; color:#173152;'>Component Comparison</h3>",
+        "<h3 style='margin:0 0 10px 0; color:#173152;'>Comparison</h3>",
         "<table style='border-collapse:collapse; width:100%; margin:8px 0;'>",
         "<thead><tr><th>Item</th><th>Purpose / Context</th><th>Technical Signals</th><th>Interfaces / Notes</th></tr></thead><tbody>",
     ]
@@ -4119,7 +4151,30 @@ def build_component_comparison_response(file_texts, user_query):
             "</tr>"
         )
 
-    sections.extend(["</tbody></table>", "<p><b>Key takeaway:</b> Shared wording is intentionally collapsed; the table highlights only item-specific context found near each component.</p>", "</div>"])
+    sections.extend(["</tbody></table>"])
+
+    # Add additional sections
+    all_item_lines = []
+    for item in items:
+        for file_text in (file_texts or {}).values():
+            all_item_lines.extend(collect_item_context_lines(file_text, item, window=5, limit=60))
+    all_item_lines = list(dict.fromkeys(all_item_lines))
+
+    similarities = select_relevant_lines(all_item_lines, ["same", "similar", "common", "shared", "both", "equivalent"], limit=5)
+    differences = select_relevant_lines(all_item_lines, ["different", "differs", "unique", "specific", "only", "versus", "vs"], limit=5)
+    key_insights = select_relevant_lines(all_item_lines, ["important", "key", "note", "critical", "main", "primary"], limit=5)
+    best_use = select_relevant_lines(all_item_lines, ["best for", "recommended", "ideal", "suitable", "use case", "application"], limit=5)
+
+    if similarities:
+        sections.append(html_section("Similarities", similarities))
+    if differences:
+        sections.append(html_section("Differences", differences))
+    if key_insights:
+        sections.append(html_section("Key Insights", key_insights))
+    if best_use:
+        sections.append(html_section("Best-Use Scenarios", best_use))
+
+    sections.append("</div>")
     return "".join(sections)
 
 
@@ -4614,14 +4669,13 @@ def build_product_documentation_analysis(file_name, file_bytes, text):
         return f"<h4 style='margin:16px 0 6px 0; color:#173152;'>{html.escape(title_text)}</h4>{bullet_list(items)}"
 
     sections = [
-        f"<h3 style='margin:0 0 10px 0; color:#173152;'>Document Analysis: {html.escape(file_name)}</h3>",
+        f"<h3 style='margin:0 0 10px 0; color:#173152;'>Full Analysis: {html.escape(file_name)}</h3>",
         section("Overview", overview_items),
         section("Core Concept", core_concept_items),
-        section("Architecture / Structure", architecture_evidence[:7]),
-        section("Key Capabilities", capabilities[:7]),
-        section("Components / Modules", components[:6]),
-        section("Workflow / How It Is Used", workflow_evidence[:6]),
-        section("Practical Use Cases", use_case_evidence[:6]),
+        section("Structure / Architecture", architecture_evidence[:7]),
+        section("Key Elements", capabilities[:7] + components[:6]),
+        section("Workflow / Logic", workflow_evidence[:6]),
+        section("Applications / Use Cases", use_case_evidence[:6]),
         section("Key Takeaways", takeaway_items[:5]),
     ]
     return "<div style='margin-bottom:18px; line-height:1.5;'>" + "".join(part for part in sections if part) + "</div>"
@@ -4733,25 +4787,25 @@ def build_item_information_response(file_name, text, item_name):
         return f"<div><h3>Item Information: {html.escape(item_name)}</h3><p>No relevant information for this item was found in {html.escape(file_name)}.</p></div>"
 
     overview = context_lines[:5]
+    purpose = select_relevant_lines(context_lines, ["purpose", "used for", "provides", "supports", "enables", "allows", "designed"])
     features = select_relevant_lines(context_lines, ["feature", "support", "capability", "function", "operation", "application"])
-    technical = select_relevant_lines(context_lines, ["mbit", "kbit", "volt", "channel", "standard", "protocol", "can", "lin", "flexray", "interface", "specification", "iso"])
-    architecture = select_relevant_lines(context_lines, ["structure", "component", "module", "piggy", "channel", "internal", "family", "device"])
-    configuration = select_relevant_lines(context_lines, ["configure", "configuration", "install", "insert", "setup", "use", "driver", "software", "hardware"])
-    connectivity = select_relevant_lines(context_lines, ["connector", "port", "pin", "d-sub", "usb", "channel", "plug", "socket", "interface"])
-    special = select_relevant_lines(context_lines, ["special", "unique", "only", "limitation", "difference", "optional", "available", "not supported"])
-    notes = select_relevant_lines(context_lines, ["note", "warning", "caution", "must", "shall", "important", "avoid", "required"])
+    technical = select_relevant_lines(context_lines, ["mbit", "kbit", "volt", "channel", "standard", "protocol", "can", "lin", "flexray", "interface", "specification", "iso", "structure", "component", "module", "piggy", "channel", "internal", "family", "device"])
+    interfaces = select_relevant_lines(context_lines, ["connector", "port", "pin", "d-sub", "usb", "channel", "plug", "socket", "interface", "relationship", "connects to"])
+    usage = select_relevant_lines(context_lines, ["configure", "configuration", "install", "insert", "setup", "use", "driver", "software", "hardware", "role"])
+    notes = select_relevant_lines(context_lines, ["special", "unique", "only", "limitation", "difference", "optional", "available", "not supported", "note", "warning", "caution", "must", "shall", "important", "avoid", "required"])
+    takeaways = select_relevant_lines(context_lines, ["key", "important", "main", "critical", "takeaway"], limit=3)
 
     sections = [
-        f"<h3 style='margin:0 0 10px 0; color:#173152;'>Item Information: {html.escape(item_name)}</h3>",
+        f"<h3 style='margin:0 0 10px 0; color:#173152;'>Component: {html.escape(item_name)}</h3>",
         f"<p><b>Source:</b> {html.escape(file_name)}</p>",
         html_section("Overview", overview),
+        html_section("Purpose", purpose),
         html_section("Key Features", features),
-        html_section("Technical Details", technical),
-        html_section("Architecture / Structure", architecture),
-        html_section("Configuration / Usage", configuration),
-        html_section("Interfaces & Connectivity", connectivity),
-        html_section("Special Capabilities", special),
-        html_section("Important Notes", notes),
+        html_section("Technical / Contextual Details", technical),
+        html_section("Interfaces / Relationships (if applicable)", interfaces),
+        html_section("Usage / Role", usage),
+        html_section("Notes", notes),
+        html_section("Key Takeaways", takeaways),
     ]
     return "<div style='margin-bottom:18px; line-height:1.5;'>" + "".join(section for section in sections if section) + "</div>"
 
