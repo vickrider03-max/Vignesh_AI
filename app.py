@@ -11,7 +11,7 @@ from functions import *
 from router import TAB_OPTIONS, init_router, render_tab_router
 from state_firewall import init_state_firewall, tab_state_scope
 from tab_memory import init_tab_memory
-from tab_chat import render_chat_tab
+# from tab_chat import render_chat_tab\nfrom functions import render_chat_tab
 from tab_dashboard import render_dashboard_tab
 from tab_compare import render_compare_tab
 from tab_capl import render_capl_tab
