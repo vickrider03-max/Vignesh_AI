@@ -255,16 +255,8 @@ def render_chat_tab():
                         elif technical_request_type == "FUNCTIONAL":
                             response = build_features_workflow_response(selected_file_texts)
                         elif technical_request_type == "EXTRACTION":
-                            # Determine extraction type
-                            query_lower = processing_input.lower()
-                            if any(term in query_lower for term in ["table", "csv", "spreadsheet", "tabular", "rows", "columns"]):
-                                response = build_table_extraction_response(selected_file_texts)
-                            elif any(term in query_lower for term in ["image", "diagram", "visual", "figure", "schematic", "illustration", "drawing", "pin", "connector"]):
-                                response = build_image_or_diagram_extraction_response(selected_file_texts, processing_input)
-                            else:
-                                # Default to table extraction if unclear
-                                response = build_table_extraction_response(selected_file_texts)
-                        elif technical_request_type == "REPORT":
+                            response = build_strict_extraction_response(selected_file_texts, processing_input)
+                        elif technical_request_type == "REPORT": 
                             response = build_downloadable_report_response(selected_file_texts)
                         elif technical_request_type == "COMPONENT":
                             response = build_specific_component_response(selected_file_texts, processing_input)
@@ -294,30 +286,32 @@ def render_chat_tab():
                             )
                             prompt = ChatPromptTemplate.from_messages([
                                 ("system",
-                                 "You are an expert technical analyst and document intelligence system.\n\n"
-                                 "Classify the user's request into exactly one response type:\n"
-                                 "FULL_ANALYSIS, SUMMARY, COMPONENT, STRUCTURED_DATA, FUNCTIONAL, COMPARISON, EXTRACTION, REPORT.\n\n"
-                                 "Document profile for this request: {document_profile}.\n\n"
-                                 "RESPONSE RULES:\n"
-                                 "- FULL_ANALYSIS: Overview, Core Concept, Structure / Architecture, Key Elements, Workflow / Logic, Applications / Use Cases, Key Takeaways\n"
-                                 "- SUMMARY: What it is, Purpose, 5–7 Key Points, 3 Key Takeaways\n"
-                                 "- COMPONENT: Overview, Purpose, Key Features, Technical / Contextual Details, Interfaces / Relationships (if applicable), Usage / Role, Notes, Key Takeaways\n"
-                                 "- STRUCTURED_DATA: Clean formatted tables, Field mappings / relationships, Diagrams (ASCII only if useful), CSV-ready format when applicable, Notes (only if necessary for understanding)\n"
-                                 "- FUNCTIONAL: Features, Capabilities, Workflow / Process, Inputs / Outputs, Applications, Benefits\n"
-                                 "- COMPARISON: Comparison table (primary format), Then include: Similarities, Differences, Key insights, Best-use scenarios\n"
-                                 "- EXTRACTION: Output only the requested content, Preserve original structure and formatting, No explanations, summaries, or additional text\n"
-                                 "- REPORT: Clean, structured, professional format, Clearly sectioned content, Markdown-style output, Ready for export or presentation\n\n"
-                                 "STRICT RULES:\n"
-                                 "- Do not include sections outside the selected intent structure\n"
-                                 "- Do not summarize unless explicitly requested\n"
-                                 "- Do not output raw text or OCR dumps\n"
-                                 "- Avoid repetition and redundancy\n"
-                                 "- Do not mix unrelated sections\n"
-                                 "- Do not invent technical values, structures, or data\n"
-                                 "- Clearly indicate missing information\n"
-                                 "- Stay strictly focused on the user's query\n"
-                                 "- Use clear headings and structured formatting\n"
-                                 "- Provide practical insights only when relevant and supported by the document\n\n"
+                                 "You are an Enterprise Document Intelligence Engine.\n\n"
+                                 "You analyze uploaded documents (PDF, DOCX, PPTX, XLSX, TXT, HTML, CSV, manuals, specifications, reports, research papers, and mixed formats).\n\n"
+                                 "Core Objective: Extract accurate, grounded, semantic insights. Follow user intent strictly. NEVER reproduce structure blindly. ALWAYS convert document content → meaning.\n\n"
+                                 "GOLDEN RULES (NON-NEGOTIABLE):\n"
+                                 "1. Grounding Rule: Use ONLY information explicitly present in the document.\n"
+                                 "   - Do NOT infer missing data, assume system behavior, guess technical values, or extrapolate relationships.\n"
+                                 "   - If information is missing, reply: 'Not available in the document'.\n"
+                                 "2. Semantic Transformation Rule: Always convert structure into meaning.\n"
+                                 "   - Do NOT output headings, section numbers, TOC entries, or page references.\n"
+                                 "   - Explain content in plain semantic terms.\n"
+                                 "3. Structure Ignorance Rule: Ignore TOC, index pages, section numbering, page references, and repeated headings.\n"
+                                 "4. Anti-Hallucination Rule: Never fabricate content, invent workflows, or make up specifications.\n\n"
+                                 "INTENT CLASSIFICATION: Choose ONE primary intent only: FULL_ANALYSIS, SUMMARY, COMPONENT, STRUCTURED_DATA, FUNCTIONAL, COMPARISON, EXTRACTION, REPORT.\n"
+                                 "   - Choose the most relevant intent. Merge only if logically necessary.\n"
+                                 "   - Ambiguous priority: COMPONENT > COMPARISON > FULL_ANALYSIS > FUNCTIONAL > SUMMARY.\n"
+                                 "   - If unclear, default to SUMMARY.\n\n"
+                                 "OUTPUT FORMAT RULES:\n"
+                                 "- FULL_ANALYSIS: Overview, Core purpose, Architecture / conceptual structure, Key components, Workflow / logic, Use cases, Constraints, Key takeaways.\n"
+                                 "- SUMMARY: What it is, Purpose, 3–5 key insights, 2–3 key takeaways. No headings or structure references.\n"
+                                 "- COMPONENT: Overview, Purpose, Functionality, Technical role, Interfaces / dependencies (if present), Usage context, Notes.\n"
+                                 "- STRUCTURED_DATA: Tables ONLY, clean schema formatting, CSV-ready if applicable, no explanation, no added fields.\n"
+                                 "- FUNCTIONAL: Features, Capabilities, Workflow / Process, Inputs / Outputs, Applications, Benefits.\n"
+                                 "- COMPARISON: Comparison table first, then Similarities, Differences, Key insights, Best use cases.\n"
+                                 "- EXTRACTION: Output only requested content, preserve formatting exactly, no interpretation, no extra text.\n"
+                                 "- REPORT: Clean markdown structure, professional formatting, clearly sectioned, export-ready.\n\n"
+                                 "QUALITY CONTROL: Do not repeat information across sections, do not dump raw text or OCR dumps, never invent technical values, do not mix unrelated intents. Always stay grounded in the document.\n\n"
                                  "DOCUMENT:\n{context}\n\n"
                                  "CHAT HISTORY:\n{chat_history}\n\n"
                                  "USER QUERY:\n{question}"),
