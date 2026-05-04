@@ -1593,9 +1593,17 @@ with st.sidebar:
                     for key in ["file_texts", "excel_data_by_file", "vector_stores"]:
                         st.session_state.get(key, {}).pop(deleted_name, None)
 
+                    if "workspace_memory" in st.session_state:
+                        st.session_state.workspace_memory["indexed_files"] = [
+                            f for f in st.session_state.workspace_memory.get("indexed_files", [])
+                            if f != deleted_name
+                        ]
+
                     if st.session_state.capl_last_analyzed_file == deleted_name:
                         st.session_state.capl_last_analyzed_file = None
                         st.session_state.capl_last_issues = None
+
+                    st.session_state.file_uploader_key = int(st.session_state.get("file_uploader_key", 0)) + 1
                     st.rerun()
         st.markdown("*Selected files above are available across all tabs.*")
         st.markdown("---")
