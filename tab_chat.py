@@ -240,11 +240,11 @@ def render_chat_tab():
                                 response = "".join(response_blocks)
                             else:
                                 response = "⚠️ Specify the search word or phrase in quotes. Example: find('keyword') or search(\"keyword\")"
-                        elif technical_request_type == "FULL_DOCUMENT_ANALYSIS":
+                        elif technical_request_type == "FULL_ANALYSIS":
                             response = build_full_document_summary_response(selected_file_texts)
-                        elif technical_request_type == "SHORT_SUMMARY":
+                        elif technical_request_type == "SUMMARY":
                             response = build_short_summary_response(selected_file_texts)
-                        elif technical_request_type == "PIN_DIAGRAMS_CONNECTORS_TABLES":
+                        elif technical_request_type == "STRUCTURED_DATA":
                             response, pin_csv_downloads, ascii_diagram_downloads = build_diagram_pin_details_response(selected_file_texts, processing_input)
                             st.session_state.chat_summary_downloads = {
                                 "images": [],
@@ -252,20 +252,22 @@ def render_chat_tab():
                                 "csv": pin_csv_downloads,
                                 "diagrams": ascii_diagram_downloads,
                             }
-                        elif technical_request_type == "FEATURES_WORKFLOW_USE_CASES":
+                        elif technical_request_type == "FUNCTIONAL":
                             response = build_features_workflow_response(selected_file_texts)
-                        elif technical_request_type == "TABLE_EXTRACTION":
-                            response = build_table_extraction_response(selected_file_texts)
-                        elif technical_request_type == "IMAGE_OR_DIAGRAM_EXTRACTION":
-                            response = build_image_or_diagram_extraction_response(selected_file_texts, processing_input)
-                        elif technical_request_type == "DOWNLOADABLE_REPORT":
+                        elif technical_request_type == "EXTRACTION":
+                            # Determine extraction type
+                            query_lower = processing_input.lower()
+                            if any(term in query_lower for term in ["table", "csv", "spreadsheet", "tabular", "rows", "columns"]):
+                                response = build_table_extraction_response(selected_file_texts)
+                            elif any(term in query_lower for term in ["image", "diagram", "visual", "figure", "schematic", "illustration", "drawing", "pin", "connector"]):
+                                response = build_image_or_diagram_extraction_response(selected_file_texts, processing_input)
+                            else:
+                                # Default to table extraction if unclear
+                                response = build_table_extraction_response(selected_file_texts)
+                        elif technical_request_type == "REPORT":
                             response = build_downloadable_report_response(selected_file_texts)
-                        elif any(term in user_input_lower for term in ["item details", "item information", "extract item", "about item", "information about", "details about"]):
+                        elif technical_request_type == "COMPONENT":
                             response = build_specific_component_response(selected_file_texts, processing_input)
-                        elif technical_request_type == "SPECIFIC_COMPONENT_DETAILS":
-                            response = build_specific_component_response(selected_file_texts, processing_input)
-                        elif any(term in user_input_lower for term in ["analyze", "summary", "summarize", "summarise"]):
-                            response = build_full_document_summary_response(selected_file_texts)
                         elif technical_request_type == "COMPARISON":
                             compared_items = extract_multiple_component_names(processing_input)
                             if len(compared_items) >= 2:
@@ -294,26 +296,28 @@ def render_chat_tab():
                                 ("system",
                                  "You are an expert technical analyst and document intelligence system.\n\n"
                                  "Classify the user's request into exactly one response type:\n"
-                                 "FULL_DOCUMENT_ANALYSIS, SHORT_SUMMARY, SPECIFIC_COMPONENT_DETAILS, PIN_DIAGRAMS_CONNECTORS_TABLES, "
-                                 "FEATURES_WORKFLOW_USE_CASES, COMPARISON, TABLE_EXTRACTION, IMAGE_OR_DIAGRAM_EXTRACTION, or DOWNLOADABLE_REPORT.\n\n"
+                                 "FULL_ANALYSIS, SUMMARY, COMPONENT, STRUCTURED_DATA, FUNCTIONAL, COMPARISON, EXTRACTION, REPORT.\n\n"
                                  "Document profile for this request: {document_profile}.\n\n"
                                  "RESPONSE RULES:\n"
-                                 "- FULL_DOCUMENT_ANALYSIS: provide Overview, Core Concept, Architecture / Structure, Key Capabilities, Workflow, Use Cases, Important Notes, Key Takeaways. Do not copy page-wise text.\n"
-                                 "- SHORT_SUMMARY: provide what the document is about, main purpose, 5–7 key points, and 3 key takeaways.\n"
-                                 "- SPECIFIC_COMPONENT_DETAILS: focus only on the requested item and include Overview, Purpose, Key Features, Technical Details, Interfaces, Configuration, Limitations / Important Notes.\n"
-                                 "- PIN_DIAGRAMS_CONNECTORS_TABLES: extract or reconstruct connector overview, pin configuration table, diagram, and mapping details. Keep tables CSV-ready.\n"
-                                 "- FEATURES_WORKFLOW_USE_CASES: extract functional behavior into Features, Capabilities, Workflow, Inputs/Outputs, Real-World Applications, and Benefits.\n"
-                                 "- COMPARISON: compare only the requested items/files and highlight similarities/differences without repeating shared content.\n"
-                                 "- TABLE_EXTRACTION: provide extracted tables only, preserve rows and columns, and present CSV-ready output.\n"
-                                 "- IMAGE_OR_DIAGRAM_EXTRACTION: identify relevant figures, diagrams, or visual references and recreate them as clean text diagrams when possible.\n"
-                                 "- DOWNLOADABLE_REPORT: create a structured export-style summary suitable for DOCX/Markdown/PDF report generation.\n\n"
+                                 "- FULL_ANALYSIS: Overview, Core Concept, Structure / Architecture, Key Elements, Workflow / Logic, Applications / Use Cases, Key Takeaways\n"
+                                 "- SUMMARY: What it is, Purpose, 5–7 Key Points, 3 Key Takeaways\n"
+                                 "- COMPONENT: Overview, Purpose, Key Features, Technical / Contextual Details, Interfaces / Relationships (if applicable), Usage / Role, Notes, Key Takeaways\n"
+                                 "- STRUCTURED_DATA: Clean formatted tables, Field mappings / relationships, Diagrams (ASCII only if useful), CSV-ready format when applicable, Notes (only if necessary for understanding)\n"
+                                 "- FUNCTIONAL: Features, Capabilities, Workflow / Process, Inputs / Outputs, Applications, Benefits\n"
+                                 "- COMPARISON: Comparison table (primary format), Then include: Similarities, Differences, Key insights, Best-use scenarios\n"
+                                 "- EXTRACTION: Output only the requested content, Preserve original structure and formatting, No explanations, summaries, or additional text\n"
+                                 "- REPORT: Clean, structured, professional format, Clearly sectioned content, Markdown-style output, Ready for export or presentation\n\n"
                                  "STRICT RULES:\n"
-                                 "- Do not copy raw text.\n"
-                                 "- Do not show Page X Text.\n"
-                                 "- Do not repeat the same content in multiple sections.\n"
-                                 "- Do not mix full document summary with component details unless explicitly asked.\n"
-                                 "- Do not output Suggestions or generic next steps.\n"
-                                 "- Always tailor depth and structure to the exact user query, not the entire document.\n\n"
+                                 "- Do not include sections outside the selected intent structure\n"
+                                 "- Do not summarize unless explicitly requested\n"
+                                 "- Do not output raw text or OCR dumps\n"
+                                 "- Avoid repetition and redundancy\n"
+                                 "- Do not mix unrelated sections\n"
+                                 "- Do not invent technical values, structures, or data\n"
+                                 "- Clearly indicate missing information\n"
+                                 "- Stay strictly focused on the user's query\n"
+                                 "- Use clear headings and structured formatting\n"
+                                 "- Provide practical insights only when relevant and supported by the document\n\n"
                                  "DOCUMENT:\n{context}\n\n"
                                  "CHAT HISTORY:\n{chat_history}\n\n"
                                  "USER QUERY:\n{question}"),
