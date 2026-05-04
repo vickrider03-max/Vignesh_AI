@@ -92,6 +92,7 @@ EMBEDDINGS_CACHE = CacheManager(max_size=200)
 FILE_HASH_CACHE = {}
 WORKSPACE_DB_FILE = os.path.join(APP_DIR, "workspace_memory.db")
 WORKSPACE_MEMORY_KEY = "workspace_memory"
+
 SUMMARY_STOPWORDS = {
     "the", "and", "for", "with", "that", "this", "from", "are", "was", "were", "into", "your", "have",
     "has", "had", "not", "but", "you", "all", "can", "will", "use", "using", "used", "how", "what",
@@ -99,6 +100,154 @@ SUMMARY_STOPWORDS = {
     "before", "within", "without", "each", "page", "pages", "table", "tables", "image", "images",
     "document", "content", "metadata", "information", "product", "file", "text"
 }
+
+# ==============================
+# NEW ANALYSIS BUTTON PROMPTS
+# ==============================
+ANALYSIS_PROMPT = """You are a senior technical analyst and documentation expert.
+
+Analyze the uploaded document and create a professional, human-readable explanation.
+
+The user request is:
+"{USER_QUERY}"
+
+The uploaded document content may contain OCR noise, metadata, page headers, footers, copyright text, table of contents, and repeated section titles. You must ignore those unless they are directly useful.
+
+IMPORTANT CONTEXT FILTERING RULES:
+
+Ignore:
+- PDF metadata such as author, title, creation date
+- Copyright/imprint text
+- Table of contents entries
+- Page numbers
+- Header/footer repetitions
+- Raw OCR fragments
+- Isolated section titles without explanation
+- Lines that only contain headings such as "Main Features 13" or "Important Notes 10"
+
+Focus on:
+- Actual explanatory paragraphs
+- Descriptions of the product/system
+- Purpose and intended usage
+- Architecture or structure
+- Features and capabilities
+- Components/modules and their roles
+- Workflow or operating process
+- Applications/use cases
+- Safety notes only if relevant
+
+Do NOT copy raw document text.
+Do NOT show "Page X Text".
+Do NOT output a list of headings from the table of contents.
+Do NOT say "Author: ..." as the overview.
+Do NOT repeat the same content in multiple sections.
+
+Your job is to interpret, synthesize, and explain.
+
+OUTPUT FORMAT:
+
+Document Analysis
+1. Overview
+
+Explain what the document/product/system is about in simple, professional language.
+
+2. Purpose
+
+Explain why the document/product/system exists and what problem it solves.
+
+3. Core Concept
+
+Explain the main idea in beginner-friendly terms.
+
+4. Architecture / Structure
+
+Explain how the system or document is logically organized.
+Group related parts together instead of copying document section headings.
+
+5. Key Features
+
+List the important features and explain each in 1–2 lines.
+
+6. Capabilities
+
+Explain what the system/product/process can do.
+
+7. Major Components / Modules
+
+If the document contains modules, products, tools, or components, list the important ones and explain their role.
+
+8. Workflow / How It Is Used
+
+Explain the typical usage flow step by step.
+
+9. Use Cases / Applications
+
+Explain where and how it can be used in real life.
+
+10. Important Notes
+
+Include warnings, limitations, constraints, or operational notes only if meaningful.
+
+11. Key Takeaways
+
+Give 3–5 strong takeaways.
+
+STYLE:
+- Professional
+- Clean
+- Structured
+- Human-readable
+- No raw extraction
+- No table-of-contents dumping
+- No metadata dumping
+
+FINAL CHECK BEFORE ANSWERING:
+Before producing the answer, verify that the response is based on meaningful document content, not only metadata, headings, or table of contents."""
+
+SUMMARY_PROMPT = """Summarize this document clearly and professionally.
+
+Ignore metadata, table of contents, headers, footers, copyright text, and OCR noise.
+
+Give only:
+- Short summary
+- What the document is about
+- Main purpose
+- Most important points
+- Key takeaways
+
+Keep it concise.
+Do not include architecture, long module lists, raw extracted text, or page-wise content unless necessary."""
+
+OVERVIEW_PROMPT = """Give a high-level overview of this document.
+
+Ignore metadata, table of contents, headers, footers, copyright text, and OCR noise.
+
+Explain:
+- What this document/product/system is
+- Who it is for
+- What it is used for
+- Main concept
+- Main areas covered
+
+Keep it simple, clean, and professional.
+Do not list raw headings or page numbers."""
+
+FEATURES_PROMPT = """Extract the real features and capabilities described in this document.
+
+Ignore metadata, table of contents, headers, footers, copyright text, and OCR noise.
+
+Do not list headings such as "Main Features 13".
+Instead, identify actual functional features from the explanatory content.
+
+Output:
+- Feature name
+- What it does
+- Why it matters
+- Related component/module, if applicable
+
+Use a clean table if possible.
+Do not invent missing details."""
+
 CREATOR_USERNAME = "Vignesh"
 CREATOR_PASSWORD = "Rider@100"
 
@@ -3743,6 +3892,7 @@ def strip_llm_suggestions_from_response(response):
     return text
 
 
+
 def should_show_chat_suggestions(intent, user_query):
     """Only show suggestion buttons when the user explicitly asks for guidance."""
     query = str(user_query or "").lower()
@@ -3751,6 +3901,57 @@ def should_show_chat_suggestions(intent, user_query):
     if any(term in query for term in ["suggest", "next step", "what can i ask", "guide me"]):
         return True
     return False
+
+
+# ==============================
+# ANALYSIS BUTTON HANDLER
+# ==============================
+def generate_analysis_response(chat_files, analysis_type):
+    """Generate structured document analysis using specialized prompts."""
+    if not chat_files:
+        return "No files selected for analysis."
+    
+    # Get combined text
+    selected_file_texts = {f: st.session_state.file_texts.get(f, "") for f in chat_files}
+    combined_text = "\n\n".join(selected_file_texts.values())
+    if not combined_text.strip():
+        return "No readable text found in selected files."
+    
+    # Select prompt
+    prompts = {
+        "analyze": ANALYSIS_PROMPT,
+        "summary": SUMMARY_PROMPT,
+        "overview": OVERVIEW_PROMPT,
+        "features": FEATURES_PROMPT,
+    }
+    prompt_template = prompts.get(analysis_type)
+    if not prompt_template:
+        return f"Unknown analysis type: {analysis_type}"
+    
+    llm = load_llm()
+    if llm is None:
+        return "AI analysis unavailable (LLM not loaded)."
+    
+    try:
+        # Build chain: context + prompt + empty query (document analysis)
+        system_prompt = prompt_template.format(USER_QUERY="Provide a complete analysis/summary/overview/features of this document.")
+        full_prompt = f"""SYSTEM: {system_prompt}
+
+DOCUMENT CONTENT:
+{combined_text[:MAX_VECTOR_TEXT_CHARS]}"""
+        
+        response = llm.invoke(full_prompt)
+        response = str(response).strip()
+        
+        # Reset analysis state
+        st.session_state.chat_analysis_type = None
+        
+        return response or "No response generated."
+    
+    except Exception as e:
+        st.error(f"Analysis failed: {e}")
+        return f"Analysis error: {str(e)}"
+
 
 
 # ==============================
