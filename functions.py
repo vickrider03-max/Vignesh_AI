@@ -3199,6 +3199,195 @@ def build_chatpdf_documents(file_names):
     return documents
 
 
+def get_chatpdf_documents_for_selection(file_names, user_id=None):
+    """Session-cached structured chunks for hybrid retrieval."""
+    user_id = user_id or get_active_user_id()
+    cache = st.session_state.setdefault("chatpdf_documents", {})
+    cache_key = get_chatpdf_collection_id(user_id, file_names)
+    if cache_key not in cache:
+        cache[cache_key] = build_chatpdf_documents(file_names)
+        st.session_state.chatpdf_documents = cache
+    return cache.get(cache_key, [])
+
+
+def tokenize_chatpdf_text(text):
+    """Tokenize text for BM25 and fallback reranking."""
+    tokens = re.findall(r"[A-Za-z0-9_]+", str(text or "").lower())
+    return [token for token in tokens if len(token) > 1 and token not in SUMMARY_STOPWORDS]
+
+
+def get_bm25_okapi_class():
+    """Load rank_bm25 dynamically so missing optional dependency does not break imports."""
+    try:
+        return getattr(importlib.import_module("rank_bm25"), "BM25Okapi", None)
+    except Exception:
+        return None
+
+
+def get_chatpdf_bm25_index(file_names, user_id=None):
+    """Build a lightweight sparse keyword index for selected documents."""
+    bm25_okapi_class = get_bm25_okapi_class()
+    if bm25_okapi_class is None:
+        return None, []
+    user_id = user_id or get_active_user_id()
+    cache = st.session_state.setdefault("chatpdf_bm25_indexes", {})
+    cache_key = get_chatpdf_collection_id(user_id, file_names)
+    if cache_key in cache:
+        entry = cache[cache_key]
+        return entry.get("bm25"), entry.get("documents", [])
+
+    documents = get_chatpdf_documents_for_selection(file_names, user_id=user_id)
+    corpus_tokens = [tokenize_chatpdf_text(doc.page_content) for doc in documents]
+    usable_pairs = [(doc, tokens) for doc, tokens in zip(documents, corpus_tokens) if tokens]
+    if not usable_pairs:
+        return None, documents
+
+    indexed_documents = [doc for doc, _ in usable_pairs]
+    indexed_tokens = [tokens for _, tokens in usable_pairs]
+    bm25 = bm25_okapi_class(indexed_tokens)
+    cache[cache_key] = {"bm25": bm25, "documents": indexed_documents}
+    st.session_state.chatpdf_bm25_indexes = cache
+    return bm25, indexed_documents
+
+
+def chatpdf_document_key(doc):
+    meta = getattr(doc, "metadata", {}) or {}
+    content_hash = hashlib.sha1(str(getattr(doc, "page_content", "")).encode("utf-8", errors="ignore")).hexdigest()[:12]
+    return (
+        meta.get("document_id", ""),
+        meta.get("file_name", ""),
+        str(meta.get("page_or_sheet") or meta.get("page_number") or ""),
+        str(meta.get("section", "")),
+        str(meta.get("chunk_index", "")),
+        content_hash,
+    )
+
+
+def sparse_chatpdf_search(question, file_names, user_id=None, top_k=12):
+    """BM25 keyword search over the same chunks used by dense retrieval."""
+    bm25, documents = get_chatpdf_bm25_index(file_names, user_id=user_id)
+    if bm25 is None or not documents:
+        return []
+    query_tokens = tokenize_chatpdf_text(question)
+    if not query_tokens:
+        return []
+    scores = bm25.get_scores(query_tokens)
+    ranked_indices = sorted(range(len(scores)), key=lambda index: scores[index], reverse=True)
+    return [documents[index] for index in ranked_indices[:top_k] if scores[index] > 0]
+
+
+def merge_chatpdf_results(*result_groups):
+    """Merge dense and sparse candidates while preserving first-seen rank order."""
+    merged = []
+    seen = set()
+    for group in result_groups:
+        for doc in group or []:
+            key = chatpdf_document_key(doc)
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(doc)
+    return merged
+
+
+@st.cache_resource(show_spinner=False)
+def load_chatpdf_reranker():
+    """Optional cross-encoder reranker; falls back silently if unavailable."""
+    try:
+        from sentence_transformers import CrossEncoder
+        model_name = os.environ.get("CHATPDF_RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
+        return CrossEncoder(model_name)
+    except Exception:
+        return None
+
+
+def lexical_rerank_score(question, doc):
+    query_tokens = set(tokenize_chatpdf_text(question))
+    doc_tokens = tokenize_chatpdf_text(getattr(doc, "page_content", ""))
+    if not query_tokens or not doc_tokens:
+        return 0
+    doc_token_set = set(doc_tokens)
+    overlap = len(query_tokens.intersection(doc_token_set))
+    phrase_bonus = 0
+    question_l = str(question or "").lower().strip()
+    content_l = str(getattr(doc, "page_content", "") or "").lower()
+    if question_l and question_l in content_l:
+        phrase_bonus = 4
+    return (overlap * 3) + phrase_bonus + min(len(doc_tokens), 500) / 1000
+
+
+def rerank_chatpdf_documents(question, docs, top_k=8):
+    """Rerank merged candidates with a cross-encoder when possible."""
+    if not docs:
+        return []
+    reranker = load_chatpdf_reranker()
+    if reranker is not None:
+        try:
+            pairs = [[str(question), str(getattr(doc, "page_content", ""))[:4000]] for doc in docs]
+            scores = reranker.predict(pairs)
+            ranked = [doc for _, doc in sorted(zip(scores, docs), key=lambda item: item[0], reverse=True)]
+            return ranked[:top_k]
+        except Exception:
+            pass
+    return sorted(docs, key=lambda doc: lexical_rerank_score(question, doc), reverse=True)[:top_k]
+
+
+def rewrite_chatpdf_query(llm, question):
+    """Optionally rewrite the user question into a compact retrieval query."""
+    original_question = re.sub(r"\s+", " ", str(question or "")).strip()
+    if not original_question or llm is None:
+        return original_question
+
+    rewrite_prompt = f"""Rewrite this question to improve document search.
+
+Rules:
+- Preserve the user's intent.
+- Keep important names, numbers, acronyms, and technical terms.
+- Return only one concise search query.
+- Do not answer the question.
+
+Question: {original_question}
+
+Search query:"""
+    try:
+        rewritten = str(llm.invoke(rewrite_prompt)).strip()
+    except Exception:
+        return original_question
+
+    rewritten = re.sub(r"(?is)^.*?search query:\s*", "", rewritten).strip()
+    rewritten = re.sub(r"\s+", " ", rewritten).strip(" `\"'")
+    if not rewritten:
+        return original_question
+    if len(rewritten) > 260:
+        rewritten = rewritten[:260].rsplit(" ", 1)[0].strip() or original_question
+    if rewritten.lower() in {"none", "n/a", "not available"}:
+        return original_question
+    return rewritten
+
+
+def hybrid_chatpdf_retrieve(question, file_names, user_id=None, dense_k=12, sparse_k=12, final_k=8, search_query=None):
+    """Dense FAISS + sparse BM25 retrieval followed by reranking."""
+    user_id = user_id or get_active_user_id()
+    vector_store = get_chatpdf_vector_store(file_names, user_id=user_id)
+    search_queries = [str(question or "").strip()]
+    if search_query and str(search_query).strip() not in search_queries:
+        search_queries.append(str(search_query).strip())
+
+    result_groups = []
+    for query_text in [query for query in search_queries if query]:
+        dense_results = []
+        if vector_store is not None:
+            try:
+                dense_results = vector_store.similarity_search(query_text, k=dense_k)
+            except Exception:
+                dense_results = []
+        sparse_results = sparse_chatpdf_search(query_text, file_names, user_id=user_id, top_k=sparse_k)
+        result_groups.extend([dense_results, sparse_results])
+
+    candidates = merge_chatpdf_results(*result_groups)
+    return rerank_chatpdf_documents(question, candidates, top_k=final_k)
+
+
 def get_chatpdf_vector_store(file_names, user_id=None):
     """Build or load persistent FAISS collection for user/document selection."""
     user_id = user_id or get_active_user_id()
@@ -3221,7 +3410,7 @@ def get_chatpdf_vector_store(file_names, user_id=None):
         except Exception:
             pass
 
-    documents = build_chatpdf_documents(file_names)
+    documents = get_chatpdf_documents_for_selection(file_names, user_id=user_id)
     if not documents:
         return None
     vs = FAISS.from_documents(documents, embeddings)
@@ -3280,22 +3469,40 @@ def build_chatpdf_prompt(question, docs, memory):
         for item in memory[-4:]
     )
     context = format_chatpdf_context(docs)
-    return f"""You are a highly advanced multimodal document intelligence AI assistant.
+    return f"""You are an advanced AI assistant that analyzes and answers questions using provided document context.
 
 CORE IDENTITY:
-- You combine natural ChatGPT-style conversation with ChatPDF-style grounded document analysis.
+- You behave like a combination of ChatGPT reasoning/conversation and ChatPDF document-grounded intelligence.
 - You can reason across PDF, DOCX, PPTX, XLSX, TXT, RTF, ODT, and HTML content after extraction.
 - You treat every uploaded format as structured knowledge with file name, file type, locator, section, and chunk metadata.
+
+CRITICAL RULE:
+- You are ALWAYS given real document excerpts in the CONTEXT section.
+- Carefully read ALL provided context chunks.
+- Extract useful information even if it is partial or indirect.
+- Combine multiple chunks if needed.
+- Infer meaning ONLY from the given text.
+- Do NOT prematurely say information is missing.
+
+WHEN TO SAY "NOT AVAILABLE":
+- Say exactly "This information is not available in the uploaded documents." IF AND ONLY IF:
+  - the context is empty, or
+  - the context is completely unrelated to the question.
+- If ANY partial relevant information exists, attempt to answer from that information.
 
 STRICT KNOWLEDGE RULES:
 - Use ONLY the provided document context to answer factual questions.
 - Use conversation memory only for continuity over the same selected documents, not as an uncited source of new facts.
 - Do NOT use external knowledge to fill missing document facts.
-- If the answer is not supported by the provided context, respond exactly:
-  "This information is not available in the uploaded documents."
 - Never hallucinate, guess, fabricate citations, or ignore selected document context.
 
 REASONING BEHAVIOR:
+- Think through these steps internally without exposing chain-of-thought:
+  1. Read all context chunks.
+  2. Identify relevant sections, including partial matches.
+  3. Combine information across sources if needed.
+  4. Build a clear, structured answer.
+  5. Keep correctness strictly based on context.
 - Combine multiple retrieved chunks when needed.
 - Cross-reference multiple files when relevant.
 - For spreadsheets, reason over sheets, rows, columns, and values present in the context.
@@ -3314,7 +3521,7 @@ CITATION RULES:
 
 OUTPUT FORMAT:
 Answer:
-...
+Provide a clear, direct explanation based ONLY on context.
 
 Sources:
 - file_name (PDF Page X)
@@ -3323,10 +3530,10 @@ Sources:
 Conversation memory for these selected documents:
 {memory_text or "No previous conversation."}
 
-Provided context:
+CONTEXT (REAL DOCUMENT CONTENT):
 {context}
 
-Question:
+USER QUESTION:
 {question}
 """
 
@@ -3345,19 +3552,16 @@ def build_extractive_chatpdf_answer(question, docs):
     return "Answer:\n" + "\n".join(bullets) + "\n\nSources:\n" + format_chatpdf_sources(docs)
 
 
-def answer_chatpdf_question(question, file_names, user_id=None, top_k=7):
-    """Strict RAG answer with page-level citations and per-document memory."""
+def answer_chatpdf_question(question, file_names, user_id=None, top_k=8):
+    """Hybrid RAG answer with citations and per-document memory."""
     user_id = user_id or get_active_user_id()
-    vector_store = get_chatpdf_vector_store(file_names, user_id=user_id)
-    if vector_store is None:
-        return "Answer:\nThis information is not available in the uploaded documents.\n\nSources:\n- No sources found", []
-
-    docs = vector_store.similarity_search(question, k=top_k)
+    llm = load_llm()
+    search_query = rewrite_chatpdf_query(llm, question)
+    docs = hybrid_chatpdf_retrieve(question, file_names, user_id=user_id, final_k=top_k, search_query=search_query)
     if not docs:
         return "Answer:\nThis information is not available in the uploaded documents.\n\nSources:\n- No sources found", []
 
     memory = get_chatpdf_memory(user_id, file_names)
-    llm = load_llm()
     if llm is None:
         answer = build_extractive_chatpdf_answer(question, docs)
     else:
@@ -3392,7 +3596,7 @@ def load_llm():
 
     for task in candidate_tasks:
         try:
-            pipe = pipeline(task, model="google/flan-t5-small", max_new_tokens=128, return_full_text=False)
+            pipe = pipeline(task, model="google/flan-t5-small", max_new_tokens=384, return_full_text=False)
             st.session_state.llm_task = task
             return HuggingFacePipeline(pipeline=pipe)
         except Exception as e:
@@ -7077,8 +7281,8 @@ def get_dynamic_suggestions(tab_name, skill_level):
     suggestions_by_skill = {
         "chat": {
             "beginner": ["Ask document question", "Review citations", "Find a keyword", "Count a phrase"],
-            "intermediate": ["Ask follow-up with memory", "Check PDF pages/slides/sheets", "Compare selected docs", "Extract source evidence"],
-            "advanced": ["Validate grounded answers", "Cross-document reasoning", "Audit citation metadata", "Use document memory"]
+            "intermediate": ["Query rewrite + hybrid search", "Ask follow-up with memory", "Compare selected docs", "Extract source evidence"],
+            "advanced": ["Validate reranked chunks", "Cross-document reasoning", "Audit citation metadata", "Use document memory"]
         },
         "dashboard": {
             "beginner": ["Review memory snapshot", "Show key themes", "Check indexed files"],
@@ -7105,8 +7309,8 @@ def get_next_best_action(tab_name, skill_level):
     workflow_paths = {
         "chat": {
             "beginner": "Pro Tip: Select one or more files, then ask a natural-language question. Answers include Sources with PDF pages, slides, sheets, or sections.",
-            "intermediate": "Next: Ask follow-up questions on the same document selection; memory is scoped to the selected document set.",
-            "advanced": "Next: Validate claims by checking the cited source locators, then use find/count for deterministic evidence checks."
+            "intermediate": "Next: Ask follow-up questions on the same document selection; optional query rewrite feeds hybrid FAISS + BM25 retrieval.",
+            "advanced": "Next: Validate claims by checking reranked cited chunks, then use find/count for deterministic evidence checks."
         },
         "dashboard": {
             "beginner": "Pro Tip: Start with the workspace memory snapshot to confirm what the app has indexed.",
@@ -7165,17 +7369,20 @@ def show_help_popup(tab_name, selected_files):
     helper_defs = {
         "chat": {
             "title": "Chat Helper",
-            "text": "Use multimodal ChatPDF mode to ask natural-language questions over PDF, DOCX, PPTX, XLSX, TXT, RTF, ODT, and HTML files. Answers are grounded in retrieved document chunks and cite PDF pages, slides, sheets, or sections.",
-            "hint": "Select one or more files, ask a question, then verify the Sources list. If the answer is not supported by the selected documents, the assistant should say that it is unavailable.",
+            "text": "Use multimodal ChatPDF mode to ask natural-language questions over PDF, DOCX, PPTX, XLSX, TXT, RTF, ODT, and HTML files. Retrieval uses optional query rewrite, semantic FAISS search, BM25 keyword search, merged candidates, and reranking before the LLM answers.",
+            "hint": "Select one or more files, ask a question, then verify the Sources list. The assistant should only say information is unavailable when the retrieved context is empty or completely unrelated.",
             "workflow": [
                 "Upload files, then explicitly select only the documents you want to chat with in this tab.",
                 "Ask a natural-language question. The app normalizes every file into text plus metadata: file_name, file_type, page_or_sheet, section, document_id, and chunk index.",
-                "FAISS retrieves only relevant grounded chunks and sends that document context to the LLM.",
+                "The LLM may rewrite the question into a compact search query while preserving the original intent.",
+                "Dense FAISS retrieval finds semantic matches while BM25 finds exact keyword matches across both original and rewritten queries.",
+                "Merged candidates are reranked with a cross-encoder when available, or a lexical fallback when not.",
+                "The LLM receives the top reranked document excerpts and is instructed to answer from partial relevant context instead of refusing too early.",
                 "Review the Answer and Sources sections. Citations use PDF Page, Slide, Sheet, Section, or file-only labels depending on available metadata.",
                 "Follow-up questions reuse memory for the same user and document selection.",
                 "Use find \"keyword\" or count \"phrase\" when you need deterministic text checks instead of generated answers."
             ],
-            "outputs": ["Document-only answers", "PDF/slide/sheet/section citations", "Per-document memory", "Retrieved source evidence", "Streaming-style response"],
+            "outputs": ["Hybrid RAG answers", "Reranked source chunks", "PDF/slide/sheet/section citations", "Per-document memory", "Streaming-style response"],
             "shortcuts": [
                 ("What does this document say about ...?", "Ask a grounded question over selected documents."),
                 ("summarize the policy", "Create a cited summary from retrieved document pages."),
