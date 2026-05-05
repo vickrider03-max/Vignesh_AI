@@ -2,6 +2,7 @@
 # The original monolith is retained as rollback documentation.
 
 from functions import *
+from tab_memory import get_tab_uploaded_files
 
 # ==============================
 # COMPARE TAB UI
@@ -22,10 +23,17 @@ def render_compare_tab():
             st.session_state.compare_semantic_summary = None
             st.rerun()
 
+    compare_tab_file_names = [
+        file_dict.get("name")
+        for file_dict in get_tab_uploaded_files("compare")
+        if file_dict.get("name")
+    ]
+    available_compare_files = list(dict.fromkeys(compare_tab_file_names + st.session_state.selected_files))
+
     st.info("Select files in the sidebar to make them available here, then choose only the files you want to compare in this tab.")
     show_current_sidebar_selection()
-    show_help_popup('compare', st.session_state.selected_files)
-    render_file_context_card("Compare File Context", st.session_state.selected_files, st.session_state.compare_file_selection)
+    show_help_popup('compare', available_compare_files)
+    render_file_context_card("Compare File Context", available_compare_files, st.session_state.compare_file_selection)
 
     st.markdown("**Comparison options:**")
     st.markdown(
@@ -39,11 +47,11 @@ def render_compare_tab():
     # Use selected files in multiselect (user must choose from selected_files independently)
     st.session_state.compare_file_selection = [
         file_name for file_name in st.session_state.compare_file_selection
-        if file_name in st.session_state.selected_files
+        if file_name in available_compare_files
     ]
     selected_files_for_comparison = st.multiselect(
         "Choose files to compare",
-        options=st.session_state.selected_files,
+        options=available_compare_files,
         default=st.session_state.compare_file_selection,
         key="compare_file_selection"
     )
