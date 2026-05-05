@@ -31,6 +31,7 @@ import plotly.express as px
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.llms import HuggingFacePipeline
 from langchain_community.vectorstores import FAISS
+from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -2953,6 +2954,428 @@ def create_vector_store(text):
     chunks = splitter.split_text(text[:MAX_VECTOR_TEXT_CHARS])
     emb = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     return FAISS.from_texts(chunks, emb)
+
+
+@st.cache_resource(show_spinner=False)
+def get_chatpdf_embeddings():
+    """Shared embedding model for metadata-preserving ChatPDF retrieval."""
+    return HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+
+
+def get_active_user_id():
+    """Stable local user id used to isolate document vectors and memory."""
+    return str(st.session_state.get("logged_in_username") or "local_user").strip() or "local_user"
+
+
+def get_document_id(file_name, file_bytes):
+    """Stable document id from file name + content hash."""
+    digest = hashlib.sha1(file_bytes or b"").hexdigest()[:16]
+    clean_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(file_name or "document")).strip("_")
+    return f"{clean_name}_{digest}"
+
+
+def get_chatpdf_file_type(file_name):
+    """Normalize supported document extensions for ChatPDF metadata."""
+    extension = os.path.splitext(str(file_name or ""))[1].lower()
+    extension_map = {
+        ".pdf": "pdf",
+        ".docx": "docx",
+        ".doc": "docx",
+        ".pptx": "pptx",
+        ".ppt": "pptx",
+        ".xlsx": "xlsx",
+        ".xls": "xlsx",
+        ".html": "html",
+        ".htm": "html",
+        ".txt": "txt",
+        ".md": "txt",
+        ".log": "txt",
+        ".rtf": "rtf",
+        ".odt": "odt",
+        ".can": "txt",
+        ".capl": "txt",
+    }
+    return extension_map.get(extension, extension.lstrip(".") or "document")
+
+
+def build_chatpdf_citation_label(metadata):
+    """Format citations in ChatPDF style for each supported file type."""
+    meta = metadata or {}
+    file_name = str(meta.get("file_name") or "document")
+    file_type = str(meta.get("file_type") or get_chatpdf_file_type(file_name)).lower()
+    locator = str(meta.get("page_or_sheet") or meta.get("page_number") or "").strip()
+    section = re.sub(r"\s+", " ", str(meta.get("section") or "")).strip()
+
+    if file_type == "pdf" and locator:
+        return f"{file_name} (PDF Page {locator})"
+    if file_type == "pptx" and locator:
+        return f"{file_name} (Slide {locator})"
+    if file_type == "xlsx" and locator:
+        return f"{file_name} (Sheet: {locator})"
+
+    generic_sections = {
+        "",
+        "document",
+        "text content",
+        "extracted content",
+        "html",
+        "odt content",
+        "rtf content",
+    }
+    if section.lower() not in generic_sections:
+        return f"{file_name} (Section: {section[:90]})"
+    return file_name
+
+
+def get_chatpdf_collection_id(user_id, file_names):
+    selection_parts = []
+    for name in sorted(str(file_name) for file_name in file_names):
+        file_entry = get_uploaded_file_entry(name)
+        file_hash = get_file_hash(file_entry.get("bytes", b"")) if file_entry else "missing"
+        selection_parts.append(f"{name}:{file_hash}")
+    selection = "|".join(selection_parts)
+    return hashlib.sha1(f"chatpdf-schema-v2|{user_id}|{selection}".encode("utf-8")).hexdigest()[:24]
+
+
+def get_chatpdf_vector_dir(user_id, file_names):
+    collection_id = get_chatpdf_collection_id(user_id, file_names)
+    safe_user = re.sub(r"[^A-Za-z0-9_.-]+", "_", user_id)
+    return os.path.join(APP_DIR, "chatpdf_vectorstores", safe_user, collection_id)
+
+
+def get_chatpdf_memory_key(user_id, file_names):
+    collection_id = get_chatpdf_collection_id(user_id, file_names)
+    return f"{user_id}:{collection_id}"
+
+
+def init_chatpdf_memory():
+    if "document_chat_memory" not in st.session_state or not isinstance(st.session_state.document_chat_memory, dict):
+        st.session_state.document_chat_memory = {}
+
+
+def get_chatpdf_memory(user_id, file_names):
+    init_chatpdf_memory()
+    key = get_chatpdf_memory_key(user_id, file_names)
+    return st.session_state.document_chat_memory.setdefault(key, [])
+
+
+def append_chatpdf_memory(user_id, file_names, question, answer):
+    memory = get_chatpdf_memory(user_id, file_names)
+    memory.append({"question": str(question), "answer": str(answer)})
+    st.session_state.document_chat_memory[get_chatpdf_memory_key(user_id, file_names)] = memory[-10:]
+
+
+def extract_chatpdf_structured_pages(file_name, file_bytes):
+    """Extract page/slide/sheet-aware text records with traceable metadata."""
+    records = []
+    bio = BytesIO(file_bytes)
+    file_lower = str(file_name).lower()
+    file_type = get_chatpdf_file_type(file_name)
+    document_id = get_document_id(file_name, file_bytes)
+
+    def add_record(text, page_number="1", section="Document", page_or_sheet=None):
+        clean_text = re.sub(r"\s+", " ", str(text or "")).strip()
+        if not clean_text:
+            return
+        locator = str(page_or_sheet if page_or_sheet is not None else page_number)
+        records.append({
+            "text": clean_text,
+            "metadata": {
+                "file_name": file_name,
+                "file_type": file_type,
+                "page_number": str(page_number),
+                "page_or_sheet": locator,
+                "document_id": document_id,
+                "section": section or "Document",
+            },
+        })
+
+    try:
+        if file_lower.endswith(".pdf"):
+            with pdfplumber.open(bio) as pdf:
+                for page_index, page in enumerate(pdf.pages, start=1):
+                    add_record(page.extract_text() or "", page_index, f"Page {page_index}", page_index)
+
+        elif file_lower.endswith(".docx"):
+            document = docx.Document(bio)
+            section = "Document"
+            paragraph_buffer = []
+            page_number = 1
+            for paragraph in document.paragraphs:
+                text = paragraph.text.strip()
+                if not text:
+                    continue
+                if paragraph.style and str(paragraph.style.name).lower().startswith("heading"):
+                    if paragraph_buffer:
+                        add_record("\n".join(paragraph_buffer), page_number, section, section)
+                        paragraph_buffer = []
+                    section = text[:120]
+                paragraph_buffer.append(text)
+                if len(" ".join(paragraph_buffer)) > 3500:
+                    add_record("\n".join(paragraph_buffer), page_number, section, section)
+                    paragraph_buffer = []
+                    page_number += 1
+            if paragraph_buffer:
+                add_record("\n".join(paragraph_buffer), page_number, section, section)
+            for table_index, table in enumerate(document.tables, start=1):
+                rows = [" | ".join(str(cell.text).strip() for cell in row.cells) for row in table.rows]
+                add_record("\n".join(rows), f"T{table_index}", f"Table {table_index}", f"Table {table_index}")
+
+        elif file_lower.endswith(".pptx"):
+            presentation = Presentation(bio)
+            for slide_index, slide in enumerate(presentation.slides, start=1):
+                slide_lines = []
+                for shape in slide.shapes:
+                    if hasattr(shape, "text") and shape.text:
+                        slide_lines.append(shape.text)
+                add_record("\n".join(slide_lines), slide_index, f"Slide {slide_index}", slide_index)
+
+        elif file_lower.endswith(".xlsx"):
+            workbook = openpyxl.load_workbook(bio, data_only=True, read_only=True)
+            for sheet in workbook.worksheets:
+                rows = []
+                for row_index, row in enumerate(sheet.iter_rows(values_only=True), start=1):
+                    values = [str(value) for value in row if value is not None]
+                    if values:
+                        rows.append(" | ".join(values))
+                    if len(rows) >= 120:
+                        add_record("\n".join(rows), sheet.title, f"Sheet {sheet.title}", sheet.title)
+                        rows = []
+                if rows:
+                    add_record("\n".join(rows), sheet.title, f"Sheet {sheet.title}", sheet.title)
+
+        elif file_lower.endswith((".html", ".htm")):
+            soup = BeautifulSoup(bio.read().decode("utf-8", errors="ignore"), "html.parser")
+            for tag in soup(["script", "style", "nav", "footer"]):
+                tag.decompose()
+            section = soup.title.get_text(" ", strip=True) if soup.title else "HTML"
+            add_record(soup.get_text("\n", strip=True), 1, section, section)
+
+        elif file_lower.endswith(".odt"):
+            with zipfile.ZipFile(bio) as odt_zip:
+                xml_text = odt_zip.read("content.xml").decode("utf-8", errors="ignore")
+            root = ET.fromstring(xml_text)
+            text_nodes = [node.text for node in root.iter() if node.text and node.text.strip()]
+            add_record("\n".join(text_nodes), 1, "ODT content", "ODT content")
+
+        elif file_lower.endswith(".rtf"):
+            raw = bio.read().decode("utf-8", errors="ignore")
+            plain = re.sub(r"\\'[0-9a-fA-F]{2}", " ", raw)
+            plain = re.sub(r"\\[a-zA-Z]+\d* ?", " ", plain)
+            plain = re.sub(r"[{}]", " ", plain)
+            add_record(plain, 1, "RTF content", "RTF content")
+
+        elif file_lower.endswith((".txt", ".md", ".log", ".can")):
+            add_record(bio.read().decode("utf-8", errors="ignore"), 1, "Text content", "Text content")
+
+        else:
+            fallback_text = extract_text(file_name, file_bytes)
+            for match in re.finditer(r"Page\s+(\d+)\s+Text:\s*(.*?)(?=Page\s+\d+\s+Text:|\Z)", fallback_text, re.DOTALL | re.IGNORECASE):
+                add_record(match.group(2), match.group(1), f"Page {match.group(1)}", match.group(1))
+            if not records:
+                add_record(fallback_text, 1, "Extracted content", "Extracted content")
+
+    except Exception as exc:
+        fallback_text = st.session_state.get("file_texts", {}).get(file_name) or extract_text(file_name, file_bytes)
+        add_record(fallback_text, 1, f"Fallback extraction: {str(exc)[:80]}", "Extracted content")
+
+    return records
+
+
+def build_chatpdf_documents(file_names):
+    """Create metadata-preserving LangChain documents for selected files."""
+    splitter = RecursiveCharacterTextSplitter(chunk_size=3200, chunk_overlap=450)
+    documents = []
+    for file_name in file_names:
+        file_entry = get_uploaded_file_entry(file_name)
+        if not file_entry:
+            continue
+        for page_record in extract_chatpdf_structured_pages(file_name, file_entry.get("bytes", b"")):
+            metadata = dict(page_record["metadata"])
+            for chunk_index, chunk in enumerate(splitter.split_text(page_record["text"][:MAX_VECTOR_TEXT_CHARS]), start=1):
+                chunk_metadata = dict(metadata)
+                chunk_metadata["chunk_index"] = chunk_index
+                documents.append(Document(page_content=chunk, metadata=chunk_metadata))
+    return documents
+
+
+def get_chatpdf_vector_store(file_names, user_id=None):
+    """Build or load persistent FAISS collection for user/document selection."""
+    user_id = user_id or get_active_user_id()
+    ensure_files_processed(file_names)
+    collection_key = f"chatpdf::{user_id}::{get_chatpdf_collection_id(user_id, file_names)}"
+    cached_vs = VECTOR_STORE_CACHE.get(collection_key)
+    if cached_vs is not None:
+        return cached_vs
+    if collection_key in st.session_state.get("vector_stores", {}):
+        return st.session_state.vector_stores[collection_key]
+
+    embeddings = get_chatpdf_embeddings()
+    vector_dir = get_chatpdf_vector_dir(user_id, file_names)
+    if os.path.exists(vector_dir):
+        try:
+            vs = FAISS.load_local(vector_dir, embeddings, allow_dangerous_deserialization=True)
+            st.session_state.vector_stores[collection_key] = vs
+            VECTOR_STORE_CACHE.set(collection_key, vs)
+            return vs
+        except Exception:
+            pass
+
+    documents = build_chatpdf_documents(file_names)
+    if not documents:
+        return None
+    vs = FAISS.from_documents(documents, embeddings)
+    os.makedirs(vector_dir, exist_ok=True)
+    try:
+        vs.save_local(vector_dir)
+    except Exception:
+        pass
+    st.session_state.vector_stores[collection_key] = vs
+    VECTOR_STORE_CACHE.set(collection_key, vs)
+    return vs
+
+
+def format_chatpdf_context(docs):
+    blocks = []
+    for index, doc in enumerate(docs, start=1):
+        meta = getattr(doc, "metadata", {}) or {}
+        source = build_chatpdf_citation_label(meta)
+        section = meta.get("section", "")
+        file_type = meta.get("file_type", "document")
+        locator = meta.get("page_or_sheet") or meta.get("page_number", "")
+        blocks.append(
+            f"[Source {index}: {source}; File type: {file_type}; Locator: {locator}; Section: {section}]\n"
+            f"{getattr(doc, 'page_content', str(doc))}"
+        )
+    return "\n\n---\n\n".join(blocks)
+
+
+def format_chatpdf_sources(docs, include_snippets=False):
+    sources = []
+    seen = set()
+    for doc in docs:
+        meta = getattr(doc, "metadata", {}) or {}
+        line_label = build_chatpdf_citation_label(meta)
+        key = (
+            meta.get("file_name", "document"),
+            meta.get("file_type", ""),
+            str(meta.get("page_or_sheet") or meta.get("page_number") or ""),
+            meta.get("section", ""),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        line = f"- {line_label}"
+        if include_snippets:
+            snippet = re.sub(r"\s+", " ", getattr(doc, "page_content", "")).strip()[:220]
+            if snippet:
+                line += f"\n  Snippet: {snippet}"
+        sources.append(line)
+    return "\n".join(sources) if sources else "- No sources found"
+
+
+def build_chatpdf_prompt(question, docs, memory):
+    memory_text = "\n".join(
+        f"User: {item.get('question', '')}\nAssistant: {item.get('answer', '')}"
+        for item in memory[-4:]
+    )
+    context = format_chatpdf_context(docs)
+    return f"""You are a highly advanced multimodal document intelligence AI assistant.
+
+CORE IDENTITY:
+- You combine natural ChatGPT-style conversation with ChatPDF-style grounded document analysis.
+- You can reason across PDF, DOCX, PPTX, XLSX, TXT, RTF, ODT, and HTML content after extraction.
+- You treat every uploaded format as structured knowledge with file name, file type, locator, section, and chunk metadata.
+
+STRICT KNOWLEDGE RULES:
+- Use ONLY the provided document context to answer factual questions.
+- Use conversation memory only for continuity over the same selected documents, not as an uncited source of new facts.
+- Do NOT use external knowledge to fill missing document facts.
+- If the answer is not supported by the provided context, respond exactly:
+  "This information is not available in the uploaded documents."
+- Never hallucinate, guess, fabricate citations, or ignore selected document context.
+
+REASONING BEHAVIOR:
+- Combine multiple retrieved chunks when needed.
+- Cross-reference multiple files when relevant.
+- For spreadsheets, reason over sheets, rows, columns, and values present in the context.
+- For presentations, treat slides as sections.
+- For HTML, use only the clean readable text in context.
+- Be natural, concise, and complete. Use bullets or headings when helpful.
+
+CITATION RULES:
+- Every document-based answer must include Sources.
+- Use these citation styles exactly when metadata is available:
+  - file_name (PDF Page 3)
+  - file_name (Sheet: Sales_Q1)
+  - file_name (Slide 5)
+  - file_name (Section: Introduction)
+- If a locator is unavailable, cite the file name only.
+
+OUTPUT FORMAT:
+Answer:
+...
+
+Sources:
+- file_name (PDF Page X)
+- file_name (Sheet: SheetName)
+
+Conversation memory for these selected documents:
+{memory_text or "No previous conversation."}
+
+Provided context:
+{context}
+
+Question:
+{question}
+"""
+
+
+def build_extractive_chatpdf_answer(question, docs):
+    """Fallback answer when no LLM is available; remains grounded in retrieved chunks."""
+    if not docs:
+        return "Answer:\nThis information is not available in the uploaded documents.\n\nSources:\n- No sources found"
+    bullets = []
+    for doc in docs[:4]:
+        snippet = re.sub(r"\s+", " ", getattr(doc, "page_content", "")).strip()
+        if snippet:
+            bullets.append(f"- {snippet[:500]}")
+    if not bullets:
+        return "Answer:\nThis information is not available in the uploaded documents.\n\nSources:\n- No sources found"
+    return "Answer:\n" + "\n".join(bullets) + "\n\nSources:\n" + format_chatpdf_sources(docs)
+
+
+def answer_chatpdf_question(question, file_names, user_id=None, top_k=7):
+    """Strict RAG answer with page-level citations and per-document memory."""
+    user_id = user_id or get_active_user_id()
+    vector_store = get_chatpdf_vector_store(file_names, user_id=user_id)
+    if vector_store is None:
+        return "Answer:\nThis information is not available in the uploaded documents.\n\nSources:\n- No sources found", []
+
+    docs = vector_store.similarity_search(question, k=top_k)
+    if not docs:
+        return "Answer:\nThis information is not available in the uploaded documents.\n\nSources:\n- No sources found", []
+
+    memory = get_chatpdf_memory(user_id, file_names)
+    llm = load_llm()
+    if llm is None:
+        answer = build_extractive_chatpdf_answer(question, docs)
+    else:
+        prompt = build_chatpdf_prompt(question, docs, memory)
+        try:
+            answer = str(llm.invoke(prompt)).strip()
+        except Exception:
+            answer = build_extractive_chatpdf_answer(question, docs)
+
+        if not answer:
+            answer = "Answer:\nThis information is not available in the uploaded documents."
+        if "Sources:" not in answer:
+            answer = answer.rstrip() + "\n\nSources:\n" + format_chatpdf_sources(docs)
+        elif not any(meta.get("file_name", "") in answer for meta in [getattr(doc, "metadata", {}) for doc in docs]):
+            answer = answer.rstrip() + "\n" + format_chatpdf_sources(docs)
+
+    append_chatpdf_memory(user_id, file_names, question, answer)
+    return answer, docs
 
 
 @st.cache_resource(show_spinner=False)
@@ -6653,9 +7076,9 @@ def get_dynamic_suggestions(tab_name, skill_level):
     """Returns context-aware suggestions based on skill level."""
     suggestions_by_skill = {
         "chat": {
-            "beginner": ["Summarize selected files", "Find a keyword", "Count a phrase"],
-            "intermediate": ["Ask from workspace memory", "Extract item details", "Build summary downloads"],
-            "advanced": ["Compare answers across files", "Generate engineering reference", "Use chat memory as context", "Extract workflow"]
+            "beginner": ["Ask document question", "Review citations", "Find a keyword", "Count a phrase"],
+            "intermediate": ["Ask follow-up with memory", "Check PDF pages/slides/sheets", "Compare selected docs", "Extract source evidence"],
+            "advanced": ["Validate grounded answers", "Cross-document reasoning", "Audit citation metadata", "Use document memory"]
         },
         "dashboard": {
             "beginner": ["Review memory snapshot", "Show key themes", "Check indexed files"],
@@ -6681,9 +7104,9 @@ def get_next_best_action(tab_name, skill_level):
     """Intelligently recommends the next workflow step."""
     workflow_paths = {
         "chat": {
-            "beginner": "Pro Tip: Select files, then ask 'summarize', 'overview', 'find keyword', or 'count phrase'.",
-            "intermediate": "Next: Ask targeted questions that use both selected documents and stored chat memory.",
-            "advanced": "Next: Combine item extraction, direct commands, and prior chat context to validate details across files."
+            "beginner": "Pro Tip: Select one or more files, then ask a natural-language question. Answers include Sources with PDF pages, slides, sheets, or sections.",
+            "intermediate": "Next: Ask follow-up questions on the same document selection; memory is scoped to the selected document set.",
+            "advanced": "Next: Validate claims by checking the cited source locators, then use find/count for deterministic evidence checks."
         },
         "dashboard": {
             "beginner": "Pro Tip: Start with the workspace memory snapshot to confirm what the app has indexed.",
@@ -6737,24 +7160,27 @@ def show_help_popup(tab_name, selected_files):
         else:
             support_hint_msg = f"Ready to analyze CAPL files ({selected_type_names})."
     elif tab_name == "chat":
-        support_hint_msg = f"Ready to chat over {selected_file_count} selected file(s) ({selected_type_names})."
+        support_hint_msg = f"Ready for grounded multi-format document chat over {selected_file_count} selected file(s) ({selected_type_names})."
 
     helper_defs = {
         "chat": {
             "title": "Chat Helper",
-            "text": "Use Chat to ask natural-language questions over selected documents, retrieve focused summaries, extract tables, identify item details, and request visual or comparison insights.",
-            "hint": "Select your files, then ask for summary, overview, find \"keyword\", count \"phrase\", item details \"VN1630A\", pin diagram \"D-SUB9\", or compare related items.",
+            "text": "Use multimodal ChatPDF mode to ask natural-language questions over PDF, DOCX, PPTX, XLSX, TXT, RTF, ODT, and HTML files. Answers are grounded in retrieved document chunks and cite PDF pages, slides, sheets, or sections.",
+            "hint": "Select one or more files, ask a question, then verify the Sources list. If the answer is not supported by the selected documents, the assistant should say that it is unavailable.",
             "workflow": [
-                "Choose one or more sidebar files and keep only the relevant ones selected for this tab.",
-                "Ask a question or use direct commands such as overview, summarize, find, count, item details, pin diagram, or compare.",
-                "Use quick suggestions and follow-up prompts to narrow results, inspect specific sections, or download extracted assets."
+                "Upload files, then explicitly select only the documents you want to chat with in this tab.",
+                "Ask a natural-language question. The app normalizes every file into text plus metadata: file_name, file_type, page_or_sheet, section, document_id, and chunk index.",
+                "FAISS retrieves only relevant grounded chunks and sends that document context to the LLM.",
+                "Review the Answer and Sources sections. Citations use PDF Page, Slide, Sheet, Section, or file-only labels depending on available metadata.",
+                "Follow-up questions reuse memory for the same user and document selection.",
+                "Use find \"keyword\" or count \"phrase\" when you need deterministic text checks instead of generated answers."
             ],
-            "outputs": ["Document answers", "Summaries", "Table extractions", "Diagram/pin references", "Comparison insights"],
+            "outputs": ["Document-only answers", "PDF/slide/sheet/section citations", "Per-document memory", "Retrieved source evidence", "Streaming-style response"],
             "shortcuts": [
-                ("overview", "Get a structured overview of the selected documents."),
-                ("summarize", "Create a concise summary or key points."),
-                ("find \"keyword\"", "Locate relevant occurrences in the files."),
-                ("item details \"VN1630A\"", "Extract component-specific reference details.")
+                ("What does this document say about ...?", "Ask a grounded question over selected documents."),
+                ("summarize the policy", "Create a cited summary from retrieved document pages."),
+                ("find \"keyword\"", "Locate exact occurrences in the selected files."),
+                ("count \"phrase\"", "Count exact matches in selected document text.")
             ]
         },
         "dashboard": {
