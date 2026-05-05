@@ -780,6 +780,8 @@ for key, default_value in [
     ("messages", []),
     ("document_chat_memory", {}),
     ("document_chat_display", {}),
+    ("chatpdf_documents", {}),
+    ("chatpdf_bm25_indexes", {}),
     ("welcome_shown", False),
     ("mobile_sidebar_visible", False),
 ]:
@@ -932,6 +934,8 @@ if st.session_state.is_authenticated:
             st.session_state.messages = []
             st.session_state.document_chat_memory = {}
             st.session_state.document_chat_display = {}
+            st.session_state.chatpdf_documents = {}
+            st.session_state.chatpdf_bm25_indexes = {}
             st.session_state.compare_file_selection = []
             st.session_state.compare_result_html = None
             st.session_state.compare_result_excel_bytes = None
@@ -1637,7 +1641,7 @@ with st.sidebar:
         st.markdown("---")
         if st.button("Clear All Files"):
             for key in ["uploaded_files", "selected_files", "file_texts", "excel_data_by_file", "vector_stores",
-                        "messages"]:
+                        "messages", "chatpdf_documents", "chatpdf_bm25_indexes"]:
                 st.session_state[key].clear()
             for tab_name in ["chat", "dashboard", "compare", "capl"]:
                 clear_tab_uploads(tab_name)
