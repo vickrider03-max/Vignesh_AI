@@ -2,6 +2,7 @@
 # The original monolith is retained as rollback documentation.
 
 from functions import *
+from tab_memory import get_tab_uploaded_files, remember_tab_upload
 
 # ==============================
 # CAPL TAB UI
@@ -22,8 +23,11 @@ def render_capl_tab():
 
     st.info(
         "Use sidebar selection to make CAPL source files available here. Then choose the CAPL file you want only in this tab.")
+    capl_tab_file_names = [file_dict.get("name") for file_dict in get_tab_uploaded_files("capl") if file_dict.get("name")]
+    available_capl_source_files = list(dict.fromkeys(capl_tab_file_names + st.session_state.selected_files))
+
     show_current_sidebar_selection()
-    show_help_popup('capl', [f for f in st.session_state.selected_files if f.lower().endswith((".can", ".txt"))])
+    show_help_popup('capl', [f for f in available_capl_source_files if f.lower().endswith((".can", ".txt"))])
 
     st.markdown("### Autonomous CAPL Agent Workspace")
     st.info("Use the CAPL agent system to run goal-driven workflows across uploaded documents, shared memory, and CAPL analysis.")
@@ -44,7 +48,7 @@ def render_capl_tab():
         with st.spinner("Running autonomous CAPL agents..."):
             st.session_state.capl_agent_result = run_capl_agent(
                 st.session_state.capl_autonomous_goal,
-                st.session_state.selected_files
+                available_capl_source_files
             )
         st.success("Autonomous CAPL task completed.")
 
@@ -61,7 +65,7 @@ def render_capl_tab():
                 st.markdown("---")
 
     # Filter selected files for CAPL analysis
-    capl_selectable_files = [f for f in st.session_state.selected_files if f.lower().endswith((".can", ".txt"))]
+    capl_selectable_files = [f for f in available_capl_source_files if f.lower().endswith((".can", ".txt"))]
     active_capl_files = [] if st.session_state.selected_capl_file == "--Select CAPL file--" else [st.session_state.selected_capl_file]
     render_file_context_card("CAPL File Context", capl_selectable_files, active_capl_files)
 
@@ -339,6 +343,7 @@ def render_capl_tab():
                 else:
                     st.session_state.uploaded_files[existing_index] = {"name": new_file_name, "bytes": file_bytes}
 
+                remember_tab_upload("capl", new_file_name, file_bytes, status="ready")
                 st.session_state.file_texts[new_file_name] = st.session_state.capl_editor_code
                 if new_file_name not in st.session_state.selected_files:
                     st.session_state.selected_files.append(new_file_name)
