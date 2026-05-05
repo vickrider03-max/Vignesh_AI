@@ -2,6 +2,7 @@
 # The original monolith is retained as rollback documentation.
 
 from functions import *
+from tab_memory import get_tab_uploaded_files
 
 # ==============================
 # DASHBOARD TAB UI
@@ -20,15 +21,22 @@ def render_dashboard_tab():
             st.session_state.dashboard_bar_orientation = "Vertical"
             st.rerun()
 
+    dashboard_tab_file_names = [
+        file_dict.get("name")
+        for file_dict in get_tab_uploaded_files("dashboard")
+        if file_dict.get("name")
+    ]
+    available_dashboard_source_files = list(dict.fromkeys(dashboard_tab_file_names + st.session_state.selected_files))
+
     show_current_sidebar_selection()
     show_help_popup('dashboard', [
-        f for f in st.session_state.selected_files
+        f for f in available_dashboard_source_files
         if f.lower().endswith((".html", ".htm", ".xlsx"))
     ])
 
     # Filter selected files for dashboard-compatible formats
     dashboard_files = [
-        f for f in st.session_state.selected_files
+        f for f in available_dashboard_source_files
         if f.lower().endswith((".html", ".htm", ".xlsx"))
     ]
     active_dashboard_files = [] if st.session_state.file_dropdown == "--Select File--" else [st.session_state.file_dropdown]
@@ -333,7 +341,7 @@ def render_dashboard_tab():
         return results
 
 
-    if not st.session_state.selected_files:
+    if not available_dashboard_source_files:
         st.info("Select files from the sidebar to show dashboard.")
     elif not dashboard_files:
         st.info("No dashboard-friendly files selected. Choose HTML/HTM/XLSX in sidebar for dashboard details.")
