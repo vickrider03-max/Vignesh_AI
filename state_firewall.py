@@ -28,6 +28,8 @@ SHARED_KEYS = {
     "active_tab",
     "tab_colors",
     "tab_memory",
+    "document_chat_memory",
+    "document_chat_display",
     "context_memory",
     "pending_scroll_anchor",
     "mobile_sidebar_visible",
