@@ -11,7 +11,7 @@ from functions import *
 from router import TAB_OPTIONS, init_router, render_tab_router
 from state_firewall import init_state_firewall, tab_state_scope
 from tab_memory import init_tab_memory
-# from tab_chat import render_chat_tab\nfrom functions import render_chat_tab
+from tab_chat import render_chat_tab
 from tab_dashboard import render_dashboard_tab
 from tab_compare import render_compare_tab
 from tab_capl import render_capl_tab
@@ -3568,7 +3568,7 @@ active_main_tab = render_tab_router("Open Section")
 # The visible active-tab radio remains identical; only the tab body execution
 # moved into dedicated modules for lazy execution and faster switching.
 # ==============================
-fn.query_params = query_params
+fn.query_params = dict(query_params)
 if active_main_tab == main_tab_options[0]:
     with tab_state_scope("chat"):
         render_chat_tab()
