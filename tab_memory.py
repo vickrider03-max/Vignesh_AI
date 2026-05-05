@@ -8,21 +8,25 @@ import streamlit as st
 
 DEFAULT_TAB_MEMORY = {
     "chat": {
+        "uploaded_files": [],
         "messages": [],
         "context": {},
         "history": [],
     },
     "dashboard": {
+        "uploaded_files": [],
         "selected_file": None,
         "filters": {},
         "history": [],
     },
     "compare": {
+        "uploaded_files": [],
         "selected_files": [],
         "last_result": None,
         "history": [],
     },
     "capl": {
+        "uploaded_files": [],
         "selected_file": None,
         "issues": [],
         "analysis_cache": {},
@@ -61,3 +65,42 @@ def append_tab_history(tab_name, event):
     memory.setdefault("history", []).append(event)
     memory["history"] = memory["history"][-100:]
     return event
+
+
+def get_tab_uploaded_files(tab_name):
+    """Return the persisted uploaded files for one tab."""
+    memory = get_tab_memory(tab_name)
+    uploads = memory.setdefault("uploaded_files", [])
+    if not isinstance(uploads, list):
+        memory["uploaded_files"] = []
+    return memory["uploaded_files"]
+
+
+def remember_tab_upload(tab_name, file_name, file_bytes, status="queued"):
+    """Persist uploaded bytes independently from Streamlit's file_uploader widget."""
+    uploads = get_tab_uploaded_files(tab_name)
+    entry = {
+        "name": file_name,
+        "bytes": file_bytes,
+        "status": status,
+    }
+    for index, existing in enumerate(uploads):
+        if existing.get("name") == file_name:
+            uploads[index] = entry
+            return entry
+    uploads.append(entry)
+    return entry
+
+
+def remove_tab_upload(tab_name, file_name):
+    """Remove one persisted file from a tab upload bucket."""
+    uploads = get_tab_uploaded_files(tab_name)
+    get_tab_memory(tab_name)["uploaded_files"] = [
+        upload for upload in uploads
+        if upload.get("name") != file_name
+    ]
+
+
+def clear_tab_uploads(tab_name):
+    """Clear only one tab's persisted upload bucket."""
+    get_tab_memory(tab_name)["uploaded_files"] = []
