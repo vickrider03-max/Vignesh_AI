@@ -2,6 +2,7 @@
 # The original monolith is retained as rollback documentation.
 
 from functions import *
+from tab_memory import get_tab_uploaded_files
 
 # ==============================
 # CHAT TAB UI
@@ -153,6 +154,36 @@ def render_chat_tab():
 
         return list(dict.fromkeys(suggestions))[:4]
 
+    def get_valid_chat_message(message):
+        """Return a normalized chat message or None for legacy/empty entries."""
+        if not isinstance(message, dict):
+            return None
+        role = str(message.get("role", "")).strip().lower()
+        if role not in {"user", "assistant"}:
+            return None
+        content = str(message.get("content", "") or "").strip()
+        if not content:
+            return None
+        return {"role": role, "content": content}
+
+    def render_chat_message_content(message, msg_index):
+        content = message["content"]
+        if message["role"] == "assistant" and msg_index == st.session_state.get("last_streamed_assistant_index"):
+            placeholder = st.empty()
+            tokens = re.split(r"(\s+)", content)
+            streamed = ""
+            for token_index, token in enumerate(tokens):
+                streamed += token
+                if token_index < 240:
+                    placeholder.markdown(streamed + "▌", unsafe_allow_html=True)
+                    time.sleep(0.006)
+            placeholder.markdown(content, unsafe_allow_html=True)
+            st.session_state.last_streamed_assistant_index = None
+        elif message["role"] == "assistant":
+            st.markdown(content, unsafe_allow_html=True)
+        else:
+            st.markdown(content)
+
     chat_header_col, chat_reset_col = st.columns([8, 1])
     with chat_header_col:
         st.subheader("Chat with Selected Documents")
@@ -169,17 +200,20 @@ def render_chat_tab():
 
     st.info(
         "Choose files in the sidebar to make them available here. Then select only the files you want for Chat in this tab.")
+    chat_tab_file_names = [file_dict.get("name") for file_dict in get_tab_uploaded_files("chat") if file_dict.get("name")]
+    available_chat_files = list(dict.fromkeys(chat_tab_file_names + st.session_state.selected_files))
+
     show_current_sidebar_selection()
-    render_file_context_card("Chat File Context", st.session_state.selected_files, st.session_state.chat_file_selection)
+    render_file_context_card("Chat File Context", available_chat_files, st.session_state.chat_file_selection)
 
-    show_help_popup('chat', st.session_state.selected_files)
+    show_help_popup('chat', available_chat_files)
 
-    if st.session_state.selected_files:
+    if available_chat_files:
         st.session_state.chat_file_selection = [
             file_name for file_name in st.session_state.chat_file_selection
-            if file_name in st.session_state.selected_files
+            if file_name in available_chat_files
         ]
-        chat_files = st.multiselect("Choose file(s) for Chat", options=st.session_state.selected_files,
+        chat_files = st.multiselect("Choose file(s) for Chat", options=available_chat_files,
                                     default=st.session_state.chat_file_selection, key="chat_file_selection")
         if not chat_files:
             st.info("Choose one or more files in this tab to start chatting.")
@@ -188,6 +222,10 @@ def render_chat_tab():
                 ensure_files_processed(chat_files)
             selected_file_texts = {f: st.session_state.file_texts.get(f, "") for f in chat_files}
             combined_text = "\n".join(selected_file_texts.values())
+            
+            # Check if files are actually loaded
+            if not combined_text or not any(selected_file_texts.values()):
+                st.warning("⚠️ Files are selected but their content is not loaded yet. Please wait a moment and try again, or re-select the files.")
 
 
             user_input = st.chat_input("Ask anything related to selected documents/files")
@@ -655,6 +693,12 @@ def render_chat_tab():
                                     response = "AI model is unavailable, so I retrieved the closest workspace memory:\n\n" + "\n\n---\n\n".join(memory_hits)
                                 else:
                                     response = "⚠️ AI model is unavailable. Use direct extraction questions such as 'count(\"keyword\")', 'find(\"phrase\")', 'summarize', or 'overview'."
+                        
+                        # Ensure response is never empty
+                        response = str(response or "").strip()
+                        if not response:
+                            response = "Unable to generate a response. Please try with a different query or ensure files are properly loaded."
+                        
                         st.session_state.messages.append({"role": "assistant", "content": response})
                         st.session_state.last_streamed_assistant_index = len(st.session_state.messages) - 1
                         st.session_state.chat_next_suggestions = build_chat_next_suggestions(processing_input, combined_text, chat_intent)
@@ -669,23 +713,14 @@ def render_chat_tab():
                         if "⚠️" in response or "not found" in response.lower() or "please select" in response.lower() or "ai model is unavailable" in response.lower():
                             set_help_popup_state("chat", True)
 
-        for msg_index, msg in enumerate(st.session_state.messages):
-            role = "🧑" if msg["role"] == "user" else "🤖"
-            st.markdown(f"**{role}**", unsafe_allow_html=True)
-            if msg["role"] == "assistant" and msg_index == st.session_state.get("last_streamed_assistant_index"):
-                placeholder = st.empty()
-                content = str(msg["content"])
-                tokens = re.split(r"(\s+)", content)
-                streamed = ""
-                for token_index, token in enumerate(tokens):
-                    streamed += token
-                    if token_index < 240:
-                        placeholder.markdown(streamed + "▌", unsafe_allow_html=True)
-                        time.sleep(0.006)
-                placeholder.markdown(content, unsafe_allow_html=True)
-                st.session_state.last_streamed_assistant_index = None
-            else:
-                st.markdown(msg["content"], unsafe_allow_html=True)
+        for msg_index, raw_msg in enumerate(st.session_state.messages):
+            msg = get_valid_chat_message(raw_msg)
+            if msg is None:
+                continue
+
+            avatar = "🧑" if msg["role"] == "user" else "🤖"
+            with st.chat_message(msg["role"], avatar=avatar):
+                render_chat_message_content(msg, msg_index)
 
             if (
                 msg["role"] == "assistant"
@@ -694,15 +729,21 @@ def render_chat_tab():
             ):
                 st.caption("Suggested next steps")
                 next_suggestions = list(dict.fromkeys(st.session_state.get("chat_next_suggestions", [])))[:4]
-                suggestion_cols = st.columns(len(next_suggestions))
-                for suggestion_index, suggestion_text in enumerate(next_suggestions):
-                    if suggestion_cols[suggestion_index].button(
-                        suggestion_text,
-                        key=f"ai_sugg_{msg_index}_{suggestion_index}",
-                        use_container_width=True,
-                    ):
-                        st.session_state.input_prefill = suggestion_text
-                        st.rerun()
+                # Ensure all suggestions are non-empty strings
+                next_suggestions = [str(s).strip() for s in next_suggestions if s and str(s).strip()]
+                
+                if next_suggestions:
+                    suggestion_cols = st.columns(len(next_suggestions))
+                    for suggestion_index, suggestion_text in enumerate(next_suggestions):
+                        if suggestion_text:  # Double-check suggestion is not empty
+                            with suggestion_cols[suggestion_index]:
+                                if st.button(
+                                    suggestion_text,
+                                    key=f"ai_sugg_{msg_index}_{suggestion_index}",
+                                    use_container_width=True,
+                                ):
+                                    st.session_state.input_prefill = suggestion_text
+                                    st.rerun()
 
         render_chat_summary_downloads()
     else:
