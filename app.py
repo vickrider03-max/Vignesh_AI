@@ -778,6 +778,8 @@ for key, default_value in [
     ("chat_summary_downloads", {"images": [], "tables": [], "csv": [], "diagrams": []}),
     ("chat_item_downloads", {"csv": [], "diagrams": []}),
     ("messages", []),
+    ("document_chat_memory", {}),
+    ("document_chat_display", {}),
     ("welcome_shown", False),
     ("mobile_sidebar_visible", False),
 ]:
@@ -928,6 +930,8 @@ if st.session_state.is_authenticated:
             st.session_state.chat_summary_downloads = {"images": [], "tables": [], "csv": [], "diagrams": []}
             st.session_state.chat_item_downloads = {"csv": [], "diagrams": []}
             st.session_state.messages = []
+            st.session_state.document_chat_memory = {}
+            st.session_state.document_chat_display = {}
             st.session_state.compare_file_selection = []
             st.session_state.compare_result_html = None
             st.session_state.compare_result_excel_bytes = None
@@ -1537,18 +1541,6 @@ with st.sidebar:
                     if file.name not in new_file_names:
                         new_file_names.append(file.name)
 
-                if file.name not in st.session_state.selected_files:
-                    st.session_state.selected_files.append(file.name)
-
-                if current_upload_tab == "chat" and file.name not in st.session_state.chat_file_selection:
-                    st.session_state.chat_file_selection.append(file.name)
-                elif current_upload_tab == "dashboard" and file.name.lower().endswith((".html", ".htm", ".xlsx")):
-                    st.session_state.file_dropdown = file.name
-                elif current_upload_tab == "compare" and file.name not in st.session_state.compare_file_selection:
-                    st.session_state.compare_file_selection.append(file.name)
-                elif current_upload_tab == "capl" and file.name.lower().endswith((".can", ".txt")):
-                    st.session_state.selected_capl_file = file.name
-
             if new_file_names:
                 for file_name in new_file_names:
                     update_uploaded_file_status(file_name, "processing")
@@ -1564,9 +1556,8 @@ with st.sidebar:
                 save_workspace_memory()
                 save_memory_log("upload", f"Queued {len(new_file_names)} new file(s)", {"files": new_file_names})
                 if current_upload_tab == "chat":
-                    st.session_state.messages = []
                     st.session_state.chat_summary_downloads = {"images": [], "tables": [], "csv": [], "diagrams": []}
-                    st.success("✅ New chat files uploaded. Chat history has been cleared.")
+                    st.success("✅ New chat files uploaded. Chat history was preserved.")
                 else:
                     st.success(f"✅ File persisted for the {current_upload_tab.title()} tab.")
 
