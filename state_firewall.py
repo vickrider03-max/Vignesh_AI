@@ -27,6 +27,7 @@ SHARED_KEYS = {
     "active_main_tab",
     "active_tab",
     "tab_colors",
+    "tab_memory",
     "context_memory",
     "pending_scroll_anchor",
     "mobile_sidebar_visible",
