@@ -20,3 +20,4 @@ torch
 torchvision
 transformers
 xlrd
+rank-bm25
