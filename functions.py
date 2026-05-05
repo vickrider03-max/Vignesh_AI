@@ -104,105 +104,74 @@ SUMMARY_STOPWORDS = {
 # ==============================
 # NEW ANALYSIS BUTTON PROMPTS
 # ==============================
-ANALYSIS_PROMPT = """You are a senior technical analyst and documentation expert.
+ANALYSIS_PROMPT = """You are an Enterprise Document Intelligence Engine for technical documentation.
 
-Analyze the uploaded document and create a professional, human-readable explanation.
+CORE CAPABILITIES:
+- Analyze PDF, DOCX, PPTX, XLSX, CSV, TXT, HTML, images, manuals, specifications, reports
+- Filter OCR noise, metadata, TOC, headers/footers automatically
+- Classify intent: FULL_DOCUMENT_ANALYSIS | SHORT_SUMMARY | OVERVIEW | FEATURES_ONLY | SPECIFIC_COMPONENT_DETAILS | PIN_DIAGRAMS | WORKFLOW | USE_CASES | COMPARISON | TABLE_EXTRACTION | DIAGRAM_EXPLANATION | REPORT | TROUBLESHOOTING | REQUIREMENTS_EXTRACTION
+- Generate structured, professional responses
+- Extract tables/images as downloads
+- Support pin diagrams, connectors, signal tables
+- Handle VN devices, CAPL scripts, automotive specs
+
+CONTEXT FILTERING (MANDATORY):
+IGNORE unless directly relevant:
+- PDF metadata (author, title, dates)
+- Copyright/imprint/warranty/trademark
+- Table of contents/page numbers
+- Headers/footers
+- Repeated section titles
+- Raw OCR fragments
+- Lines like "Main Features 13"
+
+FOCUS ON:
+- Explanatory paragraphs
+- Purpose/use case
+- Architecture/components
+- Features/capabilities
+- Workflow/steps
+- Tables/diagrams
+- Connectors/pinouts
+- Safety/constraints
+
+RESPONSE RULES BY BUTTON/INTENT:
+
+🔍 ANALYZE (FULL_DOCUMENT_ANALYSIS):
+1. Overview | 2. Purpose | 3. Core Concept | 4. Architecture | 5. Key Features | 6. Capabilities | 7. Components | 8. Workflow | 9. Use Cases | 10. Notes | 11. Takeaways
+
+📋 SUMMARY (SHORT_SUMMARY):
+Short summary | What it is | Purpose | Key points | Takeaways
+
+👁️ OVERVIEW:
+What it is | Who for | Usage | Main concept | Areas covered
+
+⭐ FEATURES:
+Table: Feature | What it does | Why matters | Component
+
+SPECIFIC COMPONENT:
+Only about requested item - Overview | Purpose | Features | Details | Interfaces | Usage | Notes
+
+PIN/CONNECTOR:
+Pin table | Diagram | Notes | "Not specified" if missing
+
+NEVER:
+- Copy raw text
+- Show page numbers/metadata
+- Repeat info
+- Invent specs/pins
+- Use TOC headings as content
+
+QUALITY CHECK:
+If context = metadata/TOC only → "Insufficient meaningful content"
+
+FINAL OUTPUT:
+Professional | Structured | Markdown tables | CSV-ready | Downloadable
 
 The user request is:
 "{USER_QUERY}"
 
-The uploaded document content may contain OCR noise, metadata, page headers, footers, copyright text, table of contents, and repeated section titles. You must ignore those unless they are directly useful.
-
-IMPORTANT CONTEXT FILTERING RULES:
-
-Ignore:
-- PDF metadata such as author, title, creation date
-- Copyright/imprint text
-- Table of contents entries
-- Page numbers
-- Header/footer repetitions
-- Raw OCR fragments
-- Isolated section titles without explanation
-- Lines that only contain headings such as "Main Features 13" or "Important Notes 10"
-
-Focus on:
-- Actual explanatory paragraphs
-- Descriptions of the product/system
-- Purpose and intended usage
-- Architecture or structure
-- Features and capabilities
-- Components/modules and their roles
-- Workflow or operating process
-- Applications/use cases
-- Safety notes only if relevant
-
-Do NOT copy raw document text.
-Do NOT show "Page X Text".
-Do NOT output a list of headings from the table of contents.
-Do NOT say "Author: ..." as the overview.
-Do NOT repeat the same content in multiple sections.
-
-Your job is to interpret, synthesize, and explain.
-
-OUTPUT FORMAT:
-
-Document Analysis
-1. Overview
-
-Explain what the document/product/system is about in simple, professional language.
-
-2. Purpose
-
-Explain why the document/product/system exists and what problem it solves.
-
-3. Core Concept
-
-Explain the main idea in beginner-friendly terms.
-
-4. Architecture / Structure
-
-Explain how the system or document is logically organized.
-Group related parts together instead of copying document section headings.
-
-5. Key Features
-
-List the important features and explain each in 1–2 lines.
-
-6. Capabilities
-
-Explain what the system/product/process can do.
-
-7. Major Components / Modules
-
-If the document contains modules, products, tools, or components, list the important ones and explain their role.
-
-8. Workflow / How It Is Used
-
-Explain the typical usage flow step by step.
-
-9. Use Cases / Applications
-
-Explain where and how it can be used in real life.
-
-10. Important Notes
-
-Include warnings, limitations, constraints, or operational notes only if meaningful.
-
-11. Key Takeaways
-
-Give 3–5 strong takeaways.
-
-STYLE:
-- Professional
-- Clean
-- Structured
-- Human-readable
-- No raw extraction
-- No table-of-contents dumping
-- No metadata dumping
-
-FINAL CHECK BEFORE ANSWERING:
-Before producing the answer, verify that the response is based on meaningful document content, not only metadata, headings, or table of contents."""
+The uploaded document content may contain OCR noise, metadata, page headers, footers, copyright text, table of contents, and repeated section titles. You must ignore those unless they are directly useful."""
 
 SUMMARY_PROMPT = """Summarize this document clearly and professionally.
 
@@ -3666,6 +3635,53 @@ def empty_chat_summary_downloads():
     return {"images": [], "tables": [], "csv": [], "diagrams": []}
 
 
+def generate_analysis_response(chat_files, analysis_type):
+    """Generate structured document analysis using specialized prompts."""
+    if not chat_files:
+        return "No files selected for analysis."
+    
+    # Get combined text
+    selected_file_texts = {f: st.session_state.file_texts.get(f, "") for f in chat_files}
+    combined_text = "\n\n".join(selected_file_texts.values())
+    if not combined_text.strip():
+        return "No readable text found in selected files."
+    
+    # Select prompt
+    prompts = {
+        "analyze": ANALYSIS_PROMPT,
+        "summary": SUMMARY_PROMPT,
+        "overview": OVERVIEW_PROMPT,
+        "features": FEATURES_PROMPT,
+    }
+    prompt_template = prompts.get(analysis_type)
+    if not prompt_template:
+        return f"Unknown analysis type: {analysis_type}"
+    
+    llm = load_llm()
+    if llm is None:
+        return "AI analysis unavailable (LLM not loaded)."
+    
+    try:
+        # Build chain: context + prompt + empty query (document analysis)
+        system_prompt = prompt_template.format(USER_QUERY="Provide a complete analysis/summary/overview/features of this document.")
+        full_prompt = f"""SYSTEM: {system_prompt}
+
+DOCUMENT CONTENT:
+{combined_text[:MAX_VECTOR_TEXT_CHARS]}"""
+        
+        response = llm.invoke(full_prompt)
+        response = str(response).strip()
+        
+        # Reset analysis state
+        st.session_state.chat_analysis_type = None
+        
+        return response or "No response generated."
+    
+    except Exception as e:
+        st.error(f"Analysis failed: {e}")
+        return f"Analysis error: {str(e)}"
+
+
 def render_chat_summary_downloads():
     downloads = st.session_state.get("chat_summary_downloads", empty_chat_summary_downloads())
     image_items = downloads.get("images", [])
@@ -4003,14 +4019,13 @@ def classify_technical_document_request(user_query):
     """Classify user queries into the exact enterprise document intent categories requested by the user."""
     query = str(user_query or "").strip().lower()
     if not query:
-        return "SUMMARY"  # Default to SUMMARY if unclear
+        return "SHORT_SUMMARY"  # Default to SHORT_SUMMARY if unclear
 
-    # Priority: Component > Comparison > Full Analysis > Functional > Summary
-    # Explicit extraction and structured requests still map to their own intents when present.
+    # Priority: Specific Component > Comparison > Full Analysis > Features > Workflow > Use Cases > Table Extraction > Image/Diagram > Report > Troubleshooting > Requirements > Overview > Short Summary
 
     # Check for specific component first
     if extract_specific_component_name(user_query):
-        return "COMPONENT"
+        return "SPECIFIC_COMPONENT_DETAILS"
 
     # Check for comparison
     multiple_items = extract_multiple_component_names(user_query)
@@ -4019,37 +4034,442 @@ def classify_technical_document_request(user_query):
     if len(multiple_items) >= 2 and any(term in query for term in ["between", "which", "better", "different"]):
         return "COMPARISON"
 
+    # Check for troubleshooting or limitations
+    if any(term in query for term in ["troubleshooting", "troubleshoot", "debug", "fix", "issue", "problem", "limitation", "limitations", "constraint", "constraints", "error", "failure"]):
+        return "TROUBLESHOOTING_OR_LIMITATIONS"
+
+    # Check for requirements or specifications
+    if any(term in query for term in ["requirements", "requirement", "specifications", "specification", "specs", "reqs"]):
+        return "REQUIREMENTS_OR_SPECIFICATION_EXTRACTION"
+
     # Check for report
     if any(term in query for term in ["downloadable report", "export report", "generate report", "report download", "create report", "report"]):
-        return "REPORT"
+        return "DOWNLOADABLE_REPORT"
 
-    # Check for extraction explicitly
-    if any(term in query for term in ["table extract", "extract table", "extract data", "table data", "table rows", "csv extract", "spreadsheet", "table only", "image", "diagram", "visual", "figure", "schematic", "illustration", "drawing", "visual extraction", "extract"]):
-        return "EXTRACTION"
+    # Check for table extraction
+    if any(term in query for term in ["table extract", "extract table", "extract data", "table data", "table rows", "csv extract", "spreadsheet", "table only"]):
+        return "TABLE_EXTRACTION"
 
-    # Check for structured data explicitly
+    # Check for image or diagram explanation
+    if any(term in query for term in ["image", "diagram", "visual", "figure", "schematic", "illustration", "drawing", "visual extraction"]):
+        return "IMAGE_OR_DIAGRAM_EXPLANATION"
+
+    # Check for pin diagrams connectors tables
     if any(term in query for term in ["pin", "diagram", "connector", "mapping", "pinout", "visual structure", "technical table", "structured data"]):
-        return "STRUCTURED_DATA"
+        return "PIN_DIAGRAMS_CONNECTORS_TABLES"
 
-    # Check for functional intent
-    if any(term in query for term in ["feature", "features", "workflow", "use case", "use cases", "capability", "capabilities", "process flow", "real usage", "functional behavior", "how does", "how it works"]):
-        return "FUNCTIONAL"
+    # Check for workflow or process
+    if any(term in query for term in ["workflow", "process", "process flow", "how does", "how it works", "steps", "procedure"]):
+        return "WORKFLOW_OR_PROCESS"
 
-    # Check for full document analysis requests
+    # Check for use cases or applications
+    if any(term in query for term in ["use case", "use cases", "application", "applications", "real usage", "practical use"]):
+        return "USE_CASES_APPLICATIONS"
+
+    # Check for features only
+    if any(term in query for term in ["feature", "features", "capability", "capabilities", "functional behavior"]):
+        return "FEATURES_ONLY"
+
+    # Check for full document analysis
     if any(term in query for term in ["full analysis", "complete document", "analyze document", "analyse document", "full document", "explain document", "detailed analysis"]):
-        return "FULL_ANALYSIS"
+        return "FULL_DOCUMENT_ANALYSIS"
 
-    # Check for summary requests
-    if any(term in query for term in ["short summary", "brief summary", "concise summary", "main points", "key points", "3 key takeaways", "summary", "summarize", "summarise", "overview"]):
-        return "SUMMARY"
+    # Check for overview
+    if any(term in query for term in ["overview"]):
+        return "OVERVIEW"
 
-    # Default to SUMMARY if unclear
-    return "SUMMARY"
+    # Check for short summary
+    if any(term in query for term in ["short summary", "brief summary", "concise summary", "main points", "key points", "3 key takeaways", "summary", "summarize", "summarise"]):
+        return "SHORT_SUMMARY"
+
+    # Default to SHORT_SUMMARY if unclear
+    return "SHORT_SUMMARY"
+
+
+def evaluate_context_quality(text):
+    """Evaluate if the provided context contains enough meaningful content to answer accurately."""
+    if not text or not str(text).strip():
+        return False, "No text content provided."
+
+    lines = [line.strip() for line in str(text).splitlines() if line.strip()]
+    if not lines:
+        return False, "No readable lines found."
+
+    # Count low-quality indicators
+    low_quality_count = 0
+    total_lines = len(lines)
+
+    low_quality_patterns = [
+        r"^\s*(page\s+\d+|slide\s+\d+|table\s+\d+|figure\s+\d+|image\s+\d+)\s*$",
+        r"^\s*(copyright|imprint|trademark|warranty|legal|disclaimer)\s*$",
+        r"^\s*(table\s+of\s+contents|index|contents)\s*$",
+        r"^\s*(header|footer|repeated|section\s+\d+)\s*$",
+        r"^\s*(metadata|author|title|creation|date|version)\s*$",
+        r"^\s*[-=]{3,}\s*$",
+        r"^\s*\d+\.\s*$",
+    ]
+
+    for line in lines:
+        lower_line = line.lower()
+        if len(line) < 5 or any(re.search(pattern, lower_line, re.IGNORECASE) for pattern in low_quality_patterns):
+            low_quality_count += 1
+
+    # If more than 70% is low-quality, reject
+    if low_quality_count / total_lines > 0.7:
+        return False, "The provided context contains mostly metadata, headers, footers, table of contents, or repeated sections without explanatory content."
+
+    # Check for meaningful content
+    meaningful_lines = [line for line in lines if len(line) > 10 and not any(re.search(pattern, line.lower()) for pattern in low_quality_patterns)]
+    if len(meaningful_lines) < 3:
+        return False, "Insufficient meaningful explanatory content found."
+
+    return True, "Context appears to contain useful content."
 
 
 def join_response_blocks(blocks):
     """Join non-empty response blocks with a clean divider."""
     return "\n\n---\n\n".join(block for block in blocks if str(block or "").strip())
+
+
+def build_overview_response(file_texts):
+    """Provide high-level overview: What it is, Who it is for, What it is used for, Main concept, Main areas covered."""
+    blocks = []
+    for file_name, text in (file_texts or {}).items():
+        quality_ok, quality_msg = evaluate_context_quality(text)
+        if not quality_ok:
+            blocks.append(f"**{html.escape(file_name)}**\n\n{quality_msg}")
+            continue
+
+        lines = [normalize_extracted_line(line) for line in str(text or "").splitlines() if line.strip()]
+        meaningful = [line for line in lines if 15 <= len(line) <= 200]
+
+        what_it_is = ""
+        for line in meaningful[:10]:
+            if any(term in line.lower() for term in ["is a", "provides", "enables", "supports", "system", "device", "module", "interface"]):
+                what_it_is = line
+                break
+        if not what_it_is:
+            what_it_is = "This document provides technical reference and operational guidance."
+
+        who_for = ""
+        for line in meaningful:
+            if any(term in line.lower() for term in ["for users", "target", "intended for", "engineers", "developers", "operators"]):
+                who_for = line
+                break
+        if not who_for:
+            who_for = "Technical professionals and system integrators."
+
+        used_for = ""
+        for line in meaningful:
+            if any(term in line.lower() for term in ["used to", "used for", "application", "purpose", "function"]):
+                used_for = line
+                break
+        if not used_for:
+            used_for = "Configuration, operation, and troubleshooting of technical systems."
+
+        main_concept = ""
+        for line in meaningful:
+            if any(term in line.lower() for term in ["concept", "overview", "introduction", "main idea"]):
+                main_concept = line
+                break
+        if not main_concept:
+            main_concept = "Technical specification and operational reference."
+
+        main_areas = []
+        seen = set()
+        for line in meaningful:
+            lower_line = line.lower()
+            if any(term in lower_line for term in ["features", "capabilities", "components", "interfaces", "configuration", "usage", "troubleshooting"]) and lower_line not in seen:
+                main_areas.append(line)
+                seen.add(lower_line)
+            if len(main_areas) >= 5:
+                break
+        if not main_areas:
+            main_areas = ["Technical specifications", "Operational guidance", "Configuration details"]
+
+        blocks.append(
+            f"<div style='margin-bottom:18px; line-height:1.5;'>"
+            f"<h3 style='margin:0 0 10px 0; color:#173152;'>Overview: {html.escape(file_name)}</h3>"
+            f"<p><b>What it is:</b> {html.escape(what_it_is)}</p>"
+            f"<p><b>Who it is for:</b> {html.escape(who_for)}</p>"
+            f"<p><b>What it is used for:</b> {html.escape(used_for)}</p>"
+            f"<p><b>Main concept:</b> {html.escape(main_concept)}</p>"
+            f"<p><b>Main areas covered:</b> {', '.join(html.escape(area) for area in main_areas)}</p>"
+            "</div>"
+        )
+    return join_response_blocks(blocks)
+
+
+def build_features_only_response(file_texts):
+    """Extract actual functional features and capabilities in a table format."""
+    blocks = []
+    for file_name, text in (file_texts or {}).items():
+        quality_ok, quality_msg = evaluate_context_quality(text)
+        if not quality_ok:
+            blocks.append(f"**{html.escape(file_name)}**\n\n{quality_msg}")
+            continue
+
+        lines = [normalize_extracted_line(line) for line in str(text or "").splitlines() if line.strip()]
+        meaningful = [line for line in lines if 10 <= len(line) <= 250]
+
+        features = []
+        for line in meaningful:
+            lower_line = line.lower()
+            if any(term in lower_line for term in ["feature", "function", "capability", "enable", "allows", "provide", "interface", "communication", "diagnostic", "support"]):
+                # Parse feature, what it does, why it matters, related component
+                feature_name = line.split(":")[0].strip() if ":" in line else line[:50].strip()
+                description = line.split(":", 1)[1].strip() if ":" in line else "Provides specific functionality."
+                why_matters = "Enhances system capabilities."  # Placeholder, as not always specified
+                related = "Not specified in the provided context."
+                features.append({
+                    "feature": feature_name,
+                    "what_it_does": description,
+                    "why_it_matters": why_matters,
+                    "related_component": related,
+                })
+            if len(features) >= 10:
+                break
+
+        if not features:
+            blocks.append(f"**{html.escape(file_name)}**\n\nNo explicit features were identified in the provided context.")
+            continue
+
+        table_rows = "".join(
+            f"<tr><td>{html.escape(f['feature'])}</td><td>{html.escape(f['what_it_does'])}</td><td>{html.escape(f['why_it_matters'])}</td><td>{html.escape(f['related_component'])}</td></tr>"
+            for f in features
+        )
+
+        blocks.append(
+            f"<div style='margin-bottom:18px; line-height:1.5;'>"
+            f"<h3 style='margin:0 0 10px 0; color:#173152;'>Features: {html.escape(file_name)}</h3>"
+            "<table style='border-collapse:collapse; width:100%; margin:8px 0;'>"
+            "<thead><tr><th>Feature</th><th>What it does</th><th>Why it matters</th><th>Related component/module</th></tr></thead>"
+            f"<tbody>{table_rows}</tbody>"
+            "</table>"
+            "</div>"
+        )
+    return join_response_blocks(blocks)
+
+
+def build_workflow_or_process_response(file_texts):
+    """Provide process overview, step-by-step workflow, inputs, outputs, tools/components involved, practical notes."""
+    blocks = []
+    for file_name, text in (file_texts or {}).items():
+        quality_ok, quality_msg = evaluate_context_quality(text)
+        if not quality_ok:
+            blocks.append(f"**{html.escape(file_name)}**\n\n{quality_msg}")
+            continue
+
+        lines = [normalize_extracted_line(line) for line in str(text or "").splitlines() if line.strip()]
+        meaningful = [line for line in lines if 10 <= len(line) <= 250]
+
+        process_overview = ""
+        for line in meaningful[:10]:
+            if any(term in line.lower() for term in ["process", "workflow", "overview", "steps", "procedure"]):
+                process_overview = line
+                break
+        if not process_overview:
+            process_overview = "Describes operational procedures and workflows."
+
+        steps = []
+        for line in meaningful:
+            if re.match(r"^\s*\d+\.", line) or any(term in line.lower() for term in ["step", "first", "then", "next", "finally"]):
+                steps.append(line)
+            if len(steps) >= 8:
+                break
+
+        inputs = []
+        outputs = []
+        tools = []
+        for line in meaningful:
+            lower_line = line.lower()
+            if "input" in lower_line:
+                inputs.append(line)
+            if "output" in lower_line:
+                outputs.append(line)
+            if any(term in lower_line for term in ["tool", "component", "module", "interface", "software", "hardware"]):
+                tools.append(line)
+            if len(inputs) >= 5 and len(outputs) >= 5 and len(tools) >= 5:
+                break
+
+        practical_notes = []
+        for line in meaningful:
+            if any(term in line.lower() for term in ["note", "important", "caution", "tip", "warning"]):
+                practical_notes.append(line)
+            if len(practical_notes) >= 5:
+                break
+
+        blocks.append(
+            f"<div style='margin-bottom:18px; line-height:1.5;'>"
+            f"<h3 style='margin:0 0 10px 0; color:#173152;'>Workflow / Process: {html.escape(file_name)}</h3>"
+            f"<p><b>Process overview:</b> {html.escape(process_overview)}</p>"
+            f"{f'<p><b>Step-by-step workflow:</b></p><ul>{''.join(f'<li>{html.escape(step)}</li>' for step in steps[:10])}</ul>' if steps else '<p><b>Step-by-step workflow:</b> Not specified in the provided context.</p>'}"
+            f"{f'<p><b>Inputs:</b></p><ul>{''.join(f'<li>{html.escape(inp)}</li>' for inp in inputs[:5])}</ul>' if inputs else '<p><b>Inputs:</b> Not specified in the provided context.</p>'}"
+            f"{f'<p><b>Outputs:</b></p><ul>{''.join(f'<li>{html.escape(out)}</li>' for out in outputs[:5])}</ul>' if outputs else '<p><b>Outputs:</b> Not specified in the provided context.</p>'}"
+            f"{f'<p><b>Tools/components involved:</b></p><ul>{''.join(f'<li>{html.escape(tool)}</li>' for tool in tools[:5])}</ul>' if tools else '<p><b>Tools/components involved:</b> Not specified in the provided context.</p>'}"
+            f"{f'<p><b>Practical notes:</b></p><ul>{''.join(f'<li>{html.escape(note)}</li>' for note in practical_notes[:5])}</ul>' if practical_notes else '<p><b>Practical notes:</b> Not specified in the provided context.</p>'}"
+            "</div>"
+        )
+    return join_response_blocks(blocks)
+
+
+def build_use_cases_applications_response(file_texts):
+    """Provide primary use cases, real-world applications, target users, benefits, example scenarios."""
+    blocks = []
+    for file_name, text in (file_texts or {}).items():
+        quality_ok, quality_msg = evaluate_context_quality(text)
+        if not quality_ok:
+            blocks.append(f"**{html.escape(file_name)}**\n\n{quality_msg}")
+            continue
+
+        lines = [normalize_extracted_line(line) for line in str(text or "").splitlines() if line.strip()]
+        meaningful = [line for line in lines if 10 <= len(line) <= 250]
+
+        use_cases = []
+        applications = []
+        target_users = []
+        benefits = []
+        scenarios = []
+
+        for line in meaningful:
+            lower_line = line.lower()
+            if "use case" in lower_line or "used to" in lower_line or "application" in lower_line:
+                use_cases.append(line)
+            if "real-world" in lower_line or "practical" in lower_line or "industry" in lower_line:
+                applications.append(line)
+            if "user" in lower_line or "engineer" in lower_line or "developer" in lower_line or "operator" in lower_line:
+                target_users.append(line)
+            if "benefit" in lower_line or "advantage" in lower_line or "improve" in lower_line:
+                benefits.append(line)
+            if "example" in lower_line or "scenario" in lower_line or "for instance" in lower_line:
+                scenarios.append(line)
+            if len(use_cases) >= 5 and len(applications) >= 5 and len(target_users) >= 5 and len(benefits) >= 5 and len(scenarios) >= 5:
+                break
+
+        blocks.append(
+            f"<div style='margin-bottom:18px; line-height:1.5;'>"
+            f"<h3 style='margin:0 0 10px 0; color:#173152;'>Use Cases / Applications: {html.escape(file_name)}</h3>"
+            f"{f'<p><b>Primary use cases:</b></p><ul>{''.join(f'<li>{html.escape(uc)}</li>' for uc in use_cases[:5])}</ul>' if use_cases else '<p><b>Primary use cases:</b> Not specified in the provided context.</p>'}"
+            f"{f'<p><b>Real-world applications:</b></p><ul>{''.join(f'<li>{html.escape(app)}</li>' for app in applications[:5])}</ul>' if applications else '<p><b>Real-world applications:</b> Not specified in the provided context.</p>'}"
+            f"{f'<p><b>Target users:</b></p><ul>{''.join(f'<li>{html.escape(user)}</li>' for user in target_users[:5])}</ul>' if target_users else '<p><b>Target users:</b> Not specified in the provided context.</p>'}"
+            f"{f'<p><b>Benefits:</b></p><ul>{''.join(f'<li>{html.escape(ben)}</li>' for ben in benefits[:5])}</ul>' if benefits else '<p><b>Benefits:</b> Not specified in the provided context.</p>'}"
+            f"{f'<p><b>Example scenarios:</b></p><ul>{''.join(f'<li>{html.escape(scen)}</li>' for scen in scenarios[:5])}</ul>' if scenarios else '<p><b>Example scenarios:</b> Not specified in the provided context.</p>'}"
+            "</div>"
+        )
+    return join_response_blocks(blocks)
+
+
+def build_troubleshooting_or_limitations_response(file_texts):
+    """Provide problems/limitations, causes, constraints, actions, unspecified items."""
+    blocks = []
+    for file_name, text in (file_texts or {}).items():
+        quality_ok, quality_msg = evaluate_context_quality(text)
+        if not quality_ok:
+            blocks.append(f"**{html.escape(file_name)}**\n\n{quality_msg}")
+            continue
+
+        lines = [normalize_extracted_line(line) for line in str(text or "").splitlines() if line.strip()]
+        meaningful = [line for line in lines if 10 <= len(line) <= 250]
+
+        problems = []
+        causes = []
+        constraints = []
+        actions = []
+        unspecified = []
+
+        for line in meaningful:
+            lower_line = line.lower()
+            if any(term in lower_line for term in ["problem", "issue", "error", "failure", "limitation", "constraint", "troubleshooting"]):
+                problems.append(line)
+            if "cause" in lower_line or "due to" in lower_line or "because" in lower_line:
+                causes.append(line)
+            if "constraint" in lower_line or "limitation" in lower_line or "cannot" in lower_line or "not supported" in lower_line:
+                constraints.append(line)
+            if "action" in lower_line or "fix" in lower_line or "resolve" in lower_line or "recommend" in lower_line:
+                actions.append(line)
+            if "not specified" in lower_line or "unknown" in lower_line or "not available" in lower_line:
+                unspecified.append(line)
+            if len(problems) >= 5 and len(causes) >= 5 and len(constraints) >= 5 and len(actions) >= 5 and len(unspecified) >= 5:
+                break
+
+        table_rows = ""
+        for i, prob in enumerate(problems[:10]):
+            cause = causes[i] if i < len(causes) else "Not specified in the provided context."
+            constraint = constraints[i] if i < len(constraints) else "Not specified in the provided context."
+            action = actions[i] if i < len(actions) else "Not specified in the provided context."
+            table_rows += f"<tr><td>{html.escape(prob)}</td><td>{html.escape(cause)}</td><td>{html.escape(constraint)}</td><td>{html.escape(action)}</td></tr>"
+
+        blocks.append(
+            f"<div style='margin-bottom:18px; line-height:1.5;'>"
+            f"<h3 style='margin:0 0 10px 0; color:#173152;'>Troubleshooting / Limitations: {html.escape(file_name)}</h3>"
+            "<table style='border-collapse:collapse; width:100%; margin:8px 0;'>"
+            "<thead><tr><th>Problem / Limitation</th><th>Likely Cause</th><th>Relevant Constraints</th><th>Recommended Action</th></tr></thead>"
+            f"<tbody>{table_rows}</tbody>"
+            "</table>"
+            "</div>"
+        )
+    return join_response_blocks(blocks)
+
+
+def build_requirements_or_specification_extraction_response(file_texts):
+    """Extract requirements/specifications in a structured table."""
+    blocks = []
+    for file_name, text in (file_texts or {}).items():
+        quality_ok, quality_msg = evaluate_context_quality(text)
+        if not quality_ok:
+            blocks.append(f"**{html.escape(file_name)}**\n\n{quality_msg}")
+            continue
+
+        lines = [normalize_extracted_line(line) for line in str(text or "").splitlines() if line.strip()]
+        meaningful = [line for line in lines if 10 <= len(line) <= 250]
+
+        specs = []
+        id_counter = 1
+        for line in meaningful:
+            lower_line = line.lower()
+            if any(term in lower_line for term in ["requirement", "spec", "must", "shall", "should", "specification", "parameter", "value", "condition"]):
+                req = line
+                category = "Functional"  # Default
+                if "performance" in lower_line:
+                    category = "Performance"
+                elif "interface" in lower_line or "connector" in lower_line:
+                    category = "Interface"
+                elif "environmental" in lower_line:
+                    category = "Environmental"
+                applies_to = "System"  # Default
+                value = "Not specified"
+                notes = "Extracted from document"
+                specs.append({
+                    "id": f"REQ-{id_counter}",
+                    "requirement": req,
+                    "category": category,
+                    "applies_to": applies_to,
+                    "value": value,
+                    "notes": notes,
+                })
+                id_counter += 1
+            if len(specs) >= 15:
+                break
+
+        if not specs:
+            blocks.append(f"**{html.escape(file_name)}**\n\nNo explicit requirements or specifications were identified in the provided context.")
+            continue
+
+        table_rows = "".join(
+            f"<tr><td>{html.escape(s['id'])}</td><td>{html.escape(s['requirement'])}</td><td>{html.escape(s['category'])}</td><td>{html.escape(s['applies_to'])}</td><td>{html.escape(s['value'])}</td><td>{html.escape(s['notes'])}</td></tr>"
+            for s in specs
+        )
+
+        blocks.append(
+            f"<div style='margin-bottom:18px; line-height:1.5;'>"
+            f"<h3 style='margin:0 0 10px 0; color:#173152;'>Requirements / Specifications: {html.escape(file_name)}</h3>"
+            "<table style='border-collapse:collapse; width:100%; margin:8px 0;'>"
+            "<thead><tr><th>ID</th><th>Requirement / Specification</th><th>Category</th><th>Applies to</th><th>Value / Condition</th><th>Notes</th></tr></thead>"
+            f"<tbody>{table_rows}</tbody>"
+            "</table>"
+            "</div>"
+        )
+    return join_response_blocks(blocks)
 
 
 def build_full_document_summary_response(file_texts):
@@ -4332,15 +4752,15 @@ def build_features_workflow_response(file_texts):
         )
 
         blocks.append(
-            "<div style='margin-bottom:18px; line-height:1.5;'>"
+            f"<div style='margin-bottom:18px; line-height:1.5;'>"
             f"<h3 style='margin:0 0 10px 0; color:#173152;'>Functional Analysis: {html.escape(file_name)}</h3>"
-            + html_section("Features", features[:7])
-            + html_section("Capabilities", capabilities[:7])
-            + html_section("Workflow", workflow[:7])
-            + html_section("Inputs/Outputs", inputs_outputs[:7])
-            + html_section("Applications", applications[:7])
-            + html_section("Benefits", benefits[:7])
-            + "</div>"
+            f"{html_section('Features', features[:7])}"
+            f"{html_section('Capabilities', capabilities[:7])}"
+            f"{html_section('Workflow', workflow[:7])}"
+            f"{html_section('Inputs/Outputs', inputs_outputs[:7])}"
+            f"{html_section('Applications', applications[:7])}"
+            f"{html_section('Benefits', benefits[:7])}"
+            f"</div>"
         )
     return join_response_blocks(blocks)
 
@@ -6295,70 +6715,94 @@ def show_help_popup(tab_name, selected_files):
     skill_level = infer_user_workflow()
     selected_types = {os.path.splitext(f)[1].lower() for f in (selected_files or [])}
     selected_types_text = ", ".join(sorted(selected_types)) if selected_types else "No files selected"
+    selected_type_names = ", ".join(sorted(ext.lstrip('.') for ext in selected_types if ext)) or "none"
+    selected_file_count = len(selected_files or [])
+
+    support_hint_msg = "Select files from the sidebar to use this feature."
+    if selected_file_count == 0:
+        support_hint_msg = "No files selected yet. Choose files from the sidebar to get started."
+    elif tab_name == "dashboard":
+        if not selected_types.intersection({".html", ".htm", ".xlsx"}):
+            support_hint_msg = "Dashboard works only with HTML, HTM, or XLSX report files. Select one of these formats."
+        else:
+            support_hint_msg = f"Ready to analyze {selected_file_count} selected file(s) ({selected_type_names})."
+    elif tab_name == "compare":
+        if selected_file_count < 2:
+            support_hint_msg = "Select at least two files from the sidebar to compare them."
+        else:
+            support_hint_msg = f"Ready to compare {selected_file_count} selected files ({selected_type_names})."
+    elif tab_name == "capl":
+        if not selected_types.intersection({".can", ".txt"}):
+            support_hint_msg = "CAPL analysis requires a .can or .txt CAPL source file. Select one of those file types."
+        else:
+            support_hint_msg = f"Ready to analyze CAPL files ({selected_type_names})."
+    elif tab_name == "chat":
+        support_hint_msg = f"Ready to chat over {selected_file_count} selected file(s) ({selected_type_names})."
 
     helper_defs = {
         "chat": {
             "title": "Chat Helper",
-            "text": "Use Chat for natural-language Q&A over selected documents and workspace memory.",
-            "hint": "Ask a question, request an overview, or use direct commands like summarize, overview, find \"keyword\", count \"phrase\", item details \"VN1630A\".",
+            "text": "Use Chat to ask natural-language questions over selected documents, retrieve focused summaries, extract tables, identify item details, and request visual or comparison insights.",
+            "hint": "Select your files, then ask for summary, overview, find \"keyword\", count \"phrase\", item details \"VN1630A\", pin diagram \"D-SUB9\", or compare related items.",
             "workflow": [
-                "Select one or more sidebar files, then choose them in Chat.",
-                "Ask a normal question or use focused commands for summary, search, count, overview, and item details.",
-                "Use generated suggestions to continue the conversation without retyping context."
+                "Choose one or more sidebar files and keep only the relevant ones selected for this tab.",
+                "Ask a question or use direct commands such as overview, summarize, find, count, item details, pin diagram, or compare.",
+                "Use quick suggestions and follow-up prompts to narrow results, inspect specific sections, or download extracted assets."
             ],
-            "outputs": ["Document answers", "Highlights/search matches", "Summaries", "Downloadable assets"],
+            "outputs": ["Document answers", "Summaries", "Table extractions", "Diagram/pin references", "Comparison insights"],
             "shortcuts": [
-                ("/analyze", "Run focused analysis on selected files."),
-                ("/find", "Search uploaded content and workspace memory."),
-                ("/overview", "Get a document overview with headings and structure.")
+                ("overview", "Get a structured overview of the selected documents."),
+                ("summarize", "Create a concise summary or key points."),
+                ("find \"keyword\"", "Locate relevant occurrences in the files."),
+                ("item details \"VN1630A\"", "Extract component-specific reference details.")
             ]
         },
         "dashboard": {
             "title": "Dashboard Helper",
-            "text": "Use Dashboard to inspect workspace memory, extracted entities, risk signals, and structured report data.",
-            "hint": "Select an HTML or Excel report, review the memory snapshot, then use charts and tables to explore test results or metrics.",
+            "text": "Use Dashboard to review indexed workspace memory, extracted entities, risk signals, and structured report metrics from HTML and Excel files.",
+            "hint": "Pick an HTML/XLSX/HTM report, confirm the selected file, then choose a chart type and consult memory, entities, risks, and report data together.",
             "workflow": [
-                "Select dashboard-compatible files from the sidebar: HTML, HTM, or XLSX.",
-                "Review the workspace memory snapshot to confirm indexed files, chat history, and agent runs.",
-                "Choose chart options or report groupings, then export visuals or filtered data."
+                "Select a dashboard-compatible file: HTML, HTM, or XLSX.",
+                "Review the workspace memory snapshot and file context card for indexed entities and risk signals.",
+                "Choose charts, filter data, or export visual summaries for reporting or analysis."
             ],
-            "outputs": ["Memory snapshot", "Themes/entities/risks", "Interactive charts", "Report tables"],
+            "outputs": ["Memory snapshot", "Extracted themes", "Entities", "Risk signals", "Interactive charts"],
             "shortcuts": [
-                ("Select file", "Choose the active report or workbook."),
-                ("Chart type", "Switch between pie, bar, and other report views."),
-                ("Export", "Download chart data or summarized report results.")
+                ("Select report", "Load the active report or workbook for analysis."),
+                ("Choose chart", "Switch chart types or orientations."),
+                ("Reset", "Clear dashboard filters and selections.")
             ]
         },
         "compare": {
             "title": "Compare Helper",
-            "text": "Use Compare to find exact, line-level, word-level, and semantic differences across selected files.",
-            "hint": "Select at least two files, choose the comparison mode, run comparison, then review the semantic summary and exported workbook.",
+            "text": "Use Compare to discover exact inline diffs, side-by-side line changes, and word presence differences across files, with semantic summaries and Excel export.",
+            "hint": "Select at least two files, choose a comparison mode, run the analysis, then review the diff output and download the comparison workbook.",
             "workflow": [
-                "Select two or more comparable files from the sidebar.",
-                "Choose exact inline diff, side-by-side line diff, or word presence summary.",
-                "Review semantic summary and download the Excel comparison workbook for traceability."
+                "Select two or more files from the sidebar and confirm them in this tab.",
+                "Choose a comparison mode: exact inline diff, side-by-side line diff, or word presence summary.",
+                "Run the compare action, inspect the semantic summary, and download the generated Excel workbook."
             ],
-            "outputs": ["Inline differences", "Line-by-line comparison", "Word presence summary", "Excel workbook"],
+            "outputs": ["Inline diffs", "Side-by-side line comparison", "Word presence summaries", "Semantic summary", "Excel export"],
             "shortcuts": [
-                ("Select 2+ files", "Comparison starts after at least two files are available."),
-                ("Compare mode", "Pick the diff style that matches your review task."),
-                ("Download Excel", "Export differences for offline review.")
+                ("Select 2+ files", "Add at least two files for comparison."),
+                ("Compare mode", "Choose the best diff style for your review."),
+                ("Download Excel", "Save comparison results for offline review.")
             ]
         },
         "capl": {
             "title": "CAPL Helper",
-            "text": "Use CAPL for CANoe/CANalyzer script analysis, issue detection, AI fixes, and autonomous agent workflows.",
-            "hint": "Select a .can or text CAPL file, run analysis, inspect issues, then generate fixes or launch a goal-driven agent run.",
+            "text": "Use CAPL to analyze CANoe/CANalyzer code, detect syntax and logic issues, generate AI fixes, and run autonomous goal-driven agent workflows.",
+            "hint": "Select a .can or .txt CAPL file, run analysis, inspect live issues, apply AI fix suggestions, or execute an autonomous CAPL goal.",
             "workflow": [
-                "Select a CAPL file or edit code directly in the live editor.",
-                "Run analysis to detect syntax issues, risky patterns, unused variables, and missing handlers.",
-                "Use AI fix suggestions or autonomous goals when you need a planned multi-step repair."
+                "Select CAPL source files in the sidebar and choose one for analysis.",
+                "Run CAPL analysis to detect issues, review live preview output, and inspect the generated issue table.",
+                "Use the AI fix button for code suggestions or enter a goal to run the autonomous CAPL agents."
             ],
-            "outputs": ["Issue table", "Highlighted CAPL preview", "Suggested fixes", "Agent run history"],
+            "outputs": ["Issue diagnosis", "Live code preview", "Suggested fixes", "Agent run summary", "Run history"],
             "shortcuts": [
-                ("Analyze", "Scan the current CAPL code for problems."),
-                ("AI fix", "Generate corrected code or targeted suggestions."),
-                ("Agent goal", "Run a coordinated autonomous CAPL task.")
+                ("Analyze CAPL", "Scan the selected CAPL file for issues."),
+                ("Suggest Fix", "Generate AI-based corrections for the code."),
+                ("Run goal", "Execute an autonomous CAPL workflow.")
             ]
         }
     }
@@ -6659,6 +7103,7 @@ def show_help_popup(tab_name, selected_files):
                 <ul>
                     <li>{html.escape(helper_def['hint'])}</li>
                     <li>{html.escape(next_action)}</li>
+                    <li>{html.escape(support_hint_msg)}</li>
                     <li>Click suggestions for faster input when available.</li>
                 </ul>
 
