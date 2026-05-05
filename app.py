@@ -8,9 +8,9 @@
 
 import functions as fn
 from functions import *
-from router import TAB_OPTIONS, init_router, render_tab_router
+from router import TAB_KEYS, TAB_OPTIONS, init_router, render_tab_router
 from state_firewall import init_state_firewall, tab_state_scope
-from tab_memory import init_tab_memory
+from tab_memory import clear_tab_uploads, get_tab_uploaded_files, init_tab_memory, remember_tab_upload, remove_tab_upload
 from tab_chat import render_chat_tab
 from tab_dashboard import render_dashboard_tab
 from tab_compare import render_compare_tab
@@ -784,6 +784,8 @@ for key, default_value in [
     if key not in st.session_state:
         st.session_state[key] = default_value
 
+init_tab_memory()
+
 
 
 
@@ -1497,7 +1499,11 @@ with st.sidebar:
                 unsafe_allow_html=True,
             )
         
+        current_upload_tab = TAB_KEYS.get(st.session_state.get("active_main_tab"), "chat")
+        current_tab_uploads = get_tab_uploaded_files(current_upload_tab)
+
         st.header("Upload Documents")
+        st.caption(f"Upload bucket: {current_upload_tab.title()} tab")
         st.info("1) Upload files." \
         " 2) Click the file cards you need. " \
         "3) Switch tabs and work with selected files.")
@@ -1505,15 +1511,16 @@ with st.sidebar:
             "Upload PDF, Word, PPT, Excel, CSV, TXT, HTML, ODT, RTF, Pages, CAPL, Images",
             type=["pdf", "doc", "docx", "txt", "md", "log", "ppt", "pptx", "xls", "xlsx", "csv", "html", "htm", "odt", "rtf", "pages", "capl", "can", "png", "jpg", "jpeg", "gif", "bmp", "webp"],
             accept_multiple_files=True,
-            key=f"file_uploader_{st.session_state.file_uploader_key}"
+            key=f"{current_upload_tab}_file_uploader_{st.session_state.file_uploader_key}"
         )
 
         if new_files:
             existing_names = {f["name"] for f in st.session_state.uploaded_files}
             new_file_names = []
             for file in new_files:
+                file_bytes = file.read()
+                remember_tab_upload(current_upload_tab, file.name, file_bytes, status="processing")
                 if file.name not in existing_names:
-                    file_bytes = file.read()
                     st.session_state.uploaded_files.append({
                         "name": file.name,
                         "bytes": file_bytes,
@@ -1521,6 +1528,26 @@ with st.sidebar:
                     })
                     new_file_names.append(file.name)
                     existing_names.add(file.name)
+                else:
+                    for existing_file in st.session_state.uploaded_files:
+                        if existing_file.get("name") == file.name:
+                            existing_file["bytes"] = file_bytes
+                            existing_file["status"] = "queued"
+                            break
+                    if file.name not in new_file_names:
+                        new_file_names.append(file.name)
+
+                if file.name not in st.session_state.selected_files:
+                    st.session_state.selected_files.append(file.name)
+
+                if current_upload_tab == "chat" and file.name not in st.session_state.chat_file_selection:
+                    st.session_state.chat_file_selection.append(file.name)
+                elif current_upload_tab == "dashboard" and file.name.lower().endswith((".html", ".htm", ".xlsx")):
+                    st.session_state.file_dropdown = file.name
+                elif current_upload_tab == "compare" and file.name not in st.session_state.compare_file_selection:
+                    st.session_state.compare_file_selection.append(file.name)
+                elif current_upload_tab == "capl" and file.name.lower().endswith((".can", ".txt")):
+                    st.session_state.selected_capl_file = file.name
 
             if new_file_names:
                 for file_name in new_file_names:
@@ -1536,10 +1563,21 @@ with st.sidebar:
                 )
                 save_workspace_memory()
                 save_memory_log("upload", f"Queued {len(new_file_names)} new file(s)", {"files": new_file_names})
-                st.session_state.messages = []
-                st.session_state.chat_summary_downloads = {"images": [], "tables": [], "csv": [], "diagrams": []}
-                st.session_state.chat_file_selection = []
-                st.success("✅ New files uploaded. Chat history has been cleared.")
+                if current_upload_tab == "chat":
+                    st.session_state.messages = []
+                    st.session_state.chat_summary_downloads = {"images": [], "tables": [], "csv": [], "diagrams": []}
+                    st.success("✅ New chat files uploaded. Chat history has been cleared.")
+                else:
+                    st.success(f"✅ File persisted for the {current_upload_tab.title()} tab.")
+
+        st.markdown("---")
+        st.markdown(f"### {current_upload_tab.title()} tab files")
+        if current_tab_uploads:
+            for file_dict in current_tab_uploads:
+                status_label = file_dict.get("status", "ready")
+                st.caption(f"{file_dict.get('name', 'Unnamed file')} - {status_label}")
+        else:
+            st.caption("No files uploaded for this tab yet.")
 
         st.markdown("---")
         st.markdown("### Uploaded files")
@@ -1585,8 +1623,24 @@ with st.sidebar:
                 if st.button("🗑️", key=f"del_file_{idx}", help=f"Delete {file_name}", use_container_width=True, type="tertiary"):
                     deleted_name = file_name
                     st.session_state.uploaded_files = [f for f in st.session_state.uploaded_files if f["name"] != deleted_name]
+                    for tab_name in ["chat", "dashboard", "compare", "capl"]:
+                        remove_tab_upload(tab_name, deleted_name)
+                    if deleted_name in st.session_state.selected_files:
+                        st.session_state.selected_files.remove(deleted_name)
+                    st.session_state.chat_file_selection = [
+                        f for f in st.session_state.chat_file_selection
+                        if f != deleted_name
+                    ]
+                    st.session_state.compare_file_selection = [
+                        f for f in st.session_state.compare_file_selection
+                        if f != deleted_name
+                    ]
+                    if st.session_state.file_dropdown == deleted_name:
+                        st.session_state.file_dropdown = "--Select File--"
+                    if st.session_state.selected_capl_file == deleted_name:
+                        st.session_state.selected_capl_file = "--Select CAPL file--"
                     st.session_state.file_uploader_key = int(st.session_state.get("file_uploader_key", 0)) + 1
-                    st.success(f"✅ {deleted_name} removed from upload list only (selections preserved)")
+                    st.success(f"✅ {deleted_name} removed from upload list and tab file state")
                     st.rerun()
         st.markdown("*Selected files above are available across all tabs.*")
         st.markdown("---")
@@ -1594,8 +1648,13 @@ with st.sidebar:
             for key in ["uploaded_files", "selected_files", "file_texts", "excel_data_by_file", "vector_stores",
                         "messages"]:
                 st.session_state[key].clear()
+            for tab_name in ["chat", "dashboard", "compare", "capl"]:
+                clear_tab_uploads(tab_name)
             st.session_state.chat_summary_downloads = {"images": [], "tables": [], "csv": [], "diagrams": []}
             st.session_state.chat_file_selection = []
+            st.session_state.compare_file_selection = []
+            st.session_state.file_dropdown = "--Select File--"
+            st.session_state.selected_capl_file = "--Select CAPL file--"
             st.session_state.capl_last_analyzed_file = None
             st.session_state.capl_last_issues = None
             st.session_state.file_uploader_key += 1
