@@ -39,6 +39,82 @@ def render_chat_tab():
             font-size: 0.86rem;
             margin: 0.1rem 0 0.45rem;
         }
+        .st-key-chat_file_selection div[data-baseweb="select"] > div {
+            background: #f8fbff !important;
+            border: 1px solid #cfe2f3 !important;
+            border-radius: 12px !important;
+            box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04) !important;
+            min-height: 44px !important;
+        }
+        .st-key-chat_file_selection div[data-baseweb="select"]:focus-within > div {
+            border-color: #60a5fa !important;
+            box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.16) !important;
+        }
+        .st-key-chat_file_selection span[data-baseweb="tag"] {
+            background: #e8f6ff !important;
+            border: 1px solid #c0dff0 !important;
+            border-radius: 10px !important;
+            color: #173152 !important;
+            font-weight: 650 !important;
+        }
+        [data-testid="stChatInput"] {
+            margin-top: 1rem !important;
+        }
+        [data-testid="stChatInput"] > div {
+            background: #ffffff !important;
+            border: 1px solid #cfe2f3 !important;
+            border-radius: 16px !important;
+            box-shadow: 0 10px 28px rgba(15, 23, 42, 0.07) !important;
+            padding: 3px 6px !important;
+        }
+        [data-testid="stChatInput"] > div:focus-within {
+            border-color: #60a5fa !important;
+            box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.15), 0 12px 30px rgba(15, 23, 42, 0.08) !important;
+        }
+        [data-testid="stChatInput"] textarea {
+            background: transparent !important;
+            color: #173152 !important;
+            caret-color: #2563eb !important;
+            min-height: 44px !important;
+            padding: 0.75rem 0.9rem !important;
+            font-size: 0.98rem !important;
+            font-weight: 500 !important;
+            outline: none !important;
+            box-shadow: none !important;
+        }
+        [data-testid="stChatInput"] textarea::placeholder {
+            color: #7b8aa0 !important;
+            opacity: 1 !important;
+        }
+        [data-testid="stChatInput"] textarea:focus,
+        [data-testid="stChatInput"] textarea:focus-visible {
+            outline: none !important;
+            box-shadow: none !important;
+            border-color: transparent !important;
+        }
+        [data-testid="stChatInput"] div[data-baseweb="base-input"],
+        [data-testid="stChatInput"] div[data-baseweb="textarea"] {
+            background: transparent !important;
+            border: 0 !important;
+            box-shadow: none !important;
+        }
+        [data-testid="stChatInput"] button {
+            background: #e8f6ff !important;
+            border: 1px solid #c0dff0 !important;
+            border-radius: 12px !important;
+            color: #173152 !important;
+            height: 38px !important;
+            width: 38px !important;
+            min-height: 38px !important;
+            min-width: 38px !important;
+            margin-right: 2px !important;
+            box-shadow: none !important;
+        }
+        [data-testid="stChatInput"] button:hover {
+            background: #dbeafe !important;
+            border-color: #93c5fd !important;
+            transform: translateY(-1px) !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -222,11 +298,21 @@ def render_chat_tab():
                 ensure_files_processed(chat_files)
             selected_file_texts = {f: st.session_state.file_texts.get(f, "") for f in chat_files}
             combined_text = "\n".join(selected_file_texts.values())
+            user_id = get_active_user_id()
+            document_memory = get_chatpdf_memory(user_id, chat_files)
+            chat_display_key = get_chatpdf_memory_key(user_id, chat_files)
+            if "document_chat_display" not in st.session_state or not isinstance(st.session_state.document_chat_display, dict):
+                st.session_state.document_chat_display = {}
+            current_chat_messages = st.session_state.document_chat_display.setdefault(chat_display_key, [])
             
             # Check if files are actually loaded
             if not combined_text or not any(selected_file_texts.values()):
                 st.warning("⚠️ Files are selected but their content is not loaded yet. Please wait a moment and try again, or re-select the files.")
 
+            st.caption(
+                f"ChatPDF mode: {len(chat_files)} document(s) selected, "
+                f"{len(document_memory)} memory entr{'y' if len(document_memory) == 1 else 'ies'} for this selection."
+            )
 
             user_input = st.chat_input("Ask anything related to selected documents/files")
             if st.session_state.get("input_prefill"):
@@ -240,21 +326,32 @@ def render_chat_tab():
                     st.markdown(f"<div class='chat-ghost-hint'>{html.escape(hint)}</div>", unsafe_allow_html=True)
 
                 if submitted_input.strip().lower() == "clear":
+                    current_chat_messages.clear()
                     st.session_state.messages = []
                     st.session_state.chat_summary_downloads = empty_chat_summary_downloads()
                     st.session_state.chat_next_suggestions = []
                     st.session_state.chat_next_suggestions_for = None
                     st.success("✅ Chat cleared!")
                 else:
-                    st.session_state.messages.append({"role": "user", "content": submitted_input})
+                    current_chat_messages.append({"role": "user", "content": submitted_input})
+                    st.session_state.messages = current_chat_messages
                     with st.spinner("Processing your request..."):
                         st.session_state.chat_summary_downloads = empty_chat_summary_downloads()
                         user_input_lower = processing_input.lower()
                         chat_intent = classify_document_chat_intent(processing_input)
                         technical_request_type = classify_technical_document_request(processing_input)
                         document_profile = detect_document_chat_profile(chat_files, combined_text)
+                        is_count_query = any(t in user_input_lower for t in ["how many", "count", "number of", "occurrences"])
+                        is_find_query = any(term in user_input_lower for term in ["find", "search", "locate"]) or "highlight" in user_input_lower
                         # Word count queries
-                        if any(t in user_input_lower for t in ["how many", "count", "number of", "occurrences"]):
+                        if not is_count_query and not is_find_query:
+                            response, citation_docs = answer_chatpdf_question(
+                                processing_input,
+                                chat_files,
+                                user_id=user_id,
+                                top_k=7,
+                            )
+                        elif is_count_query:
                             match = re.search(r"'(.*?)'|\"(.*?)\"", processing_input)
                             if match:
                                 word = match.group(1) or match.group(2)
@@ -267,7 +364,7 @@ def render_chat_tab():
                                 response = f"**VN device count:** {device_count}\n\n{extracted_response}"
                             else:
                                 response = "⚠️ Specify the word/phrase in quotes. Example: count('keyword') or count(\"keyword\")"
-                        elif any(term in user_input_lower for term in ["find", "search", "locate"]) or "highlight" in user_input_lower:
+                        elif is_find_query:
                             match = re.search(r"'(.*?)'|\"(.*?)\"", processing_input)
                             if match:
                                 query = match.group(1) or match.group(2)
@@ -699,7 +796,9 @@ def render_chat_tab():
                         if not response:
                             response = "Unable to generate a response. Please try with a different query or ensure files are properly loaded."
                         
-                        st.session_state.messages.append({"role": "assistant", "content": response})
+                        current_chat_messages.append({"role": "assistant", "content": response})
+                        st.session_state.document_chat_display[chat_display_key] = current_chat_messages[-100:]
+                        st.session_state.messages = st.session_state.document_chat_display[chat_display_key]
                         st.session_state.last_streamed_assistant_index = len(st.session_state.messages) - 1
                         st.session_state.chat_next_suggestions = build_chat_next_suggestions(processing_input, combined_text, chat_intent)
                         st.session_state.chat_next_suggestions_for = len(st.session_state.messages) - 1
@@ -713,7 +812,8 @@ def render_chat_tab():
                         if "⚠️" in response or "not found" in response.lower() or "please select" in response.lower() or "ai model is unavailable" in response.lower():
                             set_help_popup_state("chat", True)
 
-        for msg_index, raw_msg in enumerate(st.session_state.messages):
+        visible_messages = locals().get("current_chat_messages", st.session_state.get("messages", []))
+        for msg_index, raw_msg in enumerate(visible_messages):
             msg = get_valid_chat_message(raw_msg)
             if msg is None:
                 continue
