@@ -3335,7 +3335,15 @@ def rerank_chatpdf_documents(question, docs, top_k=8):
 def rewrite_chatpdf_query(llm, question):
     """Optionally rewrite the user question into a compact retrieval query."""
     original_question = re.sub(r"\s+", " ", str(question or "")).strip()
-    if not original_question or llm is None:
+    if not original_question:
+        return original_question
+    lower_question = original_question.lower()
+    if re.fullmatch(r"(analy[sz]e|analysis|summary|summari[sz]e|overview)", lower_question):
+        return (
+            "introduction overview purpose main features capabilities architecture components "
+            "workflow applications use cases technical details key takeaways"
+        )
+    if llm is None:
         return original_question
 
     rewrite_prompt = f"""Rewrite this question to improve document search.
