@@ -87,6 +87,8 @@ PDF_PREVIEW_RESOLUTION = 100
 PDF_PREVIEW_WINDOW = 25
 PDF_ASSET_SCAN_PAGE_LIMIT = 10
 MAX_VECTOR_TEXT_CHARS = 250000
+TEXT_EXTRACTION_SCHEMA_VERSION = "extract-v3"
+CHATPDF_SCHEMA_VERSION = "chatpdf-schema-v3"
 FILE_TEXT_CACHE = CacheManager(max_size=100)
 VECTOR_STORE_CACHE = CacheManager(max_size=20)
 EXCEL_DATA_CACHE = CacheManager(max_size=50)
@@ -1263,10 +1265,11 @@ def ensure_file_processed(file_name):
     FILE_HASH_CACHE[hash_cache_key] = new_hash
     
     # Check cache first
-    cached_text = FILE_TEXT_CACHE.get(file_name)
+    text_cache_key = f"{TEXT_EXTRACTION_SCHEMA_VERSION}:{file_name}"
+    cached_text = FILE_TEXT_CACHE.get(text_cache_key)
     if cached_text is not None and not has_changed:
         st.session_state.file_texts[file_name] = cached_text
-        if file_name_lower.endswith(".xlsx"):
+        if detect_file_type(file_name) == "excel":
             cached_excel = EXCEL_DATA_CACHE.get(file_name)
             if cached_excel is not None:
                 st.session_state.excel_data_by_file[file_name] = cached_excel
@@ -1277,9 +1280,9 @@ def ensure_file_processed(file_name):
     if file_name not in st.session_state.file_texts or has_changed:
         extracted_text = extract_text(file_name, file_bytes)
         st.session_state.file_texts[file_name] = extracted_text
-        FILE_TEXT_CACHE.set(file_name, extracted_text)
+        FILE_TEXT_CACHE.set(text_cache_key, extracted_text)
 
-    if file_name_lower.endswith(".xlsx") and (file_name not in st.session_state.excel_data_by_file or has_changed):
+    if detect_file_type(file_name) == "excel" and (file_name not in st.session_state.excel_data_by_file or has_changed):
         excel_data = extract_excel_data(file_name, file_bytes)
         st.session_state.excel_data_by_file[file_name] = excel_data
         EXCEL_DATA_CACHE.set(file_name, excel_data)
@@ -1287,66 +1290,304 @@ def ensure_file_processed(file_name):
     update_uploaded_file_status(file_name, "ready")
 
 
-def extract_text(file_name, file_bytes):
-    """Extract comprehensive text content from various file formats including tables and metadata."""
-    text_parts = []
-    bio = BytesIO(file_bytes)
-    file_name_lower = file_name.lower()
-    
+def detect_file_type(filename):
+    """Detect the normalized document type from a filename extension."""
+    ext = os.path.splitext(str(filename or ""))[1].lower()
+    mapping = {
+        ".pdf": "pdf",
+        ".docx": "word", ".doc": "word", ".odt": "word", ".rtf": "word",
+        ".pptx": "ppt", ".ppt": "ppt",
+        ".xlsx": "excel", ".xls": "excel",
+        ".csv": "csv",
+        ".txt": "text", ".md": "text", ".log": "text",
+        ".html": "html", ".htm": "html",
+        ".pages": "pages",
+        ".capl": "code", ".can": "code",
+        ".png": "image", ".jpg": "image", ".jpeg": "image", ".gif": "image", ".bmp": "image", ".webp": "image",
+    }
+    return mapping.get(ext, "unknown")
+
+
+def _read_uploaded_bytes(file):
+    """Return uploaded-file bytes without relying on the current file pointer."""
+    if file is None:
+        return b""
+    if isinstance(file, bytes):
+        return file
+    if isinstance(file, bytearray):
+        return bytes(file)
+    if hasattr(file, "getvalue"):
+        try:
+            return file.getvalue()
+        except Exception:
+            pass
     try:
-        if file_name_lower.endswith(".pdf"):
-            text_parts.extend(extract_pdf_content(bio))
-        elif file_name_lower.endswith(".docx"):
-            text_parts.extend(extract_docx_content(bio))
-        elif file_name_lower.endswith(".doc"):
-            text_parts.extend(extract_legacy_office_content(bio, "Legacy Word document"))
-        elif file_name_lower.endswith(".pptx"):
-            text_parts.extend(extract_pptx_content(bio))
-        elif file_name_lower.endswith(".ppt"):
-            text_parts.extend(extract_legacy_office_content(bio, "Legacy PowerPoint document"))
-        elif file_name_lower.endswith(".xlsx"):
-            text_parts.extend(extract_xlsx_content(bio))
-        elif file_name_lower.endswith(".xls"):
-            text_parts.extend(extract_legacy_office_content(bio, "Legacy Excel workbook"))
-        elif file_name_lower.endswith(".csv"):
-            text_parts.extend(extract_csv_content(bio))
-        elif file_name_lower.endswith((".html", ".htm")):
-            text_parts.extend(extract_html_content(bio))
-        elif file_name_lower.endswith(".odt"):
-            text_parts.extend(extract_odt_content(bio))
-        elif file_name_lower.endswith(".rtf"):
-            text_parts.extend(extract_rtf_content(bio))
-        elif file_name_lower.endswith(".pages"):
-            text_parts.extend(extract_pages_content(bio))
-        elif file_name_lower.endswith((".txt", ".md", ".log")):
-            text_parts.append(("TEXT", bio.read().decode("utf-8", errors="ignore")))
-        elif file_name_lower.endswith(".can"):
-            text_parts.append(("TEXT", bio.read().decode("utf-8", errors="ignore")))
-        else:
-            text_parts.append(("UNSUPPORTED", f"Unsupported file format: {file_name_lower}"))
-    
-    except Exception as e:
-        text_parts.append(("ERROR", f"Error extracting content: {str(e)}"))
-    
-    # Combine all extracted content
-    combined_text = ""
-    for content_type, content in text_parts:
+        if hasattr(file, "seek"):
+            file.seek(0)
+        data = file.read()
+        return data.encode("utf-8", errors="ignore") if isinstance(data, str) else (data or b"")
+    except Exception:
+        return b""
+
+
+def _to_bytes_io(file):
+    return BytesIO(_read_uploaded_bytes(file))
+
+
+def clean_text(text):
+    """Normalize noisy extracted text while preserving paragraph boundaries for chunking."""
+    text = str(text or "").replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"(?im)^\s*Page\s+\d+\s*$", "", text)
+    text = re.sub(r"[ \t\f\v]+", " ", text)
+    text = re.sub(r"\n\s*\n+", "\n", text)
+    text = re.sub(r" *\n *", "\n", text)
+    return text.strip()
+
+
+def combine_extracted_content(text_parts):
+    """Flatten typed extraction records into searchable text."""
+    combined = []
+    for content_type, content in text_parts or []:
+        if not content:
+            continue
         if content_type == "TEXT":
-            combined_text += content + "\n"
+            combined.append(str(content))
         elif content_type == "TABLE":
-            combined_text += f"\nTABLE:\n{content}\n"
+            combined.append(f"TABLE:\n{content}")
         elif content_type == "IMAGE":
-            combined_text += f"\n[IMAGE: {content}]\n"
+            combined.append(f"[IMAGE: {content}]")
         elif content_type == "EMBEDDED_IMAGE":
-            combined_text += f"\n[EMBEDDED_IMAGE: {content}]\n"
+            combined.append(f"[EMBEDDED_IMAGE: {content}]")
         elif content_type == "METADATA":
-            combined_text += f"\n{content}\n"
+            combined.append(str(content))
         elif content_type == "ERROR":
-            combined_text += f"\nERROR: {content}\n"
+            combined.append(f"ERROR: {content}")
         elif content_type == "UNSUPPORTED":
-            combined_text += f"\n{content}\n"
-    
-    return combined_text.strip()
+            combined.append(str(content))
+    return clean_text("\n".join(combined))
+
+
+def extract_pdf(file):
+    """Extract PDF text, preferring PyMuPDF when available and falling back to pdfplumber."""
+    file_bytes = _read_uploaded_bytes(file)
+    if not file_bytes:
+        return ""
+
+    fitz_module = None
+    try:
+        fitz_module = importlib.import_module("fitz")
+    except Exception:
+        fitz_module = None
+
+    if fitz_module is not None:
+        try:
+            pdf_doc = fitz_module.open(stream=file_bytes, filetype="pdf")
+            pages = [page.get_text() for page in pdf_doc]
+            pdf_doc.close()
+            return clean_text("\n".join(pages))
+        except Exception:
+            pass
+
+    return combine_extracted_content(extract_pdf_content(BytesIO(file_bytes)))
+
+
+def extract_word(file, filename=None):
+    """Extract Word-like documents: DOCX directly, ODT/RTF via XML/plain-text helpers, DOC best-effort."""
+    file_bytes = _read_uploaded_bytes(file)
+    ext = os.path.splitext(str(filename or ""))[1].lower()
+    if ext == ".docx" or not ext:
+        try:
+            document = docx.Document(BytesIO(file_bytes))
+            paragraphs = [paragraph.text for paragraph in document.paragraphs if paragraph.text.strip()]
+            table_blocks = []
+            for table_index, table in enumerate(document.tables, start=1):
+                rows = [" | ".join(cell.text.strip() for cell in row.cells) for row in table.rows]
+                if any(row.strip() for row in rows):
+                    table_blocks.append(f"Table {table_index}:\n" + "\n".join(rows))
+            return clean_text("\n".join(paragraphs + table_blocks))
+        except Exception:
+            if not ext:
+                return ""
+    if ext == ".odt":
+        return combine_extracted_content(extract_odt_content(BytesIO(file_bytes)))
+    if ext == ".rtf":
+        return combine_extracted_content(extract_rtf_content(BytesIO(file_bytes)))
+    if ext == ".doc":
+        return combine_extracted_content(extract_legacy_office_content(BytesIO(file_bytes), "Legacy Word document"))
+    return ""
+
+
+def extract_ppt(file, filename=None):
+    """Extract PowerPoint slide text and simple table content."""
+    file_bytes = _read_uploaded_bytes(file)
+    ext = os.path.splitext(str(filename or ""))[1].lower()
+    if ext == ".ppt":
+        return combine_extracted_content(extract_legacy_office_content(BytesIO(file_bytes), "Legacy PowerPoint document"))
+    try:
+        presentation = Presentation(BytesIO(file_bytes))
+        slides = []
+        for index, slide in enumerate(presentation.slides, start=1):
+            content = []
+            for shape in slide.shapes:
+                if hasattr(shape, "text") and shape.text:
+                    content.append(shape.text)
+                if hasattr(shape, "table"):
+                    rows = []
+                    for row in shape.table.rows:
+                        rows.append(" | ".join(cell.text.strip() for cell in row.cells))
+                    if rows:
+                        content.append("Table:\n" + "\n".join(rows))
+            slides.append(f"Slide {index}:\n" + "\n".join(content))
+        return clean_text("\n\n".join(slides))
+    except Exception:
+        return combine_extracted_content(extract_pptx_content(BytesIO(file_bytes)))
+
+
+def extract_excel(file, filename=None):
+    """Extract spreadsheet data from every sheet into text."""
+    file_bytes = _read_uploaded_bytes(file)
+    try:
+        sheets = pd.read_excel(BytesIO(file_bytes), sheet_name=None)
+        text = []
+        for name, df in sheets.items():
+            text.append(f"Sheet: {name}")
+            text.append(df.fillna("").to_string(index=False))
+        return clean_text("\n\n".join(text))
+    except Exception:
+        ext = os.path.splitext(str(filename or ""))[1].lower()
+        if ext == ".xls":
+            return combine_extracted_content(extract_legacy_office_content(BytesIO(file_bytes), "Legacy Excel workbook"))
+        return combine_extracted_content(extract_xlsx_content(BytesIO(file_bytes)))
+
+
+def extract_csv(file):
+    """Extract CSV data into plain table text."""
+    try:
+        df = pd.read_csv(_to_bytes_io(file))
+        return clean_text(df.fillna("").to_string(index=False))
+    except Exception:
+        return combine_extracted_content(extract_csv_content(_to_bytes_io(file)))
+
+
+def extract_html(file):
+    """Extract visible text from HTML."""
+    try:
+        soup = BeautifulSoup(_read_uploaded_bytes(file), "html.parser")
+        for tag in soup(["script", "style", "nav", "footer"]):
+            tag.decompose()
+        return clean_text(soup.get_text("\n", strip=True))
+    except Exception:
+        return combine_extracted_content(extract_html_content(_to_bytes_io(file)))
+
+
+def extract_image_ocr(file):
+    """Extract text from an image with OCR when pytesseract/Tesseract are available."""
+    try:
+        pytesseract_module = importlib.import_module("pytesseract")
+        image = Image.open(_to_bytes_io(file))
+        return clean_text(pytesseract_module.image_to_string(image))
+    except Exception as exc:
+        return f"OCR unavailable for this image: {str(exc)[:160]}"
+
+
+def extract_code(file):
+    """Extract source/code-like files without aggressively normalizing syntax."""
+    return _read_uploaded_bytes(file).decode("utf-8", errors="ignore").strip()
+
+
+def extract_pages(file):
+    """Apple Pages is proprietary; ask the user for a reliable export format."""
+    return "Please convert the .pages file to PDF or DOCX for reliable chat analysis."
+
+
+def extract_text(file_or_name, filename_or_bytes=None):
+    """Unified loader for upload -> detect type -> format-specific extraction.
+
+    Supports both the new `(file, filename)` shape and the existing app calls
+    that pass `(file_name, file_bytes)`.
+    """
+    if isinstance(file_or_name, (str, os.PathLike)) and isinstance(filename_or_bytes, (bytes, bytearray)):
+        filename = str(file_or_name)
+        file = BytesIO(bytes(filename_or_bytes))
+    else:
+        file = file_or_name
+        filename = str(filename_or_bytes or getattr(file_or_name, "name", "") or "")
+
+    file_type = detect_file_type(filename)
+    try:
+        if file_type == "pdf":
+            return extract_pdf(file)
+        if file_type == "word":
+            return extract_word(file, filename)
+        if file_type == "ppt":
+            return extract_ppt(file, filename)
+        if file_type == "excel":
+            return extract_excel(file, filename)
+        if file_type == "csv":
+            return extract_csv(file)
+        if file_type == "html":
+            return extract_html(file)
+        if file_type == "text":
+            return clean_text(_read_uploaded_bytes(file).decode("utf-8", errors="ignore"))
+        if file_type == "image":
+            return extract_image_ocr(file)
+        if file_type == "code":
+            return extract_code(file)
+        if file_type == "pages":
+            return extract_pages(file)
+        return ""
+    except Exception as exc:
+        return f"ERROR: Error extracting content: {str(exc)}"
+
+
+def smart_chunk(text, chunk_size=1200):
+    """Paragraph-aware chunking before embedding."""
+    paragraphs = [paragraph.strip() for paragraph in str(text or "").split("\n") if paragraph.strip()]
+    chunks = []
+    current = ""
+
+    for paragraph in paragraphs:
+        if not current:
+            current = paragraph + "\n"
+        elif len(current) + len(paragraph) < chunk_size:
+            current += paragraph + "\n"
+        else:
+            chunks.append(current.strip())
+            current = paragraph + "\n"
+
+    if current.strip():
+        chunks.append(current.strip())
+    return chunks
+
+
+def create_documents(chunks, filename, file_type):
+    """Create LangChain documents with normalized and legacy-compatible metadata."""
+    return [
+        Document(
+            page_content=chunk,
+            metadata={
+                "source": filename,
+                "type": file_type,
+                "file_name": filename,
+                "file_type": file_type,
+                "page_number": "1",
+                "page_or_sheet": "Document",
+                "section": "Document",
+                "chunk_index": index,
+            },
+        )
+        for index, chunk in enumerate(chunks, start=1)
+    ]
+
+
+def process_file(file, filename):
+    """Run the upload -> detect -> extract -> normalize -> chunk -> document pipeline."""
+    file_type = detect_file_type(filename)
+    raw_text = extract_text(file, filename)
+    normalized_text = clean_text(raw_text)
+    if not normalized_text:
+        return []
+    return create_documents(smart_chunk(normalized_text), filename, file_type)
 
 
 def extract_pdf_content(bio):
@@ -3386,26 +3627,8 @@ def get_document_id(file_name, file_bytes):
 
 def get_chatpdf_file_type(file_name):
     """Normalize supported document extensions for ChatPDF metadata."""
-    extension = os.path.splitext(str(file_name or ""))[1].lower()
-    extension_map = {
-        ".pdf": "pdf",
-        ".docx": "docx",
-        ".doc": "docx",
-        ".pptx": "pptx",
-        ".ppt": "pptx",
-        ".xlsx": "xlsx",
-        ".xls": "xlsx",
-        ".html": "html",
-        ".htm": "html",
-        ".txt": "txt",
-        ".md": "txt",
-        ".log": "txt",
-        ".rtf": "rtf",
-        ".odt": "odt",
-        ".can": "txt",
-        ".capl": "txt",
-    }
-    return extension_map.get(extension, extension.lstrip(".") or "document")
+    file_type = detect_file_type(file_name)
+    return "document" if file_type == "unknown" else file_type
 
 
 def build_chatpdf_citation_label(metadata):
@@ -3418,9 +3641,9 @@ def build_chatpdf_citation_label(metadata):
 
     if file_type == "pdf" and locator:
         return f"{file_name} (PDF Page {locator})"
-    if file_type == "pptx" and locator:
+    if file_type in {"ppt", "pptx"} and locator:
         return f"{file_name} (Slide {locator})"
-    if file_type == "xlsx" and locator:
+    if file_type in {"excel", "xlsx"} and locator:
         return f"{file_name} (Sheet: {locator})"
 
     generic_sections = {
@@ -3444,7 +3667,7 @@ def get_chatpdf_collection_id(user_id, file_names):
         file_hash = get_file_hash(file_entry.get("bytes", b"")) if file_entry else "missing"
         selection_parts.append(f"{name}:{file_hash}")
     selection = "|".join(selection_parts)
-    return hashlib.sha1(f"chatpdf-schema-v2|{user_id}|{selection}".encode("utf-8")).hexdigest()[:24]
+    return hashlib.sha1(f"{CHATPDF_SCHEMA_VERSION}|{user_id}|{selection}".encode("utf-8")).hexdigest()[:24]
 
 
 def get_chatpdf_vector_dir(user_id, file_names):
@@ -3594,18 +3817,20 @@ def extract_chatpdf_structured_pages(file_name, file_bytes):
 
 def build_chatpdf_documents(file_names):
     """Create metadata-preserving LangChain documents for selected files."""
-    splitter = RecursiveCharacterTextSplitter(chunk_size=3200, chunk_overlap=450)
     documents = []
     for file_name in file_names:
         file_entry = get_uploaded_file_entry(file_name)
         if not file_entry:
             continue
-        for page_record in extract_chatpdf_structured_pages(file_name, file_entry.get("bytes", b"")):
-            metadata = dict(page_record["metadata"])
-            for chunk_index, chunk in enumerate(splitter.split_text(page_record["text"][:MAX_VECTOR_TEXT_CHARS]), start=1):
-                chunk_metadata = dict(metadata)
-                chunk_metadata["chunk_index"] = chunk_index
-                documents.append(Document(page_content=chunk, metadata=chunk_metadata))
+        file_bytes = file_entry.get("bytes", b"")
+        document_id = get_document_id(file_name, file_bytes)
+        for document in process_file(BytesIO(file_bytes), file_name):
+            metadata = dict(getattr(document, "metadata", {}) or {})
+            metadata["document_id"] = document_id
+            document.metadata = metadata
+            if len(document.page_content) > MAX_VECTOR_TEXT_CHARS:
+                document.page_content = document.page_content[:MAX_VECTOR_TEXT_CHARS]
+            documents.append(document)
     return documents
 
 
