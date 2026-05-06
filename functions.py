@@ -12,6 +12,7 @@ import uuid
 import urllib.parse
 import xml.etree.ElementTree as ET
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from difflib import SequenceMatcher
 from io import BytesIO
@@ -101,6 +102,415 @@ SUMMARY_STOPWORDS = {
     "before", "within", "without", "each", "page", "pages", "table", "tables", "image", "images",
     "document", "content", "metadata", "information", "product", "file", "text"
 }
+
+MASTER_SYSTEM_PROMPT = """You are an Enterprise Document Intelligence Agent.
+
+Your role is to analyze, understand, and extract information from uploaded documents with high accuracy and professional structure.
+
+You are NOT a simple chatbot. You are a multi-capability system that must decide HOW to process each request.
+
+---------------------------------------------------------------------
+
+## 1. CORE RESPONSIBILITY
+
+For every user query:
+
+1. Identify the intent
+2. Select the correct processing mode
+3. Use the appropriate strategy
+4. Produce a structured, accurate response
+
+---------------------------------------------------------------------
+
+## 2. INTENT CLASSIFICATION (MANDATORY)
+
+Classify the user request into ONE of these:
+
+- FULL_DOCUMENT_ANALYSIS -> "analyze"
+- SHORT_SUMMARY -> "summary"
+- OVERVIEW -> "overview"
+- QUESTION_ANSWERING -> specific questions
+- TABLE_EXTRACTION -> tables/data
+- COMPONENT_EXTRACTION -> modules/components
+- DIAGRAM_ANALYSIS -> diagrams/flows
+- COMPARISON -> comparing items/files
+- SEARCH -> find/highlight/count
+
+If unclear -> default to QUESTION_ANSWERING
+
+---------------------------------------------------------------------
+
+## 3. PROCESSING MODES
+
+### A. FULL DOCUMENT ANALYSIS
+
+Use when user says:
+"analyze", "full analysis"
+
+Strategy:
+- Use full document understanding (NOT limited retrieval)
+- Combine all available context
+
+Output:
+
+### Overview
+### Purpose
+### Core Concept
+### Key Features / Capabilities
+### Architecture / Structure
+### Components / Modules
+### Workflow / Usage
+### Use Cases / Applications
+### Important Notes / Constraints
+### Key Takeaways
+
+---------------------------------------------------------------------
+
+### B. SHORT SUMMARY
+
+Output:
+- What the document is about
+- Purpose
+- 3-5 key insights
+- 2-3 key takeaways
+
+---------------------------------------------------------------------
+
+### C. QUESTION ANSWERING
+
+Strategy:
+- Use only relevant context
+- Be precise
+
+Rules:
+- Do NOT hallucinate
+- If missing info:
+  "Not specified in the provided context"
+
+---------------------------------------------------------------------
+
+### D. TABLE EXTRACTION
+
+Output:
+- Clean structured table
+- Preserve rows and columns
+
+---------------------------------------------------------------------
+
+### E. COMPONENT EXTRACTION
+
+Output:
+For each component:
+- Name
+- Purpose
+- Key features
+- Interfaces (if available)
+
+---------------------------------------------------------------------
+
+### F. DIAGRAM ANALYSIS
+
+Output:
+- Components in diagram
+- Relationships
+- Flow (signals/data)
+- Purpose
+
+Optional:
+- ASCII diagram
+
+---------------------------------------------------------------------
+
+### G. COMPARISON
+
+Output table:
+
+| Criteria | Item 1 | Item 2 | Difference |
+
+---------------------------------------------------------------------
+
+### H. SEARCH / FIND
+
+- Highlight or extract relevant matches
+- Be precise
+
+---------------------------------------------------------------------
+
+## 4. CONTEXT HANDLING
+
+Documents may contain noise:
+- headers/footers
+- table of contents
+- page numbers
+- OCR fragments
+
+You MUST ignore these.
+
+Focus on:
+- meaningful content
+- technical explanations
+- features
+- structure
+- usage
+
+---------------------------------------------------------------------
+
+## 5. PARTIAL CONTEXT RULE
+
+If context is incomplete:
+
+- Answer what is available
+- For missing parts:
+  "Not specified in the provided context"
+
+DO NOT reject entire answer unless NOTHING useful exists.
+
+---------------------------------------------------------------------
+
+## 6. STRICT RULES
+
+- Do NOT hallucinate
+- Do NOT invent specs or values
+- Do NOT repeat raw text
+- Do NOT output noise
+- Do NOT over-generalize
+
+---------------------------------------------------------------------
+
+## 7. RESPONSE STYLE
+
+- Professional
+- Structured headings
+- Bullet points
+- Clear and concise
+- No unnecessary repetition
+
+---------------------------------------------------------------------
+
+## 8. MEMORY AWARENESS
+
+If prior context or summaries are available:
+- Use them to improve answers
+- Maintain consistency
+
+---------------------------------------------------------------------
+
+## 9. CONFIDENCE
+
+At the end of every response, include:
+
+Confidence: High / Medium / Low
+
+Based on:
+- completeness of context
+- clarity of information
+
+---------------------------------------------------------------------
+
+## 10. FINAL RULE
+
+Always produce the BEST POSSIBLE answer using available document context, even if incomplete.
+
+Never default to refusal unless absolutely necessary."""
+
+CHUNK_LEVEL_SUMMARY_PROMPT = """You are an expert technical document analyzer.
+
+You are given a PARTIAL chunk of a large document. This is NOT the full document.
+
+-----------------------------
+
+## YOUR GOAL
+
+Extract meaningful information from this chunk and produce a clean structured summary.
+
+-----------------------------
+
+## IMPORTANT CONTEXT
+
+The input may contain:
+- incomplete sentences
+- OCR noise
+- headers/footers
+- page numbers
+- table fragments
+- repeated titles
+
+You MUST ignore these.
+
+-----------------------------
+
+## FOCUS ONLY ON
+
+- core ideas
+- features or capabilities
+- components/modules
+- workflows/processes
+- technical details (only if clearly stated)
+- constraints or important notes
+
+-----------------------------
+
+## OUTPUT FORMAT
+
+### Section Summary
+1-2 sentences describing what this section is about
+
+### Key Points
+- bullet points of important information
+
+### Technical Details
+- only if clearly present
+
+### Notes
+- warnings, constraints, or observations
+
+-----------------------------
+
+## STRICT RULES
+
+- Do NOT assume missing context
+- Do NOT hallucinate
+- Do NOT repeat text verbatim
+- If content is mostly noise, return:
+
+"This section contains minimal useful information."
+
+CONTEXT:
+{context}
+"""
+
+FINAL_DOCUMENT_ANALYSIS_PROMPT = """You are a senior enterprise document intelligence system.
+
+You are given multiple summarized sections of a document. Together they represent the full document.
+
+-----------------------------
+
+## YOUR TASK
+
+Combine these into a complete, structured, professional document analysis.
+
+-----------------------------
+
+## OUTPUT STRUCTURE (MANDATORY)
+
+### Overview
+What the document is about
+
+### Purpose
+Why this document exists
+
+### Core Concept
+Main idea or system explained
+
+### Key Features / Capabilities
+- bullet list
+
+### Architecture / Structure
+System design or organization (if available)
+
+### Components / Modules
+Important parts and roles
+
+### Workflow / Usage
+Step-by-step or logical flow
+
+### Use Cases / Applications
+Where and how this is used
+
+### Important Notes / Constraints
+Limitations, warnings, or important details
+
+### Key Takeaways
+Concise insights
+
+-----------------------------
+
+## RULES
+
+- Use ONLY provided summaries
+- Merge overlapping information
+- Avoid repetition
+- Do NOT hallucinate
+- If missing info, write:
+  "Not specified in the provided context"
+
+-----------------------------
+
+## STYLE
+
+- Professional
+- Clear headings
+- Bullet points
+- Clean structure
+
+SECTION SUMMARIES:
+{context}
+"""
+
+FAST_SUMMARY_PROMPT = """You are a document summarization assistant.
+
+Provide a concise summary of the document.
+
+-----------------------------
+
+## OUTPUT
+
+- What the document is about
+- Purpose
+- 3-5 key insights
+- 2-3 key takeaways
+
+-----------------------------
+
+## RULES
+
+- Focus only on meaningful content
+- Ignore noise (headers, TOC, metadata)
+- Do NOT hallucinate
+- Keep it concise
+
+CONTENT:
+{context}
+"""
+
+RAG_QA_PROMPT = MASTER_SYSTEM_PROMPT + """
+
+You are an expert assistant answering questions from document context.
+
+-----------------------------
+
+## YOUR TASK
+
+Answer the user's question using ONLY the provided context.
+
+-----------------------------
+
+## RULES
+
+- Be precise and direct
+- Use only relevant information
+- Do NOT hallucinate
+- If answer is missing, say:
+  "Not specified in the provided context"
+- Always include Sources using the source metadata supplied in the context
+
+-----------------------------
+
+## STYLE
+
+- Clear
+- Professional
+- Structured if needed
+
+Conversation memory for these selected documents:
+{memory}
+
+CONTEXT:
+{context}
+
+QUESTION:
+{question}
+"""
 
 # ==============================
 # NEW ANALYSIS BUTTON PROMPTS
@@ -3477,73 +3887,11 @@ def build_chatpdf_prompt(question, docs, memory):
         for item in memory[-4:]
     )
     context = format_chatpdf_context(docs)
-    return f"""You are an advanced AI assistant that analyzes and answers questions using provided document context.
-
-CORE IDENTITY:
-- You behave like a combination of ChatGPT reasoning/conversation and ChatPDF document-grounded intelligence.
-- You can reason across PDF, DOCX, PPTX, XLSX, TXT, RTF, ODT, and HTML content after extraction.
-- You treat every uploaded format as structured knowledge with file name, file type, locator, section, and chunk metadata.
-
-CRITICAL RULE:
-- You are ALWAYS given real document excerpts in the CONTEXT section.
-- Carefully read ALL provided context chunks.
-- Extract useful information even if it is partial or indirect.
-- Combine multiple chunks if needed.
-- Infer meaning ONLY from the given text.
-- Do NOT prematurely say information is missing.
-
-WHEN TO SAY "NOT AVAILABLE":
-- Say exactly "This information is not available in the uploaded documents." IF AND ONLY IF:
-  - the context is empty, or
-  - the context is completely unrelated to the question.
-- If ANY partial relevant information exists, attempt to answer from that information.
-
-STRICT KNOWLEDGE RULES:
-- Use ONLY the provided document context to answer factual questions.
-- Use conversation memory only for continuity over the same selected documents, not as an uncited source of new facts.
-- Do NOT use external knowledge to fill missing document facts.
-- Never hallucinate, guess, fabricate citations, or ignore selected document context.
-
-REASONING BEHAVIOR:
-- Think through these steps internally without exposing chain-of-thought:
-  1. Read all context chunks.
-  2. Identify relevant sections, including partial matches.
-  3. Combine information across sources if needed.
-  4. Build a clear, structured answer.
-  5. Keep correctness strictly based on context.
-- Combine multiple retrieved chunks when needed.
-- Cross-reference multiple files when relevant.
-- For spreadsheets, reason over sheets, rows, columns, and values present in the context.
-- For presentations, treat slides as sections.
-- For HTML, use only the clean readable text in context.
-- Be natural, concise, and complete. Use bullets or headings when helpful.
-
-CITATION RULES:
-- Every document-based answer must include Sources.
-- Use these citation styles exactly when metadata is available:
-  - file_name (PDF Page 3)
-  - file_name (Sheet: Sales_Q1)
-  - file_name (Slide 5)
-  - file_name (Section: Introduction)
-- If a locator is unavailable, cite the file name only.
-
-OUTPUT FORMAT:
-Answer:
-Provide a clear, direct explanation based ONLY on context.
-
-Sources:
-- file_name (PDF Page X)
-- file_name (Sheet: SheetName)
-
-Conversation memory for these selected documents:
-{memory_text or "No previous conversation."}
-
-CONTEXT (REAL DOCUMENT CONTENT):
-{context}
-
-USER QUESTION:
-{question}
-"""
+    return RAG_QA_PROMPT.format(
+        memory=memory_text or "No previous conversation.",
+        context=context,
+        question=question,
+    )
 
 
 def build_extractive_chatpdf_answer(question, docs):
@@ -4774,6 +5122,336 @@ def join_response_blocks(blocks):
     return "\n\n---\n\n".join(block for block in blocks if str(block or "").strip())
 
 
+def init_document_summary_cache():
+    """Session cache for expensive per-document summary/analysis responses."""
+    if "doc_cache" not in st.session_state or not isinstance(st.session_state.doc_cache, dict):
+        st.session_state.doc_cache = {}
+    if "document_summary" in st.session_state and isinstance(st.session_state.document_summary, dict):
+        for file_name, cached_value in st.session_state.document_summary.items():
+            st.session_state.doc_cache.setdefault(file_name, cached_value)
+    st.session_state.document_summary = st.session_state.doc_cache
+
+
+def get_document_summary_cache_entry(file_name, text, mode):
+    init_document_summary_cache()
+    file_cache = st.session_state.doc_cache.get(file_name, {})
+    if not isinstance(file_cache, dict):
+        return None
+    text_hash = hashlib.sha1(str(text or "").encode("utf-8", errors="ignore")).hexdigest()
+    entry = file_cache.get(mode)
+    if isinstance(entry, dict) and entry.get("text_hash") == text_hash:
+        return entry.get("response")
+    return None
+
+
+def set_document_summary_cache_entry(file_name, text, mode, response):
+    init_document_summary_cache()
+    text_hash = hashlib.sha1(str(text or "").encode("utf-8", errors="ignore")).hexdigest()
+    file_cache = st.session_state.doc_cache.setdefault(file_name, {})
+    if not isinstance(file_cache, dict):
+        file_cache = {}
+        st.session_state.doc_cache[file_name] = file_cache
+    file_cache[mode] = {
+        "text_hash": text_hash,
+        "response": response,
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+    }
+    st.session_state.document_summary = st.session_state.doc_cache
+
+
+def split_text(text, chunk_size=1000, overlap=150):
+    """Split document text into word-based chunks for map-reduce summarization."""
+    words = re.findall(r"\S+", str(text or ""))
+    if not words:
+        return []
+    chunk_size = max(100, int(chunk_size or 1000))
+    overlap = max(0, min(int(overlap or 0), chunk_size - 1))
+    chunks = []
+    start = 0
+    while start < len(words):
+        end = min(len(words), start + chunk_size)
+        chunks.append(" ".join(words[start:end]))
+        if end >= len(words):
+            break
+        start = end - overlap
+    return chunks
+
+
+def build_summary_source_text(text, max_lines=900):
+    """Prepare meaningful content for summarization while removing obvious extraction noise."""
+    meaningful_lines = get_meaningful_document_lines(
+        text,
+        min_len=12,
+        max_len=320,
+        limit=max_lines,
+    )
+    if meaningful_lines:
+        return "\n".join(meaningful_lines)
+    return str(text or "")[:MAX_VECTOR_TEXT_CHARS]
+
+
+def invoke_document_summary_prompt(llm, prompt_template, context):
+    if llm is None:
+        return ""
+    try:
+        return str(llm.invoke(prompt_template.replace("{context}", str(context or "")))).strip()
+    except Exception:
+        return ""
+
+
+def process_summary_chunk(llm, chunk):
+    """Map-step worker for one chunk."""
+    summary = invoke_document_summary_prompt(llm, CHUNK_LEVEL_SUMMARY_PROMPT, chunk)
+    if summary and "minimal useful information" not in summary.lower():
+        return summary
+    return ""
+
+
+def parallel_map_summary_chunks(llm, chunks, max_workers=6):
+    """Parallel chunk processing for large documents, with sequential fallback."""
+    if llm is None or not chunks:
+        return []
+    workers = max(1, min(int(max_workers or 1), len(chunks)))
+    try:
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            results = list(executor.map(lambda chunk: process_summary_chunk(llm, chunk), chunks))
+    except Exception:
+        results = [process_summary_chunk(llm, chunk) for chunk in chunks]
+    return [summary for summary in results if summary]
+
+
+def generated_summary_is_useful(response):
+    text = str(response or "").strip()
+    lower = text.lower()
+    if len(text) < 80:
+        return False
+    if "this information is not available in the uploaded documents" in lower:
+        return False
+    if lower.count("not specified in the provided context") >= 6:
+        return False
+    return True
+
+
+def build_map_reduce_document_analysis(file_name, text):
+    """Analyze a full document through chunk summaries, final reduction, and session caching."""
+    cached = get_document_summary_cache_entry(file_name, text, "analysis")
+    if cached:
+        return cached
+
+    source_text = build_summary_source_text(text)
+    if not source_text.strip():
+        response = f"**{html.escape(file_name)}**\n\nNo readable content found in this document."
+        set_document_summary_cache_entry(file_name, text, "analysis", response)
+        return response
+
+    llm = load_llm()
+    final_analysis = ""
+    if llm is not None:
+        chunks = split_text(source_text, chunk_size=1000, overlap=150)[:48]
+        chunk_summaries = parallel_map_summary_chunks(llm, chunks, max_workers=6)
+        if chunk_summaries:
+            final_input = "\n\n".join(chunk_summaries)
+            candidate = invoke_document_summary_prompt(llm, FINAL_DOCUMENT_ANALYSIS_PROMPT, final_input)
+            if generated_summary_is_useful(candidate):
+                final_analysis = f"### Full Analysis: {file_name}\n\n{candidate}"
+
+    if not final_analysis:
+        file_entry = get_uploaded_file_entry(file_name)
+        file_bytes = file_entry["bytes"] if file_entry else b""
+        final_analysis = build_product_documentation_analysis(file_name, file_bytes, text)
+
+    set_document_summary_cache_entry(file_name, text, "analysis", final_analysis)
+    return final_analysis
+
+
+def build_fast_document_summary(file_name, text):
+    """Build a quick cached summary using the fast prompt, with deterministic fallback."""
+    cached = get_document_summary_cache_entry(file_name, text, "summary")
+    if cached:
+        return cached
+
+    source_text = get_document_summary_cache_entry(file_name, text, "analysis")
+    if not source_text:
+        source_text = build_summary_source_text(text, max_lines=220)
+    if not source_text.strip():
+        response = f"No readable content found in {html.escape(file_name)}."
+        set_document_summary_cache_entry(file_name, text, "summary", response)
+        return response
+
+    llm = load_llm()
+    candidate = invoke_document_summary_prompt(llm, FAST_SUMMARY_PROMPT, source_text[:50000]) if llm is not None else ""
+    if generated_summary_is_useful(candidate):
+        response = f"### Summary: {file_name}\n\n{candidate}"
+    else:
+        file_entry = get_uploaded_file_entry(file_name)
+        file_bytes = file_entry["bytes"] if file_entry else b""
+        response = build_short_document_summary(file_name, file_bytes, text)
+
+    set_document_summary_cache_entry(file_name, text, "summary", response)
+    return response
+
+
+def classify_intent(query):
+    """Classify a chat request into the production document-agent intent set."""
+    q = re.sub(r"\s+", " ", str(query or "").lower()).strip()
+    compact = re.sub(r"[^a-z0-9]+", " ", q).strip()
+    if compact in {"analyze", "analyse", "analysis", "full analysis"}:
+        return "FULL_DOCUMENT_ANALYSIS"
+    if compact in {"summary", "summarize", "summarise", "short summary"}:
+        return "SHORT_SUMMARY"
+    if compact == "overview" or re.search(r"\boverview\b", q):
+        return "OVERVIEW"
+    if any(term in q for term in ["find", "search", "highlight", "count", "occurrence", "locate"]):
+        return "SEARCH"
+    if any(term in q for term in ["compare", "difference", "versus", " vs "]):
+        return "COMPARISON"
+    if any(term in q for term in ["table", "spreadsheet", "sheet", "row", "column", "csv", "data"]):
+        return "TABLE_EXTRACTION"
+    if any(term in q for term in ["diagram", "flowchart", "flow", "figure", "image", "visual", "pin diagram"]):
+        return "DIAGRAM_ANALYSIS"
+    if any(term in q for term in ["component", "module", "interface", "connector", "device", "part"]):
+        return "COMPONENT_EXTRACTION"
+    return "QUESTION_ANSWERING"
+
+
+def handle_query(user_input, combined_text, file_name):
+    """Master router for a single document where no vector file list is available."""
+    intent = classify_intent(user_input)
+    if intent == "FULL_DOCUMENT_ANALYSIS":
+        return build_map_reduce_document_analysis(file_name, combined_text)
+    if intent == "SHORT_SUMMARY":
+        return build_fast_document_summary(file_name, combined_text)
+    if intent == "OVERVIEW":
+        return build_overview_response({file_name: combined_text})
+    if intent == "TABLE_EXTRACTION":
+        return build_table_extraction_response({file_name: combined_text})
+    if intent == "DIAGRAM_ANALYSIS":
+        return build_image_or_diagram_extraction_response({file_name: combined_text}, user_input)
+    if intent == "COMPONENT_EXTRACTION":
+        return build_component_extraction_response({file_name: combined_text}, user_input)
+    if intent == "COMPARISON":
+        return build_component_comparison_response({file_name: combined_text}, user_input)
+    if intent == "SEARCH":
+        return build_extraction_response_for_query(user_input, {file_name: combined_text})
+    return None
+
+
+def handle_document_chat_query(user_input, file_texts, file_names=None, user_id=None):
+    """Agent router: map-reduce analysis, fast summary, task extraction, or RAG QA."""
+    intent = classify_intent(user_input)
+    file_texts = file_texts or {}
+    if intent == "FULL_DOCUMENT_ANALYSIS":
+        return build_full_document_summary_response(file_texts), []
+    if intent == "SHORT_SUMMARY":
+        return build_short_summary_response(file_texts), []
+    if intent == "OVERVIEW":
+        return build_overview_response(file_texts), []
+    if intent == "TABLE_EXTRACTION":
+        return build_table_extraction_response(file_texts), []
+    if intent == "DIAGRAM_ANALYSIS":
+        return build_image_or_diagram_extraction_response(file_texts, user_input), []
+    if intent == "COMPONENT_EXTRACTION":
+        return build_component_extraction_response(file_texts, user_input), []
+    if intent == "COMPARISON":
+        return build_component_comparison_response(file_texts, user_input), []
+    if intent == "SEARCH":
+        return build_extraction_response_for_query(user_input, file_texts), []
+    return answer_chatpdf_question(user_input, file_names or list(file_texts.keys()), user_id=user_id)
+
+
+def infer_response_confidence(response, file_texts=None, citation_docs=None):
+    """Estimate answer confidence from context availability and answer quality."""
+    response_text = str(response or "").lower()
+    context_chars = sum(len(str(text or "")) for text in (file_texts or {}).values())
+    citation_count = len(citation_docs or [])
+    if not context_chars or "no readable content" in response_text:
+        return "Low"
+    if "not specified in the provided context" in response_text:
+        return "Medium" if context_chars > 2000 else "Low"
+    if "this information is not available" in response_text or "insufficient meaningful" in response_text:
+        return "Low"
+    if citation_count >= 2 or context_chars > 8000:
+        return "High"
+    return "Medium"
+
+
+def append_confidence_to_response(response, file_texts=None, citation_docs=None):
+    """Append the required confidence footer if it is not already present."""
+    response = str(response or "").rstrip()
+    if re.search(r"(?im)^confidence:\s*(high|medium|low)\s*$", response):
+        return response
+    confidence = infer_response_confidence(response, file_texts=file_texts, citation_docs=citation_docs)
+    return response + f"\n\nConfidence: {confidence}"
+
+
+def build_component_extraction_response(file_texts, user_query=""):
+    """Extract named components/modules/devices and summarize their available roles."""
+    requested_item = extract_specific_component_name(user_query) or extract_quoted_item_name(user_query) or extract_bare_item_name(user_query)
+    if requested_item:
+        return build_specific_component_response(file_texts, user_query)
+
+    blocks = []
+    for file_name, text in (file_texts or {}).items():
+        meaningful = get_meaningful_document_lines(text, min_len=12, max_len=280, limit=260)
+        if not meaningful:
+            blocks.append(f"**{html.escape(file_name)}**\n\nNo readable component or module information found.")
+            continue
+
+        candidates = []
+        seen = set()
+        for line in meaningful:
+            matches = re.findall(
+                r"\b(?:[A-Z]{2,}[A-Za-z0-9_+\-/]{1,}|[A-Z][A-Za-z0-9_+\-/]+(?:\s+[A-Z][A-Za-z0-9_+\-/]+){0,2})\b",
+                line,
+            )
+            if re.search(r"\b(component|module|device|interface|connector|unit|adapter|channel|driver|application|tool)\b", line, re.IGNORECASE):
+                words = re.findall(r"\b[A-Z][A-Za-z0-9_+\-/]{2,}\b", line)
+                matches.extend(words[:2])
+            for candidate in matches:
+                name = normalize_extracted_line(candidate).strip(" :-")
+                lower_name = name.lower()
+                if (
+                    len(name) < 3
+                    or len(name) > 48
+                    or lower_name in seen
+                    or lower_name in SUMMARY_STOPWORDS
+                    or lower_name in {"pdf", "table", "figure", "page", "chapter", "section"}
+                ):
+                    continue
+                seen.add(lower_name)
+                candidates.append(name)
+                break
+            if len(candidates) >= 12:
+                break
+
+        if not candidates:
+            blocks.append(f"**{html.escape(file_name)}**\n\nNo explicit components or modules were identified in the provided context.")
+            continue
+
+        rows = []
+        for component in candidates[:10]:
+            context_lines = collect_item_context_lines(text, component, window=4, limit=30)
+            if not context_lines:
+                context_lines = [line for line in meaningful if component.lower() in line.lower()][:8]
+            purpose = select_relevant_lines(context_lines, ["purpose", "used", "provides", "supports", "enables", "allows"], limit=2)
+            features = select_relevant_lines(context_lines, ["feature", "capability", "function", "supports", "configuration"], limit=2)
+            interfaces = select_relevant_lines(context_lines, ["interface", "connector", "port", "channel", "pin", "network"], limit=2)
+            rows.append([
+                component,
+                "; ".join(purpose[:2]) if purpose else "Not specified in the provided context",
+                "; ".join(features[:2]) if features else "Not specified in the provided context",
+                "; ".join(interfaces[:2]) if interfaces else "Not specified in the provided context",
+            ])
+
+        blocks.append(
+            f"<div style='margin-bottom:18px; line-height:1.5;'>"
+            f"<h3 style='margin:0 0 10px 0; color:#173152;'>Components / Modules: {html.escape(file_name)}</h3>"
+            f"{html_table(['Name', 'Purpose', 'Key features', 'Interfaces'], rows)}"
+            f"</div>"
+        )
+    return join_response_blocks(blocks)
+
+
 def build_overview_response(file_texts):
     """Provide high-level overview: What it is, Who it is for, What it is used for, Main concept, Main areas covered."""
     blocks = []
@@ -5113,13 +5791,11 @@ def build_requirements_or_specification_extraction_response(file_texts):
 
 
 def build_full_document_summary_response(file_texts):
-    """Build premium product-documentation style summaries for selected files."""
+    """Build cached map-reduce document analysis for selected files."""
     blocks = []
     for file_name, file_text in (file_texts or {}).items():
-        file_entry = get_uploaded_file_entry(file_name)
         if file_text and str(file_text).strip():
-            file_bytes = file_entry["bytes"] if file_entry else b""
-            blocks.append(build_detailed_document_summary(file_name, file_bytes, file_text))
+            blocks.append(build_map_reduce_document_analysis(file_name, file_text))
         else:
             blocks.append(f"**{html.escape(file_name)}**\n\nNo readable content found in this document.")
     return join_response_blocks(blocks)
@@ -5179,10 +5855,8 @@ def build_short_document_summary(file_name, file_bytes, text):
 def build_short_summary_response(file_texts):
     blocks = []
     for file_name, file_text in (file_texts or {}).items():
-        file_entry = get_uploaded_file_entry(file_name)
         if file_text and str(file_text).strip():
-            file_bytes = file_entry["bytes"] if file_entry else b""
-            blocks.append(build_short_document_summary(file_name, file_bytes, file_text))
+            blocks.append(build_fast_document_summary(file_name, file_text))
         else:
             blocks.append(f"**{html.escape(file_name)}**\n\nNo readable content found in this document.")
     return join_response_blocks(blocks)
@@ -7357,24 +8031,24 @@ def get_dynamic_suggestions(tab_name, skill_level):
     """Returns context-aware suggestions based on skill level."""
     suggestions_by_skill = {
         "chat": {
-            "beginner": ["Ask document question", "Review citations", "Find a keyword", "Count a phrase"],
-            "intermediate": ["Query rewrite + hybrid search", "Ask follow-up with memory", "Compare selected docs", "Extract source evidence"],
-            "advanced": ["Validate reranked chunks", "Cross-document reasoning", "Audit citation metadata", "Use document memory"]
+            "beginner": ["Analyze", "Summary", "Ask document question", "Review confidence"],
+            "intermediate": ["Use agent routing", "Ask follow-up with memory", "Find exact evidence", "Compare selected docs"],
+            "advanced": ["Validate RAG citations", "Use cached summaries", "Audit confidence", "Cross-document reasoning"]
         },
         "dashboard": {
-            "beginner": ["Review memory snapshot", "Show key themes", "Check indexed files"],
-            "intermediate": ["Review entities and risks", "Analyze report metrics", "Create charts from reports"],
-            "advanced": ["Cross-file insight review", "Memory log inspection", "Risk/theme triage", "Structured report analysis"]
+            "beginner": ["Select HTML/XLSX report", "Choose chart type", "Review metrics"],
+            "intermediate": ["Inspect report tables", "Switch orientation", "Review selected source"],
+            "advanced": ["Validate dashboard source", "Correlate report metrics", "Reset and re-scope"]
         },
         "compare": {
             "beginner": ["Exact inline diff", "Side-by-side line diff", "Select two files"],
             "intermediate": ["Word presence summary", "Download Excel diff", "Review semantic summary"],
-            "advanced": ["Multi-file comparison", "Change impact analysis", "Store comparison memory", "Validate changed sections"]
+            "advanced": ["Multi-file comparison", "Change impact analysis", "Validate changed sections", "Use chat comparison"]
         },
         "capl": {
             "beginner": ["Analyze CAPL syntax", "Review issue table", "Select a .can file"],
-            "intermediate": ["Generate AI fix", "Run CAPL agents", "Inspect unused variables"],
-            "advanced": ["Goal-driven agent run", "Retrieve FAISS memory", "Review agent history", "Coordinate final output"]
+            "intermediate": ["Generate AI fix", "Run CAPL goal", "Inspect unused variables"],
+            "advanced": ["Goal-driven CAPL run", "Review run history", "Validate generated fixes", "Coordinate final output"]
         }
     }
     
@@ -7385,14 +8059,14 @@ def get_next_best_action(tab_name, skill_level):
     """Intelligently recommends the next workflow step."""
     workflow_paths = {
         "chat": {
-            "beginner": "Pro Tip: Select one or more files, then ask a natural-language question. Answers include Sources with PDF pages, slides, sheets, or sections.",
-            "intermediate": "Next: Ask follow-up questions on the same document selection; optional query rewrite feeds hybrid FAISS + BM25 retrieval.",
-            "advanced": "Next: Validate claims by checking reranked cited chunks, then use find/count for deterministic evidence checks."
+            "beginner": "Pro Tip: Use Analyze for cached full-document analysis, Summary for instant summary, and normal questions for RAG answers.",
+            "intermediate": "Next: Let the intent router choose map-reduce, fast summary, table/component/diagram extraction, comparison, search, or RAG.",
+            "advanced": "Next: Validate confidence, citations, cached summaries, and exact find/count evidence before using the answer downstream."
         },
         "dashboard": {
-            "beginner": "Pro Tip: Start with the workspace memory snapshot to confirm what the app has indexed.",
-            "intermediate": "Next: Review themes, entities, risks, and report charts together for faster triage.",
-            "advanced": "Next: Use the dashboard as a cross-module intelligence view over uploads, chat, compare, and CAPL runs."
+            "beginner": "Pro Tip: Select an HTML/HTM/XLSX report from Uploaded files, then choose it in Dashboard.",
+            "intermediate": "Next: Use chart type and orientation controls to inspect structured report distributions.",
+            "advanced": "Next: Cross-check dashboard findings with Chat or Compare when you need evidence, explanation, or file-to-file validation."
         },
         "compare": {
             "beginner": "Pro Tip: Select at least two files, then start with exact inline word diff.",
@@ -7445,54 +8119,58 @@ def show_help_popup(tab_name, selected_files):
 
     helper_defs = {
         "chat": {
-            "title": "Chat Helper",
-            "text": "Use multimodal ChatPDF mode to ask natural-language questions over PDF, DOCX, PPTX, XLSX, TXT, RTF, ODT, and HTML files. Retrieval uses optional query rewrite, semantic FAISS search, BM25 keyword search, merged candidates, and reranking before the LLM answers.",
-            "hint": "Select one or more files, ask a question, then verify the Sources list. The assistant should only say information is unavailable when the retrieved context is empty or completely unrelated.",
+            "title": "Chat Agent Helper",
+            "text": "Use the Enterprise Document Intelligence Agent to route each request to the right pipeline: cached map-reduce analysis, instant cached summary, table/component/diagram extraction, comparison, exact search, or hybrid RAG question answering.",
+            "hint": "Analyze and Summary do not use vector search. Specific questions use hybrid RAG. Every answer includes a confidence label so you can judge how complete the context was.",
             "workflow": [
-                "Upload files, then explicitly select only the documents you want to chat with in this tab.",
-                "Use Analyze, Summary, or Overview as direct document-level commands. The app treats them as full-document analysis, short summary, and high-level overview.",
-                "Ask a natural-language question. The app normalizes every file into text plus metadata: file_name, file_type, page_or_sheet, section, document_id, and chunk index.",
-                "The LLM may rewrite the question into a compact search query while preserving the original intent.",
-                "Dense FAISS retrieval finds semantic matches while BM25 finds exact keyword matches across both original and rewritten queries.",
-                "Merged candidates are reranked with a cross-encoder when available, or a lexical fallback when not.",
-                "The LLM receives the top reranked document excerpts and is instructed to answer from partial relevant context instead of refusing too early.",
-                "Review the Answer and Sources sections. Citations use PDF Page, Slide, Sheet, Section, or file-only labels depending on available metadata.",
+                "Upload files in the sidebar, then explicitly select only the files you want available in Chat.",
+                "The agent classifies each request as analysis, summary, overview, question answering, table extraction, component extraction, diagram analysis, comparison, or search.",
+                "Use Analyze for full-document map-reduce summarization. Results are stored in doc_cache and reused for the same document text.",
+                "Use Summary for fast summary mode. It reuses cached analysis when available, otherwise creates and caches a concise summary.",
+                "Ask specific questions for hybrid RAG. Retrieval combines FAISS semantic search, BM25 keyword search, optional query rewrite, merge/deduplicate, and reranking.",
+                "Ask for tables, components, diagrams, comparisons, or searches to trigger dedicated extraction pipelines instead of generic chat.",
+                "Review Sources and Confidence. Sources show PDF pages, slides, sheets, sections, or file names when metadata is available.",
                 "Follow-up questions reuse memory for the same user and document selection.",
-                "Use find \"keyword\" or count \"phrase\" when you need deterministic text checks instead of generated answers."
+                "Use find \"keyword\" or count \"phrase\" when you need deterministic text evidence."
             ],
-            "outputs": ["Hybrid RAG answers", "Reranked source chunks", "PDF/slide/sheet/section citations", "Per-document memory", "Streaming-style response"],
+            "outputs": ["Cached full analysis", "Instant summary", "Hybrid RAG answers", "Citations", "Confidence", "Per-document memory"],
             "shortcuts": [
-                ("Analyze", "Run full document analysis over meaningful content sections."),
-                ("Summary", "Create a concise document summary."),
+                ("Analyze", "Run cached map-reduce full-document analysis."),
+                ("Summary", "Return fast cached summary mode."),
                 ("Overview", "Show a high-level explanation of the document."),
+                ("table data", "Extract clean table-like content."),
+                ("components", "Extract modules/components and roles."),
                 ("find \"keyword\"", "Locate exact occurrences in the selected files."),
                 ("count \"phrase\"", "Count exact matches in selected document text.")
             ]
         },
         "dashboard": {
             "title": "Dashboard Helper",
-            "text": "Use Dashboard to review indexed workspace memory, extracted entities, risk signals, and structured report metrics from HTML and Excel files.",
-            "hint": "Pick an HTML/XLSX/HTM report, confirm the selected file, then choose a chart type and consult memory, entities, risks, and report data together.",
+            "text": "Use Dashboard for structured HTML/HTM and XLSX report inspection with selectable chart types and focused source-file context.",
+            "hint": "Only files selected in the sidebar appear here. Pick a dashboard-compatible file, then choose the chart type, orientation, sheet/column, or report section you want to inspect.",
             "workflow": [
-                "Select a dashboard-compatible file: HTML, HTM, or XLSX.",
-                "Review the workspace memory snapshot and file context card for indexed entities and risk signals.",
-                "Choose charts, filter data, or export visual summaries for reporting or analysis."
+                "Select an HTML, HTM, or XLSX file from the sidebar Uploaded files list.",
+                "Choose the active dashboard file in this tab so Dashboard state stays independent from Chat, Compare, and CAPL.",
+                "For XLSX files, select a column and chart type to inspect value distributions.",
+                "For HTML/HTM reports, review extracted login/statistics/test-result sections and generated charts.",
+                "Use Reset to clear Dashboard-specific file and chart selections without clearing uploaded documents."
             ],
-            "outputs": ["Memory snapshot", "Extracted themes", "Entities", "Risk signals", "Interactive charts"],
+            "outputs": ["Excel distributions", "HTML report metrics", "Interactive charts", "Fixture summaries", "Dashboard file context"],
             "shortcuts": [
-                ("Select report", "Load the active report or workbook for analysis."),
+                ("Select report", "Load the active HTML/HTM/XLSX file for analysis."),
                 ("Choose chart", "Switch chart types or orientations."),
                 ("Reset", "Clear dashboard filters and selections.")
             ]
         },
         "compare": {
             "title": "Compare Helper",
-            "text": "Use Compare to discover exact inline diffs, side-by-side line changes, and word presence differences across files, with semantic summaries and Excel export.",
-            "hint": "Select at least two files, choose a comparison mode, run the analysis, then review the diff output and download the comparison workbook.",
+            "text": "Use Compare for file-to-file review: exact inline diffs, side-by-side line changes, word presence differences, semantic summaries, and Excel export.",
+            "hint": "Select at least two sidebar files, choose only the files you want in Compare, run the diff, then use Chat for explanation if you need a document-grounded comparison answer.",
             "workflow": [
                 "Select two or more files from the sidebar and confirm them in this tab.",
                 "Choose a comparison mode: exact inline diff, side-by-side line diff, or word presence summary.",
-                "Run the compare action, inspect the semantic summary, and download the generated Excel workbook."
+                "Run the compare action, inspect exact and semantic changes, and download the generated Excel workbook.",
+                "For natural-language comparison questions, switch to Chat and ask a comparison query so the agent routes it to COMPARISON."
             ],
             "outputs": ["Inline diffs", "Side-by-side line comparison", "Word presence summaries", "Semantic summary", "Excel export"],
             "shortcuts": [
@@ -7503,12 +8181,13 @@ def show_help_popup(tab_name, selected_files):
         },
         "capl": {
             "title": "CAPL Helper",
-            "text": "Use CAPL to analyze CANoe/CANalyzer code, detect syntax and logic issues, generate AI fixes, and run autonomous goal-driven agent workflows.",
-            "hint": "Select a .can or .txt CAPL file, run analysis, inspect live issues, apply AI fix suggestions, or execute an autonomous CAPL goal.",
+            "text": "Use CAPL to analyze CANoe/CANalyzer scripts, detect syntax and structure issues, review highlighted code, generate fixes, and run focused CAPL goals.",
+            "hint": "Select a .can or .txt CAPL source file. CAPL state is independent from Chat, but selected CAPL files can still be discussed in Chat when you need document-grounded explanation.",
             "workflow": [
                 "Select CAPL source files in the sidebar and choose one for analysis.",
                 "Run CAPL analysis to detect issues, review live preview output, and inspect the generated issue table.",
-                "Use the AI fix button for code suggestions or enter a goal to run the autonomous CAPL agents."
+                "Use the AI fix button for code suggestions or enter a goal to run the autonomous CAPL workflow.",
+                "Validate generated fixes in CANoe or the official CAPL toolchain before production use."
             ],
             "outputs": ["Issue diagnosis", "Live code preview", "Suggested fixes", "Agent run summary", "Run history"],
             "shortcuts": [
