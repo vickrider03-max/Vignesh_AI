@@ -4655,6 +4655,14 @@ def classify_technical_document_request(user_query):
     query = str(user_query or "").strip().lower()
     if not query:
         return "SHORT_SUMMARY"  # Default to SHORT_SUMMARY if unclear
+    compact_query = re.sub(r"[^a-z0-9]+", " ", query).strip()
+
+    if compact_query in {"analyze", "analyse", "analysis", "full analysis", "detailed analysis"}:
+        return "FULL_DOCUMENT_ANALYSIS"
+    if compact_query in {"summary", "summarize", "summarise", "short summary", "brief summary"}:
+        return "SHORT_SUMMARY"
+    if compact_query == "overview":
+        return "OVERVIEW"
 
     # Priority: Specific Component > Comparison > Full Analysis > Features > Workflow > Use Cases > Table Extraction > Image/Diagram > Report > Troubleshooting > Requirements > Overview > Short Summary
 
@@ -4770,16 +4778,13 @@ def build_overview_response(file_texts):
     """Provide high-level overview: What it is, Who it is for, What it is used for, Main concept, Main areas covered."""
     blocks = []
     for file_name, text in (file_texts or {}).items():
-        quality_ok, quality_msg = evaluate_context_quality(text)
-        if not quality_ok:
-            blocks.append(f"**{html.escape(file_name)}**\n\n{quality_msg}")
+        meaningful = get_meaningful_document_lines(text, min_len=18, max_len=260, limit=180)
+        if len(meaningful) < 3:
+            blocks.append(f"**{html.escape(file_name)}**\n\nInsufficient meaningful explanatory content found.")
             continue
 
-        lines = [normalize_extracted_line(line) for line in str(text or "").splitlines() if line.strip()]
-        meaningful = [line for line in lines if 15 <= len(line) <= 200]
-
         what_it_is = ""
-        for line in meaningful[:10]:
+        for line in meaningful[:30]:
             if any(term in line.lower() for term in ["is a", "provides", "enables", "supports", "system", "device", "module", "interface"]):
                 what_it_is = line
                 break
@@ -5122,30 +5127,26 @@ def build_full_document_summary_response(file_texts):
 
 def build_short_document_summary(file_name, file_bytes, text):
     raw_text = str(text or "")
-    lines = [normalize_extracted_line(line) for line in raw_text.splitlines() if line.strip()]
+    lines = get_meaningful_document_lines(raw_text, min_len=18, max_len=260, limit=180)
     if not lines:
         return f"No readable content found in {html.escape(file_name)}."
 
-    title = file_name
-    for line in lines[:20]:
-        if len(line.split()) > 4 and not re.search(r"\b(page|slide|table|metadata|error|text)\b", line.lower()):
-            title = line
-            break
+    title = get_document_display_title(file_name, raw_text)
 
     main_purpose = ""
     for line in lines:
         ll = line.lower()
-        if any(term in ll for term in ["purpose", "provides", "supports", "enables", "used for", "application", "helps", "allows", "designed"]):
+        if any(term in ll for term in ["purpose", "provides", "supports", "enables", "used for", "application", "allows", "designed", "test system", "assembled"]):
             main_purpose = line
             break
     if not main_purpose:
-        main_purpose = "This document provides a technical reference and practical guidance for the selected content."
+        main_purpose = lines[0]
 
     key_points = []
     seen = set()
     for line in lines:
         ll = line.lower()
-        if any(term in ll for term in ["purpose", "provides", "supports", "enables", "used for", "feature", "capability", "workflow", "process", "application", "important", "note"]):
+        if any(term in ll for term in ["provides", "supports", "enables", "used for", "feature", "capability", "function", "application", "module", "interface", "measurement", "simulation", "integration", "configuration", "test"]):
             cleaned = line.strip()
             if cleaned.lower() not in seen:
                 key_points.append(cleaned)
@@ -5155,9 +5156,15 @@ def build_short_document_summary(file_name, file_bytes, text):
     if not key_points:
         key_points = lines[:5]
 
-    key_takeaways = [html.escape(point) for point in key_points[:3]]
+    key_takeaways = []
+    if key_points:
+        key_takeaways.append("The document describes the selected system from a practical technical/product-information perspective.")
+        key_takeaways.append("The most useful content is in the meaningful feature, application, module, and usage sections rather than the cover pages or table of contents.")
+        if any("CANoe" in point or "ECU" in point for point in key_points):
+            key_takeaways.append("The document is relevant to ECU test setups, vehicle-network testing, and CANoe-integrated workflows.")
+    key_takeaways = key_takeaways[:3] or key_points[:3]
     key_points_html = "".join(f"<li>{html.escape(point)}</li>" for point in key_points[:5])
-    takeaways_html = "".join(f"<li>{point}</li>" for point in key_takeaways)
+    takeaways_html = "".join(f"<li>{html.escape(point)}</li>" for point in key_takeaways)
 
     return (
         f"<div style='margin-bottom:18px; line-height:1.5;'>"
@@ -5670,7 +5677,6 @@ def build_product_documentation_analysis(file_name, file_bytes, text):
     raw_text = str(text or "")
     lines = [normalize_extracted_line(line) for line in raw_text.splitlines() if line.strip()]
     lower_text = raw_text.lower()
-    words = re.findall(r"[A-Za-z][A-Za-z0-9_+\-/]{2,}", raw_text)
 
     ignored_prefixes = (
         "pdf metadata:", "document metadata:", "odt metadata:", "meta tags:", "total pages:",
@@ -5696,7 +5702,7 @@ def build_product_documentation_analysis(file_name, file_bytes, text):
             if not cleaned:
                 continue
             lowered = cleaned.lower()
-            if lowered.startswith(ignored_prefixes) or lowered.startswith(metadata_prefixes):
+            if lowered.startswith(ignored_prefixes) or lowered.startswith(metadata_prefixes) or is_document_noise_line(cleaned):
                 continue
             if len(cleaned) < 18 or len(cleaned) > 220:
                 continue
@@ -5714,6 +5720,8 @@ def build_product_documentation_analysis(file_name, file_bytes, text):
         return selected
 
     clean_lines = meaningful_lines()
+    clean_text_for_keywords = " ".join(clean_lines) or raw_text
+    words = re.findall(r"[A-Za-z][A-Za-z0-9_+\-/]{2,}", clean_text_for_keywords)
     keyword_counts = Counter(
         word.lower()
         for word in words
@@ -5997,6 +6005,67 @@ def normalize_extracted_line(line):
     line = re.sub(r"(\d)([A-Za-z])", r"\1 \2", line)
     line = re.sub(r"\s+", " ", line)
     return line.strip()
+
+
+def is_document_noise_line(line):
+    """Filter metadata, TOC entries, headers/footers, and extraction noise."""
+    cleaned = normalize_extracted_line(line)
+    lower = cleaned.lower().strip()
+    if not lower:
+        return True
+    metadata_prefixes = (
+        "pdf metadata:", "document metadata:", "creation date:", "creator:", "mod date:",
+        "producer:", "subject:", "title:", "total pages:", "pdfversion:", "author:",
+        "keywords:", "trapped:", "page ", "slide ", "sheet "
+    )
+    if lower.startswith(metadata_prefixes):
+        return True
+    if lower in {"table of contents", "contents", "index", "product information"}:
+        return True
+    if re.fullmatch(r"v\s*\d+(?:\.\d+)*\s*/\s*\d{4}", lower):
+        return True
+    if re.fullmatch(r"\d{1,3}", lower):
+        return True
+    if re.search(r"\.{5,}", cleaned):
+        return True
+    if re.fullmatch(r"\d+(?:\.\d+)*\s+.+\s+\d{1,3}", cleaned) and len(cleaned.split()) <= 12:
+        return True
+    if re.fullmatch(r"[\W_]+", cleaned):
+        return True
+    return False
+
+
+def get_document_display_title(file_name, text):
+    """Prefer document title metadata when it looks useful."""
+    raw_text = str(text or "")
+    title_match = re.search(r"^Title:\s*(.+)$", raw_text, re.IGNORECASE | re.MULTILINE)
+    if title_match:
+        title = normalize_extracted_line(title_match.group(1)).strip(" :-")
+        if title and not is_document_noise_line(f"Not metadata {title}") and len(title) <= 120:
+            return title
+    return os.path.splitext(str(file_name or "document"))[0]
+
+
+def get_meaningful_document_lines(text, min_len=18, max_len=260, limit=220):
+    """Return clean, unique content lines suitable for summaries and analysis."""
+    selected = []
+    seen = set()
+    for raw_line in str(text or "").splitlines():
+        line = normalize_extracted_line(raw_line)
+        line = re.sub(r"^>\s*", "", line).strip()
+        line = re.sub(r"^(?:page|slide|sheet)\s+\d+\s*(?:text|content)?\s*:?", "", line, flags=re.IGNORECASE).strip()
+        if is_document_noise_line(line):
+            continue
+        if len(line) < min_len or len(line) > max_len:
+            continue
+        key = line.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        selected.append(line)
+        if len(selected) >= limit:
+            break
+    return selected
 
 
 def collect_item_context_lines(text, item_name, window=4, limit=80):
@@ -7381,6 +7450,7 @@ def show_help_popup(tab_name, selected_files):
             "hint": "Select one or more files, ask a question, then verify the Sources list. The assistant should only say information is unavailable when the retrieved context is empty or completely unrelated.",
             "workflow": [
                 "Upload files, then explicitly select only the documents you want to chat with in this tab.",
+                "Use Analyze, Summary, or Overview as direct document-level commands. The app treats them as full-document analysis, short summary, and high-level overview.",
                 "Ask a natural-language question. The app normalizes every file into text plus metadata: file_name, file_type, page_or_sheet, section, document_id, and chunk index.",
                 "The LLM may rewrite the question into a compact search query while preserving the original intent.",
                 "Dense FAISS retrieval finds semantic matches while BM25 finds exact keyword matches across both original and rewritten queries.",
@@ -7392,8 +7462,9 @@ def show_help_popup(tab_name, selected_files):
             ],
             "outputs": ["Hybrid RAG answers", "Reranked source chunks", "PDF/slide/sheet/section citations", "Per-document memory", "Streaming-style response"],
             "shortcuts": [
-                ("What does this document say about ...?", "Ask a grounded question over selected documents."),
-                ("summarize the policy", "Create a cited summary from retrieved document pages."),
+                ("Analyze", "Run full document analysis over meaningful content sections."),
+                ("Summary", "Create a concise document summary."),
+                ("Overview", "Show a high-level explanation of the document."),
                 ("find \"keyword\"", "Locate exact occurrences in the selected files."),
                 ("count \"phrase\"", "Count exact matches in selected document text.")
             ]
