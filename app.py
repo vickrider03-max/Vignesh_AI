@@ -10,7 +10,7 @@ import functions as fn
 from functions import *
 from router import TAB_KEYS, TAB_OPTIONS, init_router, render_tab_router
 from state_firewall import init_state_firewall, tab_state_scope
-from tab_memory import clear_tab_uploads, get_tab_uploaded_files, init_tab_memory, remember_tab_upload, remove_tab_upload
+from tab_memory import clear_tab_uploads, init_tab_memory, remember_tab_upload, remove_tab_upload
 from tab_chat import render_chat_tab
 from tab_dashboard import render_dashboard_tab
 from tab_compare import render_compare_tab
@@ -780,6 +780,8 @@ for key, default_value in [
     ("messages", []),
     ("document_chat_memory", {}),
     ("document_chat_display", {}),
+    ("doc_cache", {}),
+    ("document_summary", {}),
     ("chatpdf_documents", {}),
     ("chatpdf_bm25_indexes", {}),
     ("welcome_shown", False),
@@ -934,6 +936,8 @@ if st.session_state.is_authenticated:
             st.session_state.messages = []
             st.session_state.document_chat_memory = {}
             st.session_state.document_chat_display = {}
+            st.session_state.doc_cache = {}
+            st.session_state.document_summary = {}
             st.session_state.chatpdf_documents = {}
             st.session_state.chatpdf_bm25_indexes = {}
             st.session_state.compare_file_selection = []
@@ -1124,7 +1128,7 @@ if st.session_state.get("is_authenticated"):
 # SESSION STATE INITIALIZATION
 # -------------------------------
 for key in ["uploaded_files", "selected_files", "file_texts", "excel_data_by_file", "vector_stores", "messages",
-            "ask_messages", "extracted_images"]:
+            "ask_messages", "extracted_images", "doc_cache", "document_summary"]:
     if key not in st.session_state:
         st.session_state[key] = [] if key in ["uploaded_files", "selected_files", "messages", "ask_messages"] else {}
 
@@ -1508,7 +1512,6 @@ with st.sidebar:
             )
         
         current_upload_tab = TAB_KEYS.get(st.session_state.get("active_main_tab"), "chat")
-        current_tab_uploads = get_tab_uploaded_files(current_upload_tab)
 
         st.header("Upload Documents")
         st.caption(f"Upload bucket: {current_upload_tab.title()} tab")
@@ -1566,21 +1569,47 @@ with st.sidebar:
                     st.success(f"✅ File persisted for the {current_upload_tab.title()} tab.")
 
         st.markdown("---")
-        st.markdown(f"### {current_upload_tab.title()} tab files")
-        if current_tab_uploads:
-            for file_dict in current_tab_uploads:
-                status_label = file_dict.get("status", "ready")
-                st.caption(f"{file_dict.get('name', 'Unnamed file')} - {status_label}")
-        else:
-            st.caption("No files uploaded for this tab yet.")
-
-        st.markdown("---")
         st.markdown("### Uploaded files")
+
+        def remove_single_uploaded_file(deleted_name):
+            st.session_state.uploaded_files = [
+                file_item
+                for file_item in st.session_state.get("uploaded_files", [])
+                if file_item.get("name") != deleted_name
+            ]
+            for tab_name in ["chat", "dashboard", "compare", "capl"]:
+                remove_tab_upload(tab_name, deleted_name)
+            for selection_key in ["selected_files", "chat_file_selection", "compare_file_selection"]:
+                current_selection = st.session_state.get(selection_key, [])
+                if isinstance(current_selection, list):
+                    st.session_state[selection_key] = [
+                        file_name for file_name in current_selection
+                        if file_name != deleted_name
+                    ]
+            if isinstance(st.session_state.get("file_texts"), dict):
+                st.session_state.file_texts.pop(deleted_name, None)
+            if isinstance(st.session_state.get("excel_data_by_file"), dict):
+                st.session_state.excel_data_by_file.pop(deleted_name, None)
+            if isinstance(st.session_state.get("document_summary"), dict):
+                st.session_state.document_summary.pop(deleted_name, None)
+            if isinstance(st.session_state.get("doc_cache"), dict):
+                st.session_state.doc_cache.pop(deleted_name, None)
+            for cache_key in ["vector_stores", "chatpdf_documents", "chatpdf_bm25_indexes"]:
+                if isinstance(st.session_state.get(cache_key), dict):
+                    st.session_state[cache_key].clear()
+            if st.session_state.get("file_dropdown") == deleted_name:
+                st.session_state.file_dropdown = "--Select File--"
+            if st.session_state.get("selected_capl_file") == deleted_name:
+                st.session_state.selected_capl_file = "--Select CAPL file--"
+            st.session_state.file_uploader_key = int(st.session_state.get("file_uploader_key", 0)) + 1
         
-        for idx, file_dict in enumerate(st.session_state.uploaded_files[:]):
+        for file_dict in list(st.session_state.get("uploaded_files", [])):
+            file_name = file_dict.get("name")
+            if not file_name:
+                continue
+            file_key = hashlib.sha1(file_name.encode("utf-8")).hexdigest()[:12]
             cols = st.columns([0.56, 0.27, 0.17], vertical_alignment="center")
             with cols[0]:
-                file_name = file_dict["name"]
                 file_status = file_dict.get("status", "ready")
                 if file_status == "ready":
                     status_label = "ready"
@@ -1593,7 +1622,7 @@ with st.sidebar:
                 button_label = file_label if not is_selected else f"Selected: {file_label}"
                 if st.button(
                     button_label,
-                    key=f"select_file_{idx}",
+                    key=f"select_file_{file_key}",
                     help=f"Click to {'remove' if is_selected else 'add'} {file_name}",
                     use_container_width=True,
                     type="primary" if is_selected else "secondary",
@@ -1615,33 +1644,15 @@ with st.sidebar:
                     disabled=preview_url is None,
                 )
             with cols[2]:
-                if st.button("🗑️", key=f"del_file_{idx}", help=f"Delete {file_name}", use_container_width=True, type="tertiary"):
-                    deleted_name = file_name
-                    st.session_state.uploaded_files = [f for f in st.session_state.uploaded_files if f["name"] != deleted_name]
-                    for tab_name in ["chat", "dashboard", "compare", "capl"]:
-                        remove_tab_upload(tab_name, deleted_name)
-                    if deleted_name in st.session_state.selected_files:
-                        st.session_state.selected_files.remove(deleted_name)
-                    st.session_state.chat_file_selection = [
-                        f for f in st.session_state.chat_file_selection
-                        if f != deleted_name
-                    ]
-                    st.session_state.compare_file_selection = [
-                        f for f in st.session_state.compare_file_selection
-                        if f != deleted_name
-                    ]
-                    if st.session_state.file_dropdown == deleted_name:
-                        st.session_state.file_dropdown = "--Select File--"
-                    if st.session_state.selected_capl_file == deleted_name:
-                        st.session_state.selected_capl_file = "--Select CAPL file--"
-                    st.session_state.file_uploader_key = int(st.session_state.get("file_uploader_key", 0)) + 1
-                    st.success(f"✅ {deleted_name} removed from upload list and tab file state")
+                if st.button("🗑️", key=f"del_file_{file_key}", help=f"Delete {file_name}", use_container_width=True, type="tertiary"):
+                    remove_single_uploaded_file(file_name)
+                    st.success(f"✅ Removed only {file_name}.")
                     st.rerun()
         st.markdown("*Selected files above are available across all tabs.*")
         st.markdown("---")
         if st.button("Clear All Files"):
             for key in ["uploaded_files", "selected_files", "file_texts", "excel_data_by_file", "vector_stores",
-                        "messages", "chatpdf_documents", "chatpdf_bm25_indexes"]:
+                        "messages", "chatpdf_documents", "chatpdf_bm25_indexes", "doc_cache", "document_summary"]:
                 st.session_state[key].clear()
             for tab_name in ["chat", "dashboard", "compare", "capl"]:
                 clear_tab_uploads(tab_name)
