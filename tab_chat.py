@@ -343,15 +343,33 @@ def render_chat_tab():
                         document_profile = detect_document_chat_profile(chat_files, combined_text)
                         is_count_query = any(t in user_input_lower for t in ["how many", "count", "number of", "occurrences"])
                         is_find_query = any(term in user_input_lower for term in ["find", "search", "locate"]) or "highlight" in user_input_lower
+                        citation_docs = []
+                        explicit_full_analysis = bool(re.search(r"\b(analy[sz]e|analysis|full analysis|detailed analysis|complete analysis|analyze document|analyse document|explain document)\b", user_input_lower))
+                        explicit_summary = bool(re.search(r"\b(summary|summari[sz]e|short summary|brief summary|main points|key points|recap)\b", user_input_lower))
+                        if explicit_full_analysis:
+                            technical_request_type = "FULL_DOCUMENT_ANALYSIS"
+                        elif explicit_summary:
+                            technical_request_type = "SHORT_SUMMARY"
+                        explicit_document_action = (
+                            explicit_full_analysis
+                            or explicit_summary
+                            or technical_request_type in {
+                                "OVERVIEW",
+                                "FEATURES_ONLY",
+                                "PIN_DIAGRAMS_CONNECTORS_TABLES",
+                                "WORKFLOW_OR_PROCESS",
+                                "USE_CASES_APPLICATIONS",
+                                "TABLE_EXTRACTION",
+                                "IMAGE_OR_DIAGRAM_EXPLANATION",
+                                "DOWNLOADABLE_REPORT",
+                                "SPECIFIC_COMPONENT_DETAILS",
+                                "COMPARISON",
+                                "TROUBLESHOOTING_OR_LIMITATIONS",
+                                "REQUIREMENTS_OR_SPECIFICATION_EXTRACTION",
+                            }
+                        )
                         # Word count queries
-                        if not is_count_query and not is_find_query:
-                            response, citation_docs = answer_chatpdf_question(
-                                processing_input,
-                                chat_files,
-                                user_id=user_id,
-                                top_k=7,
-                            )
-                        elif is_count_query:
+                        if is_count_query:
                             match = re.search(r"'(.*?)'|\"(.*?)\"", processing_input)
                             if match:
                                 word = match.group(1) or match.group(2)
@@ -418,11 +436,15 @@ def render_chat_tab():
                             response = build_requirements_or_specification_extraction_response(selected_file_texts)
                         elif chat_intent == "EXTRACTION":
                             response = build_extraction_response_for_query(processing_input, selected_file_texts)
-                        elif chat_intent == "UNKNOWN":
-                            response = (
-                                "What exactly should I do with the selected document: extract specific data, "
-                                "summarize it, compare it, or analyze/explain something?"
+                        elif not explicit_document_action:
+                            response, citation_docs = answer_chatpdf_question(
+                                processing_input,
+                                chat_files,
+                                user_id=user_id,
+                                top_k=7,
                             )
+                        elif chat_intent == "UNKNOWN":
+                            response = build_short_summary_response(selected_file_texts)
                         else:
                             combined_vs = get_workspace_vector_store(chat_files) or get_combined_vector_store(chat_files)
                             retriever = combined_vs.as_retriever(search_kwargs={"k": 3})
@@ -795,6 +817,24 @@ def render_chat_tab():
                         response = str(response or "").strip()
                         if not response:
                             response = "Unable to generate a response. Please try with a different query or ensure files are properly loaded."
+                        if explicit_document_action and "Sources:" not in response:
+                            source_query = processing_input
+                            if technical_request_type in {"FULL_DOCUMENT_ANALYSIS", "SHORT_SUMMARY", "OVERVIEW"}:
+                                source_query = (
+                                    "introduction overview purpose main features capabilities architecture components "
+                                    "workflow applications use cases technical details key takeaways"
+                                )
+                            citation_docs = hybrid_chatpdf_retrieve(
+                                processing_input,
+                                chat_files,
+                                user_id=user_id,
+                                final_k=7,
+                                search_query=source_query,
+                            )
+                            sources_text = format_chatpdf_sources(citation_docs) if citation_docs else "\n".join(
+                                f"- {file_name}" for file_name in chat_files
+                            )
+                            response = response.rstrip() + "\n\nSources:\n" + sources_text
                         
                         current_chat_messages.append({"role": "assistant", "content": response})
                         st.session_state.document_chat_display[chat_display_key] = current_chat_messages[-100:]
