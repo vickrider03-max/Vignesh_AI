@@ -268,6 +268,7 @@ def render_chat_tab():
             st.session_state.chat_file_selection = []
             st.session_state.chat_summary_downloads = empty_chat_summary_downloads()
             st.session_state.messages = []
+            st.session_state.document_chat_display = {}
             st.session_state.input_prefill = ""
             st.session_state.chat_next_suggestions = []
             st.session_state.chat_next_suggestions_for = None
@@ -344,13 +345,28 @@ def render_chat_tab():
                         is_count_query = any(t in user_input_lower for t in ["how many", "count", "number of", "occurrences"])
                         is_find_query = any(term in user_input_lower for term in ["find", "search", "locate"]) or "highlight" in user_input_lower
                         citation_docs = []
+                        simple_document_command = re.sub(r"[^a-z0-9]+", " ", user_input_lower).strip()
+                        exact_document_action = simple_document_command in {
+                            "analyze",
+                            "analyse",
+                            "analysis",
+                            "summary",
+                            "summarize",
+                            "summarise",
+                            "overview",
+                        }
                         explicit_full_analysis = bool(re.search(r"\b(analy[sz]e|analysis|full analysis|detailed analysis|complete analysis|analyze document|analyse document|explain document)\b", user_input_lower))
                         explicit_summary = bool(re.search(r"\b(summary|summari[sz]e|short summary|brief summary|main points|key points|recap)\b", user_input_lower))
-                        if explicit_full_analysis:
+                        if simple_document_command in {"analyze", "analyse", "analysis"} or explicit_full_analysis:
                             technical_request_type = "FULL_DOCUMENT_ANALYSIS"
-                        elif explicit_summary:
+                        elif simple_document_command in {"summary", "summarize", "summarise"} or explicit_summary:
                             technical_request_type = "SHORT_SUMMARY"
+                        elif simple_document_command == "overview":
+                            technical_request_type = "OVERVIEW"
                         explicit_document_action = (
+                            exact_document_action
+                            or simple_document_command in {"full analysis", "detailed analysis", "short summary", "brief summary"}
+                            or
                             explicit_full_analysis
                             or explicit_summary
                             or technical_request_type in {
@@ -369,7 +385,13 @@ def render_chat_tab():
                             }
                         )
                         # Word count queries
-                        if is_count_query:
+                        if exact_document_action and technical_request_type == "FULL_DOCUMENT_ANALYSIS":
+                            response = build_full_document_summary_response(selected_file_texts)
+                        elif exact_document_action and technical_request_type == "SHORT_SUMMARY":
+                            response = build_short_summary_response(selected_file_texts)
+                        elif exact_document_action and technical_request_type == "OVERVIEW":
+                            response = build_overview_response(selected_file_texts)
+                        elif is_count_query:
                             match = re.search(r"'(.*?)'|\"(.*?)\"", processing_input)
                             if match:
                                 word = match.group(1) or match.group(2)
