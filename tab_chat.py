@@ -260,6 +260,30 @@ def render_chat_tab():
         else:
             st.markdown(content)
 
+    def purge_legacy_unavailable_document_actions(messages):
+        """Remove stale Analyze/Summary/Overview answers produced by the old RAG route."""
+        cleaned_messages = []
+        skip_next = False
+        for index, message in enumerate(messages or []):
+            if skip_next:
+                skip_next = False
+                continue
+            current = get_valid_chat_message(message)
+            next_message = get_valid_chat_message(messages[index + 1]) if index + 1 < len(messages or []) else None
+            if (
+                current
+                and next_message
+                and current["role"] == "user"
+                and next_message["role"] == "assistant"
+                and re.sub(r"[^a-z0-9]+", " ", current["content"].lower()).strip()
+                in {"analyze", "analyse", "analysis", "summary", "summarize", "summarise", "overview"}
+                and "this information is not available in the uploaded documents" in next_message["content"].lower()
+            ):
+                skip_next = True
+                continue
+            cleaned_messages.append(message)
+        return cleaned_messages
+
     chat_header_col, chat_reset_col = st.columns([8, 1])
     with chat_header_col:
         st.subheader("Chat with Selected Documents")
@@ -276,9 +300,8 @@ def render_chat_tab():
             st.rerun()
 
     st.info(
-        "Choose files in the sidebar to make them available here. Then select only the files you want for Chat in this tab.")
-    chat_tab_file_names = [file_dict.get("name") for file_dict in get_tab_uploaded_files("chat") if file_dict.get("name")]
-    available_chat_files = list(dict.fromkeys(chat_tab_file_names + st.session_state.selected_files))
+        "Select files from the sidebar Uploaded files list first. Only selected files appear here for Chat.")
+    available_chat_files = list(dict.fromkeys(st.session_state.selected_files))
 
     show_current_sidebar_selection()
     render_file_context_card("Chat File Context", available_chat_files, st.session_state.chat_file_selection)
@@ -305,6 +328,11 @@ def render_chat_tab():
             if "document_chat_display" not in st.session_state or not isinstance(st.session_state.document_chat_display, dict):
                 st.session_state.document_chat_display = {}
             current_chat_messages = st.session_state.document_chat_display.setdefault(chat_display_key, [])
+            cleaned_chat_messages = purge_legacy_unavailable_document_actions(current_chat_messages)
+            if len(cleaned_chat_messages) != len(current_chat_messages):
+                current_chat_messages = cleaned_chat_messages
+                st.session_state.document_chat_display[chat_display_key] = current_chat_messages
+                st.session_state.messages = current_chat_messages
             
             # Check if files are actually loaded
             if not combined_text or not any(selected_file_texts.values()):
