@@ -414,9 +414,19 @@ def render_chat_tab():
                         )
                         # Word count queries
                         if exact_document_action and technical_request_type == "FULL_DOCUMENT_ANALYSIS":
-                            response = build_full_document_summary_response(selected_file_texts)
+                            response, citation_docs = handle_document_chat_query(
+                                processing_input,
+                                selected_file_texts,
+                                file_names=chat_files,
+                                user_id=user_id,
+                            )
                         elif exact_document_action and technical_request_type == "SHORT_SUMMARY":
-                            response = build_short_summary_response(selected_file_texts)
+                            response, citation_docs = handle_document_chat_query(
+                                processing_input,
+                                selected_file_texts,
+                                file_names=chat_files,
+                                user_id=user_id,
+                            )
                         elif exact_document_action and technical_request_type == "OVERVIEW":
                             response = build_overview_response(selected_file_texts)
                         elif is_count_query:
@@ -505,6 +515,7 @@ def render_chat_tab():
                             )
                             prompt = ChatPromptTemplate.from_messages([
                                 ("system",
+                                 MASTER_SYSTEM_PROMPT + "\n\n"
                                  "You are an Enterprise Document Intelligence Engine.\n\n"
                                  "You analyze ANY uploaded document type, including PDF, DOCX, DOC, PPTX, PPT, XLSX, XLS, CSV, TXT, HTML, Markdown, RTF, ODT, images, technical manuals, reports, specifications, presentations, spreadsheets, and mixed-format documents.\n\n"
                                  "You must answer based on the USER'S EXACT REQUEST, not by summarizing the entire document every time.\n\n"
@@ -885,6 +896,12 @@ def render_chat_tab():
                                 f"- {file_name}" for file_name in chat_files
                             )
                             response = response.rstrip() + "\n\nSources:\n" + sources_text
+
+                        response = append_confidence_to_response(
+                            response,
+                            file_texts=selected_file_texts,
+                            citation_docs=citation_docs,
+                        )
                         
                         current_chat_messages.append({"role": "assistant", "content": response})
                         st.session_state.document_chat_display[chat_display_key] = current_chat_messages[-100:]
