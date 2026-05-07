@@ -139,37 +139,30 @@ DOCUMENT_INTELLIGENCE_PROMPT_BY_INTENT = {
     "themes_request": "Explain recurring themes and how they connect across the document.",
 }
 
-NATURAL_DOCUMENT_RESPONSE_PROMPT = """Your job is to produce natural, human-like, insightful document answers.
+NATURAL_DOCUMENT_RESPONSE_PROMPT = """You are a Document Intelligence AI.
 
-Do not expose internal extraction systems or diagnostics. Never show OCR artifacts, extracted heading dumps,
-keyword lists, semantic-signal language, metadata objects, retrieval mechanics, chunking details, pipeline names,
-raw extraction artifacts, page formatting noise, repeated labels, low-level parsing details, or raw context blocks.
-The user cares about the document, not the machinery behind the answer.
-Never turn extracted entities, figure labels, module labels, table fields, captions, or repeated section titles
-into insights. Avoid claims that a term is central unless the surrounding document meaning clearly supports that conclusion.
+Focus only on the meaning and intent of the selected document, regardless of whether it came from PDF, Word,
+PowerPoint, Excel, CSV, text, HTML, Markdown, RTF, ODT, image-derived text, or a mixed-format upload.
 
-Use retrieved content only as supporting evidence for reasoning and synthesis. Explain the document clearly,
-connect ideas across sections, and write like an expert analyst.
+Ignore OCR noise, broken text, table-of-contents entries, repeated headings, page structure, metadata, extraction
+artifacts, isolated technical fields, and figure/module/channel labels unless the surrounding context makes them
+meaningful. Never treat repetition or keyword frequency as importance.
 
-Before answering, reason about the document's real meaning:
-1. What is it fundamentally about?
-2. What problem does it solve?
-3. Which systems or components are central?
-4. What technical concepts, workflows, applications, architecture, and takeaways matter most?
+Your objective is to identify what the document is fundamentally about, explain the purpose of the
+system/product/process, describe how it works conceptually, and summarize key components based on meaning rather
+than raw labels.
 
-Prioritize document purpose and semantic meaning over keyword frequency. Do not assume repeated table terms
-such as temperature range, power consumption, weight, voltage, dimensions, min/max values, or other isolated
-specifications are the document's main themes unless the document is actually about those topics.
+Do not output raw extracted text, keyword lists, entity dumps, page-by-page breakdowns, formatting artifacts, or
+statements such as "important because it appears frequently." Write in clear, natural technical English, like a
+senior domain expert who understands the system.
 
-Intent behavior:
-- Summarize: provide a concise executive summary with purpose, key systems/components, major capabilities, and practical significance.
-- Analyze: provide deeper technical reasoning, architecture insights, design philosophy, strengths, limitations, relationships, engineering implications, and practical applications.
-- Overview: provide a broad, accessible explanation of what the system/document is, how it is organized, what it covers, and who it is for.
-- Factual questions: answer directly and precisely from the document.
+Mode behavior:
+- If the user asks for SUMMARY, give a short explanation of what the document is and what it does.
+- If the user asks for ANALYZE, explain architecture, system behavior, and relationships between components, with a focus on how and why the system works.
+- If the user asks for OVERVIEW, give a simple high-level explanation of the system and its purpose.
+- For specific questions, answer directly from meaningful context and mark missing details as "Not specified in the provided context."
 
-Never concatenate headings into a summary. Never make keyword lists the primary answer. Never dump raw extracted
-text unless the user explicitly asks for exact text, search matches, or table rows. If evidence is partial, state
-the limitation briefly and still provide the best grounded synthesis."""
+Use headings only when they help the reader. Avoid robotic templates, raw parser language, and unnecessary bullet spam."""
 
 LOW_SIGNAL_THEME_TERMS = {
     "temperature", "range", "temperature range", "power", "power consumption", "consumption",
@@ -388,7 +381,10 @@ def extract_architecture_components(pages, entities=None, limit=12):
             for token in re.findall(r"\b[A-Za-z][A-Za-z0-9_/-]{2,}\b", sentence):
                 clean_token = token.strip(".,:;()[]")
                 lower_token = clean_token.lower()
-                if lower_token in SUMMARY_STOPWORDS:
+                if lower_token in SUMMARY_STOPWORDS or lower_token in {
+                    "this", "that", "these", "those", "document", "documents",
+                    "engineer", "engineers", "user", "users", "reader", "readers",
+                }:
                     continue
                 if lower_token in component_terms or clean_token.isupper() or re.search(r"[A-Z].*[a-z]|[0-9]", clean_token):
                     candidates[clean_token[:70]] += 1
@@ -474,28 +470,28 @@ def build_document_intelligence_prompt(query, document_intent, context, memory="
     )
     format_rules = {
         "summarization_request": (
-            "Output format: Executive Summary, Why It Matters, Key Insights, Key Takeaways. "
-            "Keep it concise and synthesized."
+            "Output format: a short expert summary in natural paragraphs. Explain what the document is, "
+            "what it does, and the main takeaway. Use only a few bullets if they add clarity."
         ),
         "overview_request": (
-            "Output format: What this is, Who/what it is for, Main idea, What it covers. "
-            "Use plain human-friendly language."
+            "Output format: simple high-level overview of the system/product/process, its purpose, "
+            "who or what it serves, and the main areas covered."
         ),
         "analysis_request": (
-            "Output format: Executive readout, Architecture/structure, Key concepts and relationships, "
-            "Strengths, Limitations or risks, Actionable insights, Takeaways."
+            "Output format: expert analysis of what the document is about, how the system works conceptually, "
+            "the architecture/behavior, meaningful component relationships, constraints, and practical takeaways."
         ),
         "technical_overview": (
             "Output format: Technical purpose, Components/interfaces, Workflow/data flow, Tables/diagrams, "
             "Constraints, Engineering takeaways."
         ),
         "themes_request": (
-            "Output format: Main themes table, How themes connect, Evidence by section, Takeaways."
+            "Output format: explain the main ideas and how they connect. Do not build a keyword-frequency theme list."
         ),
         "comparison_request": (
             "Output format: Comparison table, Similarities, Differences, Best-fit interpretation, Takeaway."
         ),
-        "factual_query": "Output format: Direct answer first, then supporting evidence and sources.",
+        "factual_query": "Output format: direct answer first, then concise supporting explanation and sources.",
     }.get(document_intent, "Output format: structured professional answer with sources.")
     return f"""You are an advanced document intelligence assistant.
 
@@ -510,9 +506,10 @@ Rules:
 - Broad requests require synthesis across the available document understanding and representative passages.
 - Do not dump metadata, keyword lists, OCR fragments, raw headings, source headers, or internal context labels.
 - Do not treat repeated words, table fields, or isolated specifications as primary themes by default.
+- Do not say a concept is important because it appears frequently.
 - For repeated specs such as temperature, weight, power, voltage, dimensions, and min/max fields, use them as supporting details unless the document is truly about those measurements.
 - Connect ideas across sections and explain meaning in natural language.
-- Prefer concise analyst prose over robotic templates; use headings only when they improve readability.
+- Prefer concise expert prose over robotic templates; use headings only when they improve readability.
 - Avoid generic rejection when partial evidence exists; provide best-effort, uncertainty-aware analysis.
 - Clearly say "Not specified in the provided context" only for missing details.
 - Cite relevant pages, sections, sheets, tables, or diagram references.
@@ -695,35 +692,23 @@ def synthesize_document_response(query, document_intent, brains, docs=None, sour
 
     if document_intent == "summarization_request":
         response_parts = [
-            "Answer:",
-            "**Executive Summary**",
-            core_purpose,
+            "**Summary**",
+            core_purpose[:900],
         ]
-        component_context = _component_context_text(all_components)
-        if component_context:
-            response_parts.append("**System Context**\n" + component_context)
-        if insight_lines:
-            response_parts.append("**Key Insights**\n" + "\n".join(f"- {item}" for item in insight_lines[:4]))
-        response_parts.append(
-            "**Key Takeaways**\n"
-            + "\n".join(f"- {item}" for item in (
-                insight_lines[:3] or ["Use this as a quick orientation before asking for details on a specific area."]
-            ))
-        )
+        if technical_readout and technical_readout != core_purpose:
+            response_parts.append("**What It Does**\n" + technical_readout[:650])
     elif document_intent == "overview_request":
         response_parts = [
-            "Answer:",
-            "**What This Document Is About**",
+            "**Overview**",
             core_purpose[:1100],
-            "**Quick Orientation**",
+            "**Simple Orientation**",
             "\n".join(f"- {item}" for item in (insight_lines[:4] or [focus_sentence])),
         ]
         if section_lines:
-            response_parts.append("**Useful Context**\n" + "\n".join(section_lines[:4]))
+            response_parts.append("**What It Covers**\n" + "\n".join(section_lines[:4]))
     elif document_intent in {"technical_overview", "themes_request"}:
-        heading = "**Technical Overview**" if document_intent == "technical_overview" else "**Main Themes**"
+        heading = "**Technical Overview**" if document_intent == "technical_overview" else "**Main Ideas**"
         response_parts = [
-            "Answer:",
             heading,
             technical_readout,
         ]
@@ -736,37 +721,35 @@ def synthesize_document_response(query, document_intent, brains, docs=None, sour
             response_parts.append("**What The Pattern Means**\n" + "\n".join(f"- {item}" for item in insight_lines[:5]))
     elif document_intent == "analysis_request":
         response_parts = [
-            "Answer:",
-            "**Executive Readout**",
+            "**What The Document Is About**",
             core_purpose[:1200],
-            "**Deep Analysis**",
+            "**How The System Works Conceptually**",
             focus_sentence,
         ]
         component_context = _component_context_text(all_components)
         if component_context:
-            response_parts.append("**Architecture / Structure**\n" + component_context)
+            response_parts.append("**Architecture And Meaningful Components**\n" + component_context)
         if relationships:
-            response_parts.append("**Conceptual Relationships**\n" + "\n".join(f"- {item}" for item in relationships[:5]))
+            response_parts.append("**System Behavior And Relationships**\n" + "\n".join(f"- {item}" for item in relationships[:5]))
         response_parts.append(
-            "**Strengths / Useful Insights**\n"
+            "**Expert Interpretation**\n"
             + "\n".join(f"- {item}" for item in (insight_lines[:4] or [focus_sentence]))
         )
         response_parts.append(
-            "**Limitations / Uncertainty**\n"
+            "**Limits Of The Available Context**\n"
             "- Details that are only visible inside images or diagrams may be incomplete.\n"
             "- Exact technical values are not inferred unless present in the document context.\n"
             "- Repeated specification fields are treated as supporting detail, not automatically as the document's purpose."
         )
         response_parts.append(
-            "**Actionable Takeaways**\n"
+            "**Practical Takeaways**\n"
             + "\n".join(f"- {item}" for item in (
                 insight_lines[:3] or ["Ask for a component, workflow, table, or limitation to go deeper."]
             ))
         )
     elif document_intent == "comparison_request":
         response_parts = [
-            "Answer:",
-            "**Comparison Readout**",
+            "**Comparison**",
             "| Area | Evidence / Interpretation |",
             "|---|---|",
         ]
@@ -776,7 +759,6 @@ def synthesize_document_response(query, document_intent, brains, docs=None, sour
             response_parts.append("**Interpretation**\n" + "\n".join(f"- {item}" for item in _natural_insight_lines(all_concepts[:6], limit=6)))
     else:
         response_parts = [
-            "Answer:",
             " ".join(all_summaries or all_technical)[:1200] or focus_sentence,
         ]
         if evidence_lines:
@@ -1440,69 +1422,404 @@ query_params = {}
 # helpers, CAPL analysis engine, and shared UI-adjacent helpers.
 # ==============================
 def get_file_hash(file_bytes):
-    """Generate SHA256 hash of file contents for change detection"""
-    return hashlib.sha256(file_bytes).hexdigest()
+    """Stable hash for uploaded bytes."""
+    return hashlib.sha1(file_bytes or b"").hexdigest()
 
 
-def file_has_changed(file_name, file_bytes):
-    """Check if file has been modified since last processing"""
-    new_hash = get_file_hash(file_bytes)
-    cache_key = f"{file_name}_hash"
-    old_hash = FILE_HASH_CACHE.get(cache_key)
-    FILE_HASH_CACHE[cache_key] = new_hash
-    return old_hash != new_hash
+def update_uploaded_file_status(file_name, status):
+    """Keep the sidebar upload card status in sync with processing."""
+    for file_info in st.session_state.get("uploaded_files", []):
+        if file_info.get("name") == file_name:
+            file_info["status"] = status
+            break
+
+
+def detect_file_type(filename):
+    """Normalize file extensions into the document families used by chat."""
+    ext = os.path.splitext(str(filename or "").lower())[1]
+    if ext == ".pdf":
+        return "pdf"
+    if ext in {".doc", ".docx", ".odt", ".rtf", ".pages"}:
+        return "word"
+    if ext in {".ppt", ".pptx"}:
+        return "ppt"
+    if ext in {".xls", ".xlsx"}:
+        return "excel"
+    if ext == ".csv":
+        return "csv"
+    if ext in {".html", ".htm"}:
+        return "html"
+    if ext in {".md", ".markdown"}:
+        return "markdown"
+    if ext in {".txt", ".log", ".capl", ".can"}:
+        return "text"
+    if ext in {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}:
+        return "image"
+    return "document"
+
+
+def get_chatpdf_file_type(file_name):
+    return detect_file_type(file_name)
+
+
+def normalize_brain_cell(value):
+    if value is None:
+        return ""
+    try:
+        if isinstance(value, float) and math.isnan(value):
+            return ""
+    except Exception:
+        pass
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value)
+
+
+def _read_uploaded_bytes(file):
+    """Read bytes from Streamlit uploads, BytesIO objects, or raw bytes."""
+    if file is None:
+        return b""
+    if isinstance(file, bytes):
+        return file
+    if isinstance(file, bytearray):
+        return bytes(file)
+    if hasattr(file, "getvalue"):
+        try:
+            return file.getvalue()
+        except Exception:
+            pass
+    if hasattr(file, "read"):
+        try:
+            position = file.tell() if hasattr(file, "tell") else None
+        except Exception:
+            position = None
+        try:
+            data = file.read()
+            if position is not None and hasattr(file, "seek"):
+                file.seek(position)
+            return data or b""
+        except Exception:
+            return b""
+    return b""
+
+
+def _decode_bytes(file_bytes):
+    for encoding in ("utf-8", "utf-16", "latin-1"):
+        try:
+            return (file_bytes or b"").decode(encoding, errors="ignore")
+        except Exception:
+            continue
+    return str(file_bytes or b"")
+
+
+def clean_text(text):
+    text = str(text or "")
+    text = text.replace("\x00", " ")
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def smart_chunk(text, chunk_size=FILE_BRAIN_PAGE_CONTEXT_CHARS):
+    """Split text into readable chunks without depending on a vector store."""
+    words = re.findall(r"\S+", str(text or ""))
+    if not words:
+        return []
+    chunks = []
+    current = []
+    current_len = 0
+    for word in words:
+        if current and current_len + len(word) + 1 > chunk_size:
+            chunks.append(" ".join(current))
+            current = []
+            current_len = 0
+        current.append(word)
+        current_len += len(word) + 1
+    if current:
+        chunks.append(" ".join(current))
+    return chunks
+
+
+def _extract_pdf_text(file_bytes):
+    lines = []
+    try:
+        with pdfplumber.open(BytesIO(file_bytes or b"")) as pdf:
+            lines.append(f"Total Pages: {len(pdf.pages)}")
+            for page_index, page in enumerate(pdf.pages, start=1):
+                page_text = page.extract_text() or ""
+                if page_text.strip():
+                    lines.append(f"Page {page_index} Text:\n{page_text}")
+                try:
+                    for table_index, table in enumerate(page.extract_tables() or [], start=1):
+                        table_rows = [
+                            " | ".join(str(cell or "").strip() for cell in row)
+                            for row in (table or [])[:60]
+                            if row
+                        ]
+                        if table_rows:
+                            lines.append(f"Page {page_index} Table {table_index}:\n" + "\n".join(table_rows))
+                except Exception:
+                    pass
+    except Exception as exc:
+        lines.append(f"PDF extraction failed: {str(exc)[:160]}")
+    return clean_text("\n\n".join(lines))
+
+
+def _extract_word_text(file_name, file_bytes):
+    ext = os.path.splitext(str(file_name or "").lower())[1]
+    if ext == ".docx":
+        try:
+            document = docx.Document(BytesIO(file_bytes or b""))
+            lines = []
+            for paragraph in document.paragraphs:
+                if paragraph.text and paragraph.text.strip():
+                    lines.append(paragraph.text.strip())
+            for table_index, table in enumerate(document.tables, start=1):
+                table_rows = []
+                for row in table.rows[:80]:
+                    table_rows.append(" | ".join(cell.text.strip() for cell in row.cells))
+                if table_rows:
+                    lines.append(f"Table {table_index}:\n" + "\n".join(table_rows))
+            return clean_text("\n".join(lines))
+        except Exception as exc:
+            return f"DOCX extraction failed: {str(exc)[:160]}"
+    if ext == ".odt":
+        try:
+            with zipfile.ZipFile(BytesIO(file_bytes or b"")) as odt_zip:
+                xml_text = odt_zip.read("content.xml").decode("utf-8", errors="ignore")
+            root = ET.fromstring(xml_text)
+            text_nodes = [node.text for node in root.iter() if node.text and node.text.strip()]
+            return clean_text("\n".join(text_nodes))
+        except Exception as exc:
+            return f"ODT extraction failed: {str(exc)[:160]}"
+    if ext == ".rtf":
+        raw = _decode_bytes(file_bytes)
+        raw = re.sub(r"\\'[0-9a-fA-F]{2}", " ", raw)
+        raw = re.sub(r"\\[a-zA-Z]+\d* ?", " ", raw)
+        raw = re.sub(r"[{}]", " ", raw)
+        return clean_text(raw)
+    if ext == ".pages":
+        try:
+            with zipfile.ZipFile(BytesIO(file_bytes or b"")) as pages_zip:
+                xml_members = [name for name in pages_zip.namelist() if name.lower().endswith(".xml")]
+                text_nodes = []
+                for member in xml_members[:12]:
+                    try:
+                        text_nodes.extend(re.findall(r">([^<>]{2,})<", pages_zip.read(member).decode("utf-8", errors="ignore")))
+                    except Exception:
+                        continue
+                if text_nodes:
+                    return clean_text("\n".join(text_nodes))
+        except Exception:
+            pass
+    return clean_text(_decode_bytes(file_bytes))
+
+
+def _extract_ppt_text(file_name, file_bytes):
+    if str(file_name or "").lower().endswith(".pptx"):
+        try:
+            presentation = Presentation(BytesIO(file_bytes or b""))
+            lines = [f"Total Slides: {len(presentation.slides)}"]
+            for slide_index, slide in enumerate(presentation.slides, start=1):
+                slide_lines = []
+                for shape in slide.shapes:
+                    if hasattr(shape, "text") and shape.text and shape.text.strip():
+                        slide_lines.append(shape.text.strip())
+                    if hasattr(shape, "table"):
+                        rows = []
+                        for row in shape.table.rows:
+                            rows.append(" | ".join(cell.text.strip() for cell in row.cells))
+                        if rows:
+                            slide_lines.append("Table:\n" + "\n".join(rows))
+                if slide_lines:
+                    lines.append(f"Slide {slide_index}:\n" + "\n".join(slide_lines))
+            return clean_text("\n\n".join(lines))
+        except Exception as exc:
+            return f"PPTX extraction failed: {str(exc)[:160]}"
+    return clean_text(_decode_bytes(file_bytes))
+
+
+def _extract_excel_text(file_name, file_bytes):
+    lines = []
+    if str(file_name or "").lower().endswith(".xlsx"):
+        try:
+            workbook = openpyxl.load_workbook(BytesIO(file_bytes or b""), data_only=True, read_only=True)
+            for sheet in workbook.worksheets:
+                rows = []
+                for row in sheet.iter_rows(values_only=True):
+                    values = [normalize_brain_cell(value) for value in row if value is not None and normalize_brain_cell(value).strip()]
+                    if values:
+                        rows.append(" | ".join(values))
+                    if len(rows) >= 120:
+                        break
+                if rows:
+                    lines.append(f"Sheet {sheet.title}:\n" + "\n".join(rows))
+            return clean_text("\n\n".join(lines))
+        except Exception as exc:
+            lines.append(f"XLSX extraction failed: {str(exc)[:160]}")
+    try:
+        sheets = pd.read_excel(BytesIO(file_bytes or b""), sheet_name=None)
+        for sheet_name, frame in sheets.items():
+            rows = []
+            frame = frame.fillna("")
+            header = " | ".join(str(column) for column in frame.columns)
+            if header.strip():
+                rows.append(header)
+            for row in frame.values.tolist()[:120]:
+                rows.append(" | ".join(str(cell) for cell in row if str(cell).strip()))
+            if rows:
+                lines.append(f"Sheet {sheet_name}:\n" + "\n".join(rows))
+    except Exception:
+        if not lines:
+            lines.append(_decode_bytes(file_bytes))
+    return clean_text("\n\n".join(lines))
+
+
+def _extract_csv_text(file_bytes):
+    raw = _decode_bytes(file_bytes)
+    try:
+        frame = pd.read_csv(BytesIO(file_bytes or b"")).fillna("")
+        rows = [" | ".join(str(column) for column in frame.columns)]
+        for row in frame.values.tolist()[:200]:
+            rows.append(" | ".join(str(cell) for cell in row))
+        return clean_text("CSV Rows:\n" + "\n".join(rows))
+    except Exception:
+        return clean_text(raw)
+
+
+def _extract_html_text(file_bytes):
+    soup = BeautifulSoup(_decode_bytes(file_bytes), "html.parser")
+    for tag in soup(["script", "style", "nav", "footer"]):
+        tag.decompose()
+    return clean_text(soup.get_text("\n", strip=True))
+
+
+def _extract_image_text(file_name, file_bytes):
+    try:
+        image = Image.open(BytesIO(file_bytes or b""))
+        width, height = image.size
+        return (
+            f"Image document: {file_name}\n"
+            f"Dimensions: {width} x {height} pixels\n"
+            "No OCR text was extracted from this image. Use image or diagram questions only when visible labels are available from the uploaded content."
+        )
+    except Exception as exc:
+        return f"Image extraction failed: {str(exc)[:160]}"
+
+
+def extract_text(file_or_name, filename_or_bytes=None):
+    """Extract readable text for all upload formats supported by the sidebar."""
+    if isinstance(file_or_name, str) and isinstance(filename_or_bytes, (bytes, bytearray)):
+        file_name = file_or_name
+        file_bytes = bytes(filename_or_bytes)
+    else:
+        file_name = str(filename_or_bytes or getattr(file_or_name, "name", "document"))
+        file_bytes = _read_uploaded_bytes(file_or_name)
+
+    file_type = detect_file_type(file_name)
+    if file_type == "pdf":
+        return _extract_pdf_text(file_bytes)
+    if file_type == "word":
+        return _extract_word_text(file_name, file_bytes)
+    if file_type == "ppt":
+        return _extract_ppt_text(file_name, file_bytes)
+    if file_type == "excel":
+        return _extract_excel_text(file_name, file_bytes)
+    if file_type == "csv":
+        return _extract_csv_text(file_bytes)
+    if file_type == "html":
+        return _extract_html_text(file_bytes)
+    if file_type == "image":
+        return _extract_image_text(file_name, file_bytes)
+    return clean_text(_decode_bytes(file_bytes))
+
+
+def ensure_file_processed(file_name):
+    """Extract and cache a selected file's readable content."""
+    if "file_texts" not in st.session_state or not isinstance(st.session_state.file_texts, dict):
+        st.session_state.file_texts = {}
+    if "file_text_hashes" not in st.session_state or not isinstance(st.session_state.file_text_hashes, dict):
+        st.session_state.file_text_hashes = {}
+
+    file_entry = get_uploaded_file_entry(file_name)
+    if not file_entry:
+        return ""
+
+    file_bytes = file_entry.get("bytes", b"")
+    file_hash = get_file_hash(file_bytes)
+    if st.session_state.file_text_hashes.get(file_name) == file_hash and st.session_state.file_texts.get(file_name):
+        update_uploaded_file_status(file_name, "ready")
+        return st.session_state.file_texts[file_name]
+
+    cache_key = f"text::{file_name}::{file_hash}"
+    cached_text = FILE_TEXT_CACHE.get(cache_key)
+    if cached_text is None:
+        update_uploaded_file_status(file_name, "processing")
+        cached_text = extract_text(file_name, file_bytes)
+        FILE_TEXT_CACHE.set(cache_key, cached_text)
+
+    st.session_state.file_texts[file_name] = cached_text
+    st.session_state.file_text_hashes[file_name] = file_hash
+    update_uploaded_file_status(file_name, "ready" if str(cached_text or "").strip() else "empty")
+    return cached_text
+
+
+def ensure_files_processed(file_names):
+    """Fully extract selected files before chat, dashboard, or compare uses them."""
+    for file_name in file_names or []:
+        ensure_file_processed(file_name)
+        ensure_file_brain(file_name)
+
+
+def get_uploaded_file_entry(file_name):
+    """Minimal uploaded file lookup retained for preview and workspace helpers."""
+    for file_info in st.session_state.get("uploaded_files", []):
+        if file_info.get("name") == file_name:
+            return file_info
+    return None
 
 
 def load_preview_data():
-    """Load preview data from file"""
+    """Load persisted preview tokens and file entries."""
     global PREVIEW_TOKENS, PREVIEW_STORE
-    if os.path.exists(PREVIEW_DATA_FILE):
+    if not os.path.exists(PREVIEW_DATA_FILE):
+        PREVIEW_TOKENS = {}
+        PREVIEW_STORE = {}
+        return
+    try:
+        with open(PREVIEW_DATA_FILE, "rb") as preview_file:
+            data = pickle.load(preview_file)
+        if not isinstance(data, dict):
+            raise ValueError("preview data is not a dictionary")
+        PREVIEW_TOKENS = data.get("tokens", {}) if isinstance(data.get("tokens", {}), dict) else {}
+        PREVIEW_STORE = data.get("store", {}) if isinstance(data.get("store", {}), dict) else {}
+    except Exception:
+        backup_path = f"{PREVIEW_DATA_FILE}.corrupt.{datetime.now().strftime('%Y%m%d%H%M%S')}"
         try:
-            with open(PREVIEW_DATA_FILE, "rb") as f:
-                data = pickle.load(f)
-            if not isinstance(data, dict):
-                raise ValueError("preview data is not a dictionary")
-            PREVIEW_TOKENS = data.get("tokens", {}) if isinstance(data.get("tokens", {}), dict) else {}
-            PREVIEW_STORE = data.get("store", {}) if isinstance(data.get("store", {}), dict) else {}
-        except Exception as e:
-            backup_path = f"{PREVIEW_DATA_FILE}.corrupt.{datetime.now().strftime('%Y%m%d%H%M%S')}"
-            try:
-                os.replace(PREVIEW_DATA_FILE, backup_path)
-                st.warning("Preview cache was corrupted and has been reset. Please open the document preview again from the sidebar.")
-            except Exception:
-                st.warning(f"Could not load preview data: {e}")
-            PREVIEW_TOKENS = {}
-            PREVIEW_STORE = {}
+            os.replace(PREVIEW_DATA_FILE, backup_path)
+        except Exception:
+            pass
+        PREVIEW_TOKENS = {}
+        PREVIEW_STORE = {}
 
 
 def save_preview_data():
-    """Save preview data to file"""
+    """Persist preview tokens atomically where possible."""
     temp_file = None
     try:
-        data = {
-            "tokens": PREVIEW_TOKENS,
-            "store": PREVIEW_STORE
-        }
-        preview_dir = os.path.dirname(PREVIEW_DATA_FILE) or "."
-        os.makedirs(preview_dir, exist_ok=True)
+        os.makedirs(os.path.dirname(PREVIEW_DATA_FILE) or ".", exist_ok=True)
         temp_file = f"{PREVIEW_DATA_FILE}.{os.getpid()}.{uuid.uuid4().hex}.tmp"
-        with open(temp_file, "wb") as f:
-            pickle.dump(data, f)
-            f.flush()
-            os.fsync(f.fileno())
+        with open(temp_file, "wb") as preview_file:
+            pickle.dump({"tokens": PREVIEW_TOKENS, "store": PREVIEW_STORE}, preview_file)
+            preview_file.flush()
+            os.fsync(preview_file.fileno())
         os.replace(temp_file, PREVIEW_DATA_FILE)
-    except Exception as e:
-        # Streamlit reruns can overlap during upload/sidebar rendering. If an
-        # atomic temp replace fails, keep the in-memory preview store working and
-        # fall back to a direct write before showing a warning.
+    except Exception:
         try:
-            with open(PREVIEW_DATA_FILE, "wb") as f:
-                pickle.dump({
-                    "tokens": PREVIEW_TOKENS,
-                    "store": PREVIEW_STORE
-                }, f)
-        except Exception as fallback_error:
-            st.warning(f"Could not save preview data: {fallback_error}")
+            with open(PREVIEW_DATA_FILE, "wb") as preview_file:
+                pickle.dump({"tokens": PREVIEW_TOKENS, "store": PREVIEW_STORE}, preview_file)
+        except Exception:
+            pass
     finally:
         if temp_file and os.path.exists(temp_file):
             try:
@@ -1511,109 +1828,69 @@ def save_preview_data():
                 pass
 
 
-def cleanup_expired_preview_tokens():
-    """Remove preview tokens older than 1 hour to prevent memory accumulation."""
+def cleanup_expired_preview_tokens(max_age_hours=1):
+    """Remove old preview links from memory and disk."""
     now = datetime.now()
     expired_tokens = []
-    for token, data in PREVIEW_TOKENS.items():
-        if now - data['timestamp'] > timedelta(hours=1):
+    for token, data in list(PREVIEW_TOKENS.items()):
+        timestamp = data.get("timestamp") if isinstance(data, dict) else None
+        if not isinstance(timestamp, datetime) or now - timestamp > timedelta(hours=max_age_hours):
             expired_tokens.append(token)
-    
     for token in expired_tokens:
-        del PREVIEW_TOKENS[token]
-        if token in PREVIEW_STORE:
-            del PREVIEW_STORE[token]
-    
+        PREVIEW_TOKENS.pop(token, None)
+        PREVIEW_STORE.pop(token, None)
     if expired_tokens:
         save_preview_data()
 
 
-def render_html_frame(html_content, height="content", width="stretch"):
-    """Render inline HTML with Streamlit's supported components API."""
-    if height == "content":
-        height = 240
-    if isinstance(height, int) and height < 1:
-        height = 1
-    component_width = None if width in (None, "stretch") else width
-    components.html(str(html_content), width=component_width, height=height, scrolling=True)
+def create_preview_link(file_name, highlight_term=None, page_num=None):
+    """Create a query-string link to the preview route for an uploaded file."""
+    file_entry = get_uploaded_file_entry(file_name)
+    if not file_entry:
+        return None
 
+    token = None
+    for existing_token, token_data in list(PREVIEW_TOKENS.items()):
+        if isinstance(token_data, dict) and token_data.get("file_name") == file_name:
+            token = existing_token
+            token_data["timestamp"] = datetime.now()
+            PREVIEW_STORE[existing_token] = file_entry
+            break
 
-# ==============================
-# PAGINATION SCROLL ANCHOR HELPERS
-# Streamlit-safe scroll reset for paginated viewers across all tabs.
-# Stores the requested anchor in session_state before rerun, then scrolls after
-# the next render using a tiny same-page script.
-# ==============================
-def request_scroll_to_anchor(anchor_id):
-    """Ask the next Streamlit rerun to smoothly scroll to an anchor."""
-    st.session_state.pending_scroll_anchor = str(anchor_id or "page-viewer-top")
+    if token is None:
+        token = str(uuid.uuid4())
+        PREVIEW_TOKENS[token] = {"file_name": file_name, "timestamp": datetime.now()}
+        PREVIEW_STORE[token] = file_entry
 
-
-def render_scroll_anchor(anchor_id):
-    """Render a scroll target and consume pending scroll state if it matches."""
-    anchor_id = str(anchor_id or "page-viewer-top")
-    pending_anchor = st.session_state.get("pending_scroll_anchor")
-    st.markdown(
-        f"<div id='{html.escape(anchor_id)}' style='position:relative; top:-12px; height:1px;'></div>",
-        unsafe_allow_html=True,
-    )
-    if pending_anchor == anchor_id:
-        render_html_frame(
-            f"""
-            <script>
-            const scrollTargetId = {json.dumps(anchor_id)};
-            const scrollToAnchor = () => {{
-                const root = window.parent ? window.parent.document : document;
-                const target = root.getElementById(scrollTargetId);
-                if (target) {{
-                    target.scrollIntoView({{ behavior: "smooth", block: "start", inline: "nearest" }});
-                }}
-            }};
-            requestAnimationFrame(scrollToAnchor);
-            setTimeout(scrollToAnchor, 80);
-            </script>
-            """,
-            height=1,
-        )
-        st.session_state.pending_scroll_anchor = None
-
-
-def set_paginated_index(state_key, value, minimum, maximum, scroll_anchor_id):
-    """Update a page index safely and request a top-of-viewer scroll."""
-    bounded_value = max(minimum, min(int(value), maximum))
-    if int(st.session_state.get(state_key, minimum)) != bounded_value:
-        st.session_state[state_key] = bounded_value
-        request_scroll_to_anchor(scroll_anchor_id)
-    else:
-        st.session_state[state_key] = bounded_value
+    save_preview_data()
+    params = [f"preview_token={urllib.parse.quote_plus(token)}"]
+    if highlight_term:
+        params.append(f"highlight={urllib.parse.quote_plus(str(highlight_term))}")
+    if page_num is not None:
+        params.append(f"page={urllib.parse.quote_plus(str(page_num))}")
+    return "?" + "&".join(params)
 
 
 @st.cache_data(show_spinner=False)
 def get_needle_minimalist_logo():
+    """Generate the small animated Mercedes-style logo used by the shell."""
     frames = []
-
-    silver_grey = "#A0A0A0"
-    star_light = "#DCDCDC"
-    star_shadow = "#B8B8B8"
     canvas_size = 220
     center = canvas_size // 2
     radius = 86
-
-    for angle_deg in range(360, 0, -15):
+    for angle_deg in range(360, 0, -18):
         image = Image.new("RGBA", (canvas_size, canvas_size), (255, 255, 255, 0))
         draw = ImageDraw.Draw(image)
         raw_scale = math.cos(math.radians(angle_deg))
         flip_scale = raw_scale if abs(raw_scale) > 0.08 else (0.08 if raw_scale >= 0 else -0.08)
-
         ellipse_box = [
             center - int(radius * abs(flip_scale)),
             center - radius,
             center + int(radius * abs(flip_scale)),
             center + radius,
         ]
-        draw.ellipse(ellipse_box, outline=silver_grey, width=4)
-
-        for base_angle in [90, 210, 330]:
+        draw.ellipse(ellipse_box, outline="#A0A0A0", width=4)
+        for base_angle in (90, 210, 330):
             angle = math.radians(base_angle)
             tip = (
                 center + int(radius * 0.88 * math.cos(angle) * flip_scale),
@@ -1627,247 +1904,865 @@ def get_needle_minimalist_logo():
                 center + int(radius * 0.13 * math.cos(angle - 2.15) * flip_scale),
                 center - int(radius * 0.13 * math.sin(angle - 2.15)),
             )
-            c_l, c_r = (star_light, star_shadow) if flip_scale > 0 else (star_shadow, star_light)
-            draw.polygon([(center, center), tip, side_l], fill=c_l)
-            draw.polygon([(center, center), tip, side_r], fill=c_r)
-
+            light, shadow = ("#DCDCDC", "#B8B8B8") if flip_scale > 0 else ("#B8B8B8", "#DCDCDC")
+            draw.polygon([(center, center), tip, side_l], fill=light)
+            draw.polygon([(center, center), tip, side_r], fill=shadow)
         frames.append(image)
 
-    gif_buf = BytesIO()
+    output = BytesIO()
     if frames:
         frames[0].save(
-            gif_buf,
-            format='GIF',
+            output,
+            format="GIF",
             save_all=True,
             append_images=frames[1:],
             duration=80,
             loop=0,
-            disposal=2
+            disposal=2,
         )
-
-    return base64.b64encode(gif_buf.getvalue()).decode('utf-8')
+    return base64.b64encode(output.getvalue()).decode("utf-8")
 
 
 def render_status_strip():
+    """Render a compact authenticated-session status strip."""
     if not st.session_state.get("is_authenticated"):
         return
-
-    # Get current elapsed time
-    if 'start_time' not in st.session_state or st.session_state.start_time is None:
+    if "start_time" not in st.session_state or st.session_state.start_time is None:
         st.session_state.start_time = time.time()
-    
+
     elapsed = int(time.time() - st.session_state.start_time)
     hours, rem = divmod(elapsed, 3600)
-    mins, secs = divmod(rem, 60)
-    timer_str = f"{hours:02d}:{mins:02d}:{secs:02d}"
+    minutes, seconds = divmod(rem, 60)
+    timer_text = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+    username = st.session_state.get("logged_in_username") or "User"
+    role = st.session_state.get("user_role") or "user"
+    selected_count = len(st.session_state.get("selected_files", []))
 
-    username = st.session_state.get("logged_in_username") or "Vignesh"
-    role = st.session_state.get("user_role") or "User"
-    available_files = len(st.session_state.get("selected_files", []))
-
-    # Create a placeholder for the live timer
-    timer_placeholder = st.empty()
-    
-    # JavaScript for live timer
-    live_timer_js = f"""
-    <script>
-        // Get the start time from Python
-        var startTime = {st.session_state.start_time * 1000}; // Convert to milliseconds
-        
-        function updateTimer() {{
-            var now = new Date().getTime();
-            var elapsed = Math.floor((now - startTime) / 1000);
-            
-            var hours = Math.floor(elapsed / 3600);
-            var minutes = Math.floor((elapsed % 3600) / 60);
-            var seconds = elapsed % 60;
-            
-            var timerStr = 
-                hours.toString().padStart(2, '0') + ':' +
-                minutes.toString().padStart(2, '0') + ':' +
-                seconds.toString().padStart(2, '0');
-            
-            // Update the timer display
-            var timerElement = document.getElementById('live-timer');
-            if (timerElement) {{
-                timerElement.textContent = timerStr;
-            }}
-        }}
-        
-        // Update immediately and then every second
+    st.markdown(
+        f"""
+        <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:4px 0 8px;">
+            <div style="background:#f8fbff;border:1px solid #dbeafe;border-radius:10px;padding:8px 10px;">
+                <div style="font-size:0.68rem;color:#64748b;font-weight:700;">USER</div>
+                <div style="font-weight:800;color:#173152;">{html.escape(str(username))}</div>
+            </div>
+            <div style="background:#f8fbff;border:1px solid #dbeafe;border-radius:10px;padding:8px 10px;">
+                <div style="font-size:0.68rem;color:#64748b;font-weight:700;">ROLE</div>
+                <div style="font-weight:800;color:#173152;">{html.escape(str(role).title())}</div>
+            </div>
+            <div style="background:#f8fbff;border:1px solid #dbeafe;border-radius:10px;padding:8px 10px;">
+                <div style="font-size:0.68rem;color:#64748b;font-weight:700;">FILES</div>
+                <div style="font-weight:800;color:#173152;">{selected_count}</div>
+            </div>
+            <div style="background:#f8fbff;border:1px solid #dbeafe;border-radius:10px;padding:8px 10px;">
+                <div style="font-size:0.68rem;color:#64748b;font-weight:700;">SESSION</div>
+                <div id="live-timer" style="font-weight:800;color:#173152;">{timer_text}</div>
+            </div>
+        </div>
+        <script>
+        const startTime = {float(st.session_state.start_time) * 1000};
+        const updateTimer = () => {{
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            const h = String(Math.floor(elapsed / 3600)).padStart(2, '0');
+            const m = String(Math.floor((elapsed % 3600) / 60)).padStart(2, '0');
+            const s = String(elapsed % 60).padStart(2, '0');
+            const root = window.parent ? window.parent.document : document;
+            const el = root.getElementById('live-timer') || document.getElementById('live-timer');
+            if (el) el.textContent = `${{h}}:${{m}}:${{s}}`;
+        }};
         updateTimer();
         setInterval(updateTimer, 1000);
-    </script>
-    """
+        </script>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    status_html = f"""
-    <style>
-        body {{
-            margin: 0;
-            background: transparent;
-            font-family: 'Segoe UI', Tahoma, sans-serif;
-        }}
-        .dashboard-grid {{
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 8px;
-            padding: 0 2px 4px;
-        }}
-        .metric-card {{
-            position: relative;
-            overflow: hidden;
-            min-height: 58px;
-            border-radius: 12px;
-            padding: 8px 10px;
-            border: 1px solid rgba(255, 255, 255, 0.5) !important;
-            box-shadow: 0 6px 14px rgba(15, 23, 42, 0.12);
-            transform: translateY(8px) scale(0.98);
-            opacity: 0;
-            animation: riseIn 0.65s ease-out forwards, cardFloat 4.5s ease-in-out infinite;
-        }}
-        .metric-card:nth-child(1) {{ animation-delay: 0.05s, 0.9s; }}
-        .metric-card:nth-child(2) {{ animation-delay: 0.15s, 1.05s; }}
-        .metric-card:nth-child(3) {{ animation-delay: 0.25s, 1.2s; }}
-        .metric-card:nth-child(4) {{ animation-delay: 0.35s, 1.35s; }}
-        .metric-card::before {{
-            content: "";
-            position: absolute;
-            width: 100px;
-            height: 100px;
-            top: -40px;
-            right: -20px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.22);
-            filter: blur(4px);
-            animation: bubbleDrift 8s ease-in-out infinite;
-        }}
-        .metric-card::after {{
-            content: "";
-            position: absolute;
-            width: 60px;
-            height: 60px;
-            bottom: -20px;
-            left: -8px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.16);
-        }}
-        .card-label, .card-value {{
-            position: relative;
-            z-index: 1;
-            display: block;
-        }}
-        .card-label {{
-            font-size: 0.58rem !important;
-            font-weight: 700 !important;
-            letter-spacing: 0.05em;
-            text-transform: uppercase;
-            color: rgba(15, 23, 42, 0.68) !important;
-            margin-bottom: 4px;
-        }}
-        .card-value {{
-            font-size: 1rem !important;
-            font-weight: 800 !important;
-            line-height: 1.2;
-            word-break: break-word;
-        }}
-        #live-timer {{
-            letter-spacing: 0.06em;
-            animation: timerGlow 1.8s ease-in-out infinite;
-        }}
-        @keyframes riseIn {{
-            from {{ opacity: 0; transform: translateY(8px) scale(0.98); }}
-            to {{ opacity: 1; transform: translateY(0) scale(1); }}
-        }}
-        @keyframes cardFloat {{
-            0%, 100% {{ transform: translateY(0); }}
-            50% {{ transform: translateY(-3px); }}
-        }}
-        @keyframes bubbleDrift {{
-            0%, 100% {{ transform: translate(0, 0); }}
-            50% {{ transform: translate(-8px, 10px); }}
-        }}
-        @keyframes timerGlow {{
-            0%, 100% {{ text-shadow: 0 0 0 rgba(46, 125, 50, 0); }}
-            50% {{ text-shadow: 0 0 12px rgba(46, 125, 50, 0.25); }}
-        }}
-        @media (max-width: 900px) {{
-            .dashboard-grid {{
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-            }}
-        }}
-        @media (max-width: 560px) {{
-            .dashboard-grid {{
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-                gap: 8px;
-                padding: 4px 2px 8px;
-            }}
-            .metric-card {{
-                min-height: 74px;
-                border-radius: 12px;
-                padding: 9px 8px;
-                box-shadow: 0 6px 14px rgba(15, 23, 42, 0.12);
-            }}
-            .card-label {{
-                font-size: 0.54rem !important;
-                letter-spacing: 0.04em;
-                margin-bottom: 4px;
-                white-space: normal;
-            }}
-            .card-value {{
-                font-size: clamp(0.82rem, 4vw, 1rem) !important;
-                line-height: 1.15;
-                overflow-wrap: anywhere;
-            }}
-            #live-timer {{
-                font-size: clamp(0.78rem, 3.8vw, 0.95rem) !important;
-                letter-spacing: 0.02em;
-            }}
-        }}
-    </style>
-    <script>
-        // Dynamically override button colors on page load and mutations
-        function applyButtonColors() {{
-            const buttons = document.querySelectorAll('button, [role="button"]');
-            buttons.forEach(btn => {{
-                btn.style.backgroundColor = '#e8f6ff !important';
-                btn.style.color = '#1e293b !important';
-                btn.style.borderColor = '#c0dff0 !important';
-                btn.style.border = '2px solid #c0dff0 !important';
-            }});
-        }}
-        
-        // Apply on page load
-        document.addEventListener('DOMContentLoaded', applyButtonColors);
-        
-        // Apply on mutation (when new buttons are added)
-        const observer = new MutationObserver(applyButtonColors);
-        observer.observe(document.body, {{ childList: true, subtree: true }});
-        
-        // Apply immediately
-        applyButtonColors();
-    </script>
-    {live_timer_js}
-    <div class="dashboard-grid">
-        <div class="metric-card" style="background: linear-gradient(135deg, #e8eaf6 0%, #c5cae9 100%); color: #3c4f7e; border: 1px solid #e8eaf6;">
-            <span class="card-label" style="color: #666;">👤 User</span>
-            <span class="card-value" style="color: #3c4f7e;">{html.escape(username)}</span>
-        </div>
-        <div class="metric-card" style="background: linear-gradient(135deg, #fce4ec 0%, #f8bbd9 100%); color: #7b1fa2; border: 1px solid #fce4ec;">
-            <span class="card-label" style="color: #666;">🔑 Role</span>
-            <span class="card-value" style="color: #7b1fa2;">{html.escape(str(role).title())}</span>
-        </div>
-        <div class="metric-card" style="background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); color: #1565c0; border: 1px solid #e3f2fd;">
-            <span class="card-label" style="color: #666;">📁 Available Files</span>
-            <span class="card-value" style="color: #1565c0;">{available_files}</span>
-        </div>
-        <div class="metric-card" style="background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%); color: #2e7d32; border: 1px solid #e8f5e8;">
-            <span class="card-label" style="color: #666;">⏱️ Usage Time</span>
-            <span class="card-value" id="live-timer" style="color: #2e7d32; font-family: 'Courier New', monospace;">{timer_str}</span>
-        </div>
-    </div>
-    """
 
-    render_html_frame(status_html, height=118)
+def render_mobile_workspace_controls():
+    """Toggle mobile sidebar/workspace visibility with CSS only."""
+    if not st.session_state.get("is_authenticated"):
+        return
+    show_sidebar = st.session_state.get("mobile_sidebar_visible", False)
+    mobile_mode_css = """
+        @media (max-width: 767px) {
+            [data-testid="stSidebar"], .stSidebar {
+                display: block !important;
+                width: 100% !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+                position: relative !important;
+                transform: none !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+            }
+            section.main, [data-testid="stMain"], div[data-testid="stMain"] {
+                display: none !important;
+            }
+        }
+    """ if show_sidebar else """
+        @media (max-width: 767px) {
+            [data-testid="stSidebar"], .stSidebar {
+                display: none !important;
+                visibility: hidden !important;
+                width: 0 !important;
+                min-width: 0 !important;
+                max-width: 0 !important;
+                transform: translateX(-100%) !important;
+            }
+            section.main, [data-testid="stMain"], div[data-testid="stMain"], div[data-testid="stAppViewContainer"] {
+                display: block !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                margin-left: 0 !important;
+                padding-left: 0 !important;
+            }
+        }
+    """
+    st.markdown(
+        f"""
+        <style>
+        {mobile_mode_css}
+        .st-key-mobile_show_files_btn,
+        .st-key-mobile_open_workspace_btn {{
+            display: none;
+        }}
+        @media (max-width: 767px) {{
+            .st-key-mobile_show_files_btn,
+            .st-key-mobile_open_workspace_btn {{
+                display: block !important;
+                margin-bottom: 0.75rem !important;
+            }}
+            .st-key-mobile_show_files_btn button,
+            .st-key-mobile_open_workspace_btn button {{
+                width: 100% !important;
+                min-height: 46px !important;
+                border-radius: 12px !important;
+                border: 2px solid #93c5fd !important;
+                background: #eff6ff !important;
+                color: #1e3a8a !important;
+                font-weight: 800 !important;
+            }}
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_professional_document_preview(file_name, file_entry=None, highlight_term=None, highlight_page=None):
+    """Render a lightweight but complete document preview route."""
+    del highlight_page
+    if file_entry is None:
+        file_entry = get_uploaded_file_entry(file_name)
+    if not file_entry:
+        st.error("File preview unavailable - file could not be loaded.")
+        return
+
+    file_bytes = file_entry.get("bytes", b"")
+    extracted_text = st.session_state.get("file_texts", {}).get(file_name)
+    if not extracted_text:
+        extracted_text = extract_text(file_name, file_bytes)
+        st.session_state.setdefault("file_texts", {})[file_name] = extracted_text
+
+    st.caption(f"Previewing {detect_file_type(file_name).upper()} content")
+    if str(file_name).lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp")):
+        st.image(file_bytes, caption=file_name, use_container_width=True)
+
+    viewer_tab, summary_tab, search_tab, downloads_tab = st.tabs(["Viewer", "Summary", "Search", "Downloads"])
+    safe_key = hashlib.md5(str(file_name).encode("utf-8")).hexdigest()[:12]
+    with viewer_tab:
+        st.text_area(
+            "Extracted content",
+            value=str(extracted_text or "No readable text extracted."),
+            height=520,
+            key=f"preview_text_{safe_key}",
+        )
+
+    with summary_tab:
+        summary = build_fast_document_summary(file_name, extracted_text) if extracted_text else "No readable content found."
+        st.markdown(summary, unsafe_allow_html=True)
+
+    with search_tab:
+        search_value = st.text_input("Search extracted text", value=highlight_term or "", key=f"preview_search_{safe_key}")
+        if search_value:
+            matches = []
+            terms = [term.lower() for term in re.findall(r"[A-Za-z0-9_+\-/]{2,}", search_value)]
+            for line in str(extracted_text or "").splitlines():
+                clean_line = normalize_extracted_line(line)
+                if clean_line and all(term in clean_line.lower() for term in terms):
+                    matches.append(clean_line)
+                if len(matches) >= 30:
+                    break
+            if matches:
+                for index, match in enumerate(matches, start=1):
+                    st.markdown(f"**Match {index}:** {html.escape(match)}", unsafe_allow_html=True)
+            else:
+                st.info("No matching text found.")
+        else:
+            st.info("Enter a term to search within the extracted document content.")
+
+    with downloads_tab:
+        st.download_button(
+            "Download extracted text",
+            data=str(extracted_text or "").encode("utf-8"),
+            file_name=f"{os.path.splitext(str(file_name))[0]}_extracted.txt",
+            mime="text/plain",
+            key=f"preview_download_text_{safe_key}",
+        )
+
+
+def create_heading_anchor(text):
+    anchor_text = str(text or "").strip().lower()
+    anchor_text = re.sub(r"[^a-z0-9]+", "-", anchor_text)
+    anchor_text = re.sub(r"-{2,}", "-", anchor_text).strip("-")
+    return f"heading-{anchor_text or 'preview'}"
+
+
+def render_html_frame(html_content, height="content", width="stretch"):
+    """Render inline HTML with Streamlit's component API."""
+    if height == "content":
+        height = 240
+    if isinstance(height, int) and height < 1:
+        height = 1
+    component_width = None if width in (None, "stretch") else width
+    components.html(str(html_content), width=component_width, height=height, scrolling=True)
+
+
+def create_vector_store(text):
+    """Create a best-effort local FAISS store when embeddings are available."""
+    text = str(text or "").strip()
+    if not text:
+        return None
+    try:
+        splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=120)
+        chunks = splitter.split_text(text[:MAX_VECTOR_TEXT_CHARS])
+        if not chunks:
+            return None
+        embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+        return FAISS.from_texts(chunks, embeddings)
+    except Exception:
+        return None
+
+
+def load_llm():
+    """Optional local LLM hook. Deterministic semantic synthesis is used when absent."""
+    return None
+
+
+def build_chatpdf_citation_label(metadata):
+    """Format a concise source label across document formats."""
+    meta = metadata or {}
+    file_name = str(meta.get("file_name") or "document")
+    file_type = str(meta.get("file_type") or get_chatpdf_file_type(file_name)).lower()
+    locator = str(meta.get("page_or_sheet") or meta.get("page_number") or "").strip()
+    section = re.sub(r"\s+", " ", str(meta.get("section") or "")).strip()
+    if file_type == "pdf" and locator:
+        return f"{file_name} (PDF page {locator})"
+    if file_type == "ppt" and locator:
+        return f"{file_name} (slide {locator})"
+    if file_type in {"excel", "csv"} and locator:
+        return f"{file_name} ({locator})"
+    if section and section.lower() not in {"document", "text content", "extracted content"}:
+        return f"{file_name} ({section[:90]})"
+    return file_name
+
+
+def get_active_user_id():
+    return str(st.session_state.get("logged_in_username") or "local_user").strip() or "local_user"
+
+
+def get_document_id(file_name, file_bytes):
+    clean_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(file_name or "document")).strip("_") or "document"
+    return f"{clean_name}_{get_file_hash(file_bytes)[:16]}"
+
+
+def get_chatpdf_collection_id(user_id, file_names):
+    parts = []
+    for file_name in sorted(str(name) for name in (file_names or [])):
+        file_entry = get_uploaded_file_entry(file_name)
+        file_hash = get_file_hash(file_entry.get("bytes", b"")) if file_entry else "missing"
+        parts.append(f"{file_name}:{file_hash}")
+    return hashlib.sha1(f"{CHATPDF_SCHEMA_VERSION}|{user_id}|{'|'.join(parts)}".encode("utf-8")).hexdigest()[:24]
+
+
+def get_chatpdf_memory_key(user_id, file_names):
+    return f"{user_id}:{get_chatpdf_collection_id(user_id, file_names)}"
+
+
+def init_chatpdf_memory():
+    if "document_chat_memory" not in st.session_state or not isinstance(st.session_state.document_chat_memory, dict):
+        st.session_state.document_chat_memory = {}
+
+
+def get_chatpdf_memory(user_id, file_names):
+    init_chatpdf_memory()
+    key = get_chatpdf_memory_key(user_id, file_names)
+    return st.session_state.document_chat_memory.setdefault(key, [])
+
+
+def append_chatpdf_memory(user_id, file_names, question, answer):
+    memory = get_chatpdf_memory(user_id, file_names)
+    memory.append({"question": str(question or ""), "answer": str(answer or "")})
+    st.session_state.document_chat_memory[get_chatpdf_memory_key(user_id, file_names)] = memory[-10:]
+
+
+def init_file_brain_registry():
+    if "file_brains" not in st.session_state or not isinstance(st.session_state.file_brains, dict):
+        st.session_state.file_brains = {}
+    if "global_memory_registry" not in st.session_state or not isinstance(st.session_state.global_memory_registry, dict):
+        st.session_state.global_memory_registry = {"files": {}}
+    st.session_state.global_memory_registry.setdefault("files", {})
+    return st.session_state.global_memory_registry
+
+
+def _page_records_from_text(file_name, text, file_type):
+    """Convert extracted text into page/slide/sheet-like records for all formats."""
+    raw_text = str(text or "")
+    records = []
+    marker_pattern = re.compile(r"(?im)^(Page\s+\d+\s+Text|Slide\s+\d+|Sheet\s+[^:\n]+|CSV Rows|Image document)\s*:\s*")
+    matches = list(marker_pattern.finditer(raw_text))
+    if matches:
+        for index, match in enumerate(matches):
+            start = match.end()
+            end = matches[index + 1].start() if index + 1 < len(matches) else len(raw_text)
+            label = normalize_extracted_line(match.group(1)).strip(":")
+            body = clean_text(raw_text[start:end])
+            if body:
+                records.append({
+                    "page": len(records) + 1,
+                    "section": label,
+                    "text": body,
+                    "blocks": [],
+                })
+
+    if not records:
+        meaningful = get_meaningful_document_lines(raw_text, min_len=8, max_len=420, limit=900)
+        source_text = "\n".join(meaningful) if meaningful else raw_text
+        for index, chunk in enumerate(smart_chunk(source_text, chunk_size=FILE_BRAIN_PAGE_CONTEXT_CHARS), start=1):
+            if clean_text(chunk):
+                records.append({
+                    "page": index,
+                    "section": f"{file_type.title()} section {index}",
+                    "text": clean_text(chunk),
+                    "blocks": [],
+                })
+
+    return records or [{"page": 1, "section": os.path.splitext(str(file_name))[0], "text": clean_text(raw_text), "blocks": []}]
+
+
+def _extract_tables_from_text(text, file_type):
+    tables = []
+    if file_type not in {"excel", "csv", "pdf", "word", "ppt"}:
+        return tables
+    current_rows = []
+    current_label = "Table"
+    for raw_line in str(text or "").splitlines():
+        line = normalize_extracted_line(raw_line)
+        if not line:
+            continue
+        if re.match(r"(?i)^(page\s+\d+\s+table\s+\d+|table\s+\d*|sheet\s+[^:]+|csv rows)\s*:?", line):
+            if current_rows:
+                headers = current_rows[0]
+                tables.append({"table": current_label, "headers": headers, "rows": current_rows[1:], "row_count": len(current_rows) - 1, "truncated": False})
+                current_rows = []
+            current_label = line.strip(":")[:80] or "Table"
+            continue
+        if "|" in line:
+            row = [cell.strip() for cell in line.split("|")]
+            if any(row):
+                current_rows.append(row)
+        elif file_type == "csv" and "," in line:
+            row = [cell.strip() for cell in line.split(",")]
+            if any(row):
+                current_rows.append(row)
+    if current_rows:
+        tables.append({"table": current_label, "headers": current_rows[0], "rows": current_rows[1:], "row_count": len(current_rows) - 1, "truncated": False})
+    return tables[:20]
+
+
+def _extract_diagrams_from_text(text):
+    diagrams = []
+    visual_pattern = re.compile(
+        r"\b(figure|diagram|schematic|flowchart|block diagram|layout|pinout|pin assignment|image)\b",
+        re.IGNORECASE,
+    )
+    for index, line in enumerate(get_meaningful_document_lines(text, min_len=8, max_len=320, limit=1000), start=1):
+        if visual_pattern.search(line):
+            diagrams.append({"page": index, "text": line[:500], "kind": "visual-reference"})
+        if len(diagrams) >= 30:
+            break
+    return diagrams
+
+
+def extract_lightweight_entities(text):
+    entities = set()
+    for token in re.findall(r"\b[A-Za-z][A-Za-z0-9_+\-/]{2,}\b", str(text or "")):
+        if token.isupper() or re.search(r"\d|[A-Z].*[A-Z]", token):
+            entities.add(token[:80])
+    return sorted(entities)[:500]
+
+
+def extract_lightweight_facts(text, page, limit=8):
+    facts = []
+    for sentence in document_intelligence_meaningful_sentences(text, limit=24):
+        if any(marker in sentence.lower() for marker in ["supports", "provides", "requires", "enables", "includes", "used for", "connects", "configured", "consists"]):
+            facts.append({"page": page, "fact": sentence[:360]})
+        if len(facts) >= limit:
+            break
+    return facts
+
+
+def summarize_table_for_index(table):
+    headers = " | ".join(str(header) for header in table.get("headers", [])[:20])
+    sample_rows = [
+        " | ".join(str(cell) for cell in row[:20])
+        for row in table.get("rows", [])[:8]
+    ]
+    return clean_text("\n".join([headers] + sample_rows))
+
+
+def build_file_brain(file_name, file_bytes=None):
+    """Build a semantic mini-index for one uploaded file from extracted text."""
+    file_entry = get_uploaded_file_entry(file_name)
+    file_bytes = file_bytes if file_bytes is not None else (file_entry.get("bytes", b"") if file_entry else b"")
+    file_type = detect_file_type(file_name)
+    text = st.session_state.get("file_texts", {}).get(file_name) or extract_text(file_name, file_bytes)
+    if text and file_name not in st.session_state.get("file_texts", {}):
+        st.session_state.file_texts[file_name] = text
+
+    pages = _page_records_from_text(file_name, text, file_type)
+    tables = _extract_tables_from_text(text, file_type)
+    diagrams = _extract_diagrams_from_text(text)
+    entities = extract_lightweight_entities(text)
+    page_index = []
+    facts = []
+    for page_record in pages:
+        page_text = clean_text(page_record.get("text", ""))
+        token_counts = Counter(tokenize_chatpdf_text(page_text))
+        page_index.append({
+            "page": page_record.get("page"),
+            "section": page_record.get("section") or f"Section {page_record.get('page')}",
+            "preview": page_text[:FILE_BRAIN_PREVIEW_CHARS],
+            "keywords": [word for word, _ in token_counts.most_common(30)],
+            "char_count": len(page_text),
+        })
+        facts.extend(extract_lightweight_facts(page_text, page_record.get("page")))
+
+    for table in tables:
+        table_text = summarize_table_for_index(table)
+        if table_text:
+            facts.append({"page": table.get("table") or "Table", "fact": f"Structured table available: {table_text[:300]}"})
+
+    brain = {
+        "schema": FILE_BRAIN_SCHEMA_VERSION,
+        "file_name": file_name,
+        "file_type": file_type,
+        "file_hash": get_file_hash(file_bytes or b""),
+        "pages": pages,
+        "page_index": page_index,
+        "facts": facts[:200],
+        "entities": entities,
+        "tables": tables,
+        "diagrams": diagrams,
+    }
+    brain["semantic_metadata"] = build_semantic_metadata(
+        file_name=file_name,
+        file_type=file_type,
+        pages=pages,
+        tables=tables,
+        diagrams=diagrams,
+        entities=entities,
+    )
+    return brain
+
+
+def file_brain_has_current_semantics(brain):
+    semantic = brain.get("semantic_metadata", {}) if isinstance(brain, dict) else {}
+    required = {"executive_summary", "technical_summary", "key_concepts", "architecture_components", "semantic_relationships", "section_summaries"}
+    return isinstance(semantic, dict) and required.issubset(set(semantic.keys()))
+
+
+def ensure_file_brain(file_name):
+    init_file_brain_registry()
+    file_entry = get_uploaded_file_entry(file_name)
+    if not file_entry:
+        return None
+    file_bytes = file_entry.get("bytes", b"")
+    file_hash = get_file_hash(file_bytes)
+    cached = st.session_state.file_brains.get(file_name)
+    if isinstance(cached, dict) and cached.get("hash") == file_hash and file_brain_has_current_semantics(cached.get("brain", {})):
+        st.session_state.global_memory_registry["files"][file_name] = cached["brain"]
+        return cached["brain"]
+    brain = build_file_brain(file_name, file_bytes)
+    st.session_state.file_brains[file_name] = {"hash": file_hash, "brain": brain}
+    st.session_state.global_memory_registry["files"][file_name] = brain
+    return brain
+
+
+def get_file_brains(file_names):
+    brains = {}
+    for file_name in file_names or []:
+        brain = ensure_file_brain(file_name)
+        if brain:
+            brains[file_name] = brain
+    return brains
+
+
+def tokenize_chatpdf_text(text):
+    tokens = re.findall(r"[A-Za-z0-9_+\-/]+", str(text or "").lower())
+    return [token for token in tokens if len(token) > 1 and token not in SUMMARY_STOPWORDS]
+
+
+def _lexical_score(query, text):
+    query_tokens = set(tokenize_chatpdf_text(query))
+    if not query_tokens:
+        return 0.0
+    text_lower = str(text or "").lower()
+    text_tokens = tokenize_chatpdf_text(text_lower)
+    if not text_tokens:
+        return 0.0
+    overlap = len(query_tokens.intersection(set(text_tokens)))
+    phrase_bonus = 4 if str(query or "").lower().strip() and str(query or "").lower().strip() in text_lower else 0
+    return overlap * 3 + phrase_bonus + min(len(text_tokens), 600) / 1000
+
+
+def rerank_chatpdf_documents(question, docs, top_k=8):
+    return sorted(docs or [], key=lambda doc: _lexical_score(question, getattr(doc, "page_content", "")), reverse=True)[:top_k]
+
+
+def retrieve_pages(query, brain, top_k=8):
+    scored = []
+    for page_record in brain.get("page_index", []):
+        score = _lexical_score(query, " ".join([
+            str(page_record.get("section", "")),
+            str(page_record.get("preview", "")),
+            " ".join(str(keyword) for keyword in page_record.get("keywords", [])),
+        ]))
+        if score:
+            scored.append((score, page_record))
+    if not scored and brain.get("page_index"):
+        scored = [(1.0 / (index + 1), page) for index, page in enumerate(brain.get("page_index", [])[:top_k])]
+    scored.sort(key=lambda item: item[0], reverse=True)
+    return [page for _, page in scored[:top_k]]
+
+
+def get_page_record_by_id(brain, page_id):
+    for page_record in brain.get("pages", []):
+        if str(page_record.get("page")) == str(page_id):
+            return page_record
+    return None
+
+
+def search_tables(query, tables, top_k=5):
+    scored = []
+    for table in tables or []:
+        text = " ".join([str(table.get("table", "")), summarize_table_for_index(table)])
+        score = _lexical_score(query, text)
+        if score or any(term in str(query).lower() for term in ["table", "sheet", "row", "column", "csv", "data"]):
+            scored.append((score or 0.5, table))
+    scored.sort(key=lambda item: item[0], reverse=True)
+    return [table for _, table in scored[:top_k]]
+
+
+def search_diagrams(query, diagrams, top_k=5):
+    wants_visual = any(term in str(query).lower() for term in ["diagram", "figure", "image", "visual", "pin", "flow", "schematic"])
+    scored = []
+    for diagram in diagrams or []:
+        score = _lexical_score(query, diagram.get("text", ""))
+        if score or wants_visual:
+            scored.append((score or 0.5, diagram))
+    scored.sort(key=lambda item: item[0], reverse=True)
+    return [diagram for _, diagram in scored[:top_k]]
+
+
+def table_to_context_text(table, max_rows=30):
+    headers = [str(header) for header in table.get("headers", [])]
+    rows = [" | ".join(headers)] if headers else []
+    rows.extend(" | ".join(str(cell) for cell in row) for row in table.get("rows", [])[:max_rows])
+    return clean_text("\n".join(rows))
+
+
+def chatpdf_document_key(doc):
+    meta = getattr(doc, "metadata", {}) or {}
+    content_hash = hashlib.sha1(str(getattr(doc, "page_content", "")).encode("utf-8", errors="ignore")).hexdigest()[:12]
+    return (
+        meta.get("file_name", ""),
+        str(meta.get("page_or_sheet") or meta.get("page_number") or ""),
+        meta.get("section", ""),
+        content_hash,
+    )
+
+
+def merge_chatpdf_results(*result_groups):
+    merged = []
+    seen = set()
+    for group in result_groups:
+        for doc in group or []:
+            key = chatpdf_document_key(doc)
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(doc)
+    return merged
+
+
+def retrieve_file_brain_documents(question, file_names, user_id=None, top_k=8):
+    del user_id
+    brains = get_file_brains(file_names)
+    selected = []
+    per_file_k = max(2, min(top_k, math.ceil(top_k / max(len(brains), 1)) + 2))
+    for file_name, brain in brains.items():
+        file_entry = get_uploaded_file_entry(file_name)
+        file_bytes = file_entry.get("bytes", b"") if file_entry else b""
+        document_id = get_document_id(file_name, file_bytes)
+        file_type = brain.get("file_type") or get_chatpdf_file_type(file_name)
+        for page_index_record in retrieve_pages(question, brain, top_k=per_file_k):
+            page_record = get_page_record_by_id(brain, page_index_record.get("page"))
+            if not page_record:
+                continue
+            page_text = clean_text(page_record.get("text", ""))[:FILE_BRAIN_PAGE_CONTEXT_CHARS]
+            if page_text:
+                selected.append(Document(
+                    page_content=page_text,
+                    metadata={
+                        "file_name": file_name,
+                        "file_type": file_type,
+                        "page_number": str(page_record.get("page")),
+                        "page_or_sheet": str(page_record.get("page")),
+                        "document_id": document_id,
+                        "section": page_index_record.get("section") or f"Section {page_record.get('page')}",
+                    },
+                ))
+        for table in search_tables(question, brain.get("tables", []), top_k=2):
+            table_text = table_to_context_text(table)
+            if table_text:
+                locator = table.get("table") or "Table"
+                selected.append(Document(
+                    page_content=table_text,
+                    metadata={
+                        "file_name": file_name,
+                        "file_type": file_type,
+                        "page_number": str(locator),
+                        "page_or_sheet": str(locator),
+                        "document_id": document_id,
+                        "section": f"Structured table: {locator}",
+                    },
+                ))
+        for diagram in search_diagrams(question, brain.get("diagrams", []), top_k=2):
+            diagram_text = clean_text(diagram.get("text", ""))[:1200]
+            if diagram_text:
+                locator = diagram.get("page") or "Diagram"
+                selected.append(Document(
+                    page_content=diagram_text,
+                    metadata={
+                        "file_name": file_name,
+                        "file_type": file_type,
+                        "page_number": str(locator),
+                        "page_or_sheet": str(locator),
+                        "document_id": document_id,
+                        "section": "Visual reference",
+                    },
+                ))
+    return rerank_chatpdf_documents(question, selected, top_k=top_k)
+
+
+def retrieve_document_understanding_documents(question, file_names, user_id=None, top_k=10):
+    del user_id
+    documents = []
+    for file_name, brain in get_file_brains(file_names).items():
+        file_entry = get_uploaded_file_entry(file_name)
+        file_bytes = file_entry.get("bytes", b"") if file_entry else b""
+        document_id = get_document_id(file_name, file_bytes)
+        file_type = brain.get("file_type") or get_chatpdf_file_type(file_name)
+        semantic = brain.get("semantic_metadata", {}) or {}
+        for label, value in [
+            ("Document summary", semantic.get("executive_summary") or semantic.get("document_summary")),
+            ("Technical understanding", semantic.get("technical_summary")),
+        ]:
+            if value:
+                documents.append(Document(
+                    page_content=normalize_synthesis_text(value),
+                    metadata={
+                        "file_name": file_name,
+                        "file_type": file_type,
+                        "page_number": "Document",
+                        "page_or_sheet": "Document",
+                        "document_id": document_id,
+                        "section": label,
+                    },
+                ))
+        for section_summary in semantic.get("section_summaries", [])[:max(6, top_k)]:
+            summary_text = normalize_synthesis_text(section_summary.get("summary", ""))
+            if summary_text:
+                documents.append(Document(
+                    page_content=summary_text,
+                    metadata={
+                        "file_name": file_name,
+                        "file_type": file_type,
+                        "page_number": str(section_summary.get("page") or "Section"),
+                        "page_or_sheet": str(section_summary.get("page") or "Section"),
+                        "document_id": document_id,
+                        "section": section_summary.get("section") or "Section summary",
+                    },
+                ))
+    return rerank_chatpdf_documents(question, documents, top_k=top_k)
+
+
+def sparse_chatpdf_search(question, file_names, user_id=None, top_k=12):
+    """Lexical fallback over the same file-brain content."""
+    return retrieve_file_brain_documents(question, file_names, user_id=user_id, top_k=top_k)
+
+
+def format_chatpdf_sources(docs, include_snippets=False):
+    sources = []
+    seen = set()
+    for doc in docs or []:
+        meta = getattr(doc, "metadata", {}) or {}
+        label = build_chatpdf_citation_label(meta)
+        key = (meta.get("file_name", ""), str(meta.get("page_or_sheet") or meta.get("page_number") or ""), meta.get("section", ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        line = f"- {label}"
+        if include_snippets:
+            snippet = normalize_synthesis_text(getattr(doc, "page_content", ""))[:220]
+            if snippet:
+                line += f"\n  Snippet: {snippet}"
+        sources.append(line)
+    return "\n".join(sources) if sources else "- No sources found"
+
+
+SMART_QUERY_INTENT_TERMS = {
+    "FULL_DOCUMENT_ANALYSIS": "introduction overview purpose architecture components workflow applications constraints key takeaways",
+    "SHORT_SUMMARY": "overview purpose what it does key points takeaways",
+    "OVERVIEW": "overview purpose audience usage main concept areas covered",
+    "FEATURES_ONLY": "features capabilities functions benefits components",
+    "SPECIFIC_COMPONENT_DETAILS": "component module interface connector configuration usage limitations details",
+    "PIN_DIAGRAMS_CONNECTORS_TABLES": "pin connector pinout signal mapping table channel diagram figure",
+    "WORKFLOW_OR_PROCESS": "workflow process steps procedure input output operation usage flow",
+    "USE_CASES_APPLICATIONS": "use cases applications users scenarios benefits practical usage",
+    "COMPARISON": "compare difference similarities criteria capabilities limitations",
+    "TABLE_EXTRACTION": "table sheet rows columns csv structured values",
+    "IMAGE_OR_DIAGRAM_EXPLANATION": "diagram figure image flow architecture visual layout",
+    "DOWNLOADABLE_REPORT": "overview purpose findings features workflow tables recommendations report",
+    "TROUBLESHOOTING_OR_LIMITATIONS": "troubleshooting limitations constraints issue problem cause recommendation",
+    "REQUIREMENTS_OR_SPECIFICATION_EXTRACTION": "requirements specifications shall must value condition applies notes",
+}
+
+
+def build_retrieval_query_for_intent(question, intent):
+    question_text = re.sub(r"\s+", " ", str(question or "")).strip()
+    intent_terms = SMART_QUERY_INTENT_TERMS.get(str(intent or ""), "")
+    if not question_text:
+        return intent_terms
+    return f"{question_text} {intent_terms}".strip()
+
+
+def build_extractive_chatpdf_answer(question, docs):
+    """Grounded answer for specific questions without exposing raw extraction blocks."""
+    bullets = []
+    for doc in docs or []:
+        for sentence in document_intelligence_meaningful_sentences(getattr(doc, "page_content", ""), limit=4):
+            sentence = normalize_synthesis_text(sentence)
+            if sentence and sentence not in bullets:
+                bullets.append(sentence[:360])
+            if len(bullets) >= 5:
+                break
+        if len(bullets) >= 5:
+            break
+    if not bullets:
+        return (
+            "I could not find enough meaningful document content to answer that accurately. "
+            "Try asking for a summary, overview, analysis, or a more specific component or section."
+        )
+    return "Based on the meaningful document context, the answer is:\n\n" + "\n".join(f"- {item}" for item in bullets)
+
+
+def _document_intent_from_technical_intent(question, intent):
+    explicit = {
+        "FULL_DOCUMENT_ANALYSIS": "analysis_request",
+        "SHORT_SUMMARY": "summarization_request",
+        "OVERVIEW": "overview_request",
+        "COMPARISON": "comparison_request",
+    }
+    if intent in explicit:
+        return explicit[intent]
+    return classify_query_intent(question)
+
+
+def smart_file_brain_query(question, target_files, user_id=None, intent=None, top_k=8):
+    """Semantic document-chat engine for all supported uploaded formats."""
+    user_id = user_id or get_active_user_id()
+    file_names = list(dict.fromkeys(target_files or []))
+    if not file_names:
+        return "Please select one or more documents before asking a question.\n\nSources:\n- No sources found", []
+
+    ensure_files_processed(file_names)
+    file_texts = {file_name: st.session_state.file_texts.get(file_name, "") for file_name in file_names}
+    intent = intent or classify_technical_document_request(question)
+    document_intent = _document_intent_from_technical_intent(question, intent)
+    retrieval_query = build_retrieval_query_for_intent(question, intent)
+
+    docs = []
+    if intent in {"FULL_DOCUMENT_ANALYSIS", "SHORT_SUMMARY", "OVERVIEW", "DOWNLOADABLE_REPORT"} or requires_document_scope(document_intent):
+        docs = merge_chatpdf_results(
+            retrieve_document_understanding_documents(retrieval_query, file_names, user_id=user_id, top_k=max(top_k, 10)),
+            retrieve_file_brain_documents(retrieval_query, file_names, user_id=user_id, top_k=top_k),
+        )
+    else:
+        docs = retrieve_file_brain_documents(retrieval_query, file_names, user_id=user_id, top_k=top_k)
+    if not docs:
+        docs = sparse_chatpdf_search(question, file_names, user_id=user_id, top_k=top_k)
+
+    structured_response = None
+    if intent == "FEATURES_ONLY":
+        structured_response = build_features_only_response(file_texts)
+    elif intent == "SPECIFIC_COMPONENT_DETAILS":
+        structured_response = build_specific_component_response(file_texts, question)
+    elif intent == "PIN_DIAGRAMS_CONNECTORS_TABLES":
+        structured_response = build_diagram_pin_details_response(file_texts, question)[0]
+    elif intent == "WORKFLOW_OR_PROCESS":
+        structured_response = build_workflow_or_process_response(file_texts)
+    elif intent == "USE_CASES_APPLICATIONS":
+        structured_response = build_use_cases_applications_response(file_texts)
+    elif intent == "TABLE_EXTRACTION":
+        structured_response = build_table_extraction_response(file_texts)
+    elif intent == "IMAGE_OR_DIAGRAM_EXPLANATION":
+        structured_response = build_image_or_diagram_extraction_response(file_texts, question)
+    elif intent == "TROUBLESHOOTING_OR_LIMITATIONS":
+        structured_response = build_troubleshooting_or_limitations_response(file_texts)
+    elif intent == "REQUIREMENTS_OR_SPECIFICATION_EXTRACTION":
+        structured_response = build_requirements_or_specification_extraction_response(file_texts)
+    elif intent == "COMPARISON":
+        structured_response = build_component_comparison_response(file_texts, question)
+
+    if structured_response:
+        answer = structured_response
+    elif document_intent in {"analysis_request", "summarization_request", "overview_request", "technical_overview", "themes_request"}:
+        answer = synthesize_document_response(
+            query=question,
+            document_intent=document_intent,
+            brains=get_file_brains(file_names),
+            docs=docs,
+            sources_text=format_chatpdf_sources(docs),
+        )
+    else:
+        answer = build_extractive_chatpdf_answer(question, docs)
+
+    if "Sources:" not in str(answer):
+        answer = str(answer).rstrip() + "\n\nSources:\n" + (format_chatpdf_sources(docs) if docs else "\n".join(f"- {file_name}" for file_name in file_names))
+
+    append_chatpdf_memory(user_id, file_names, question, answer)
+    return strip_llm_suggestions_from_response(answer), docs
+
+
+def answer_chatpdf_question(question, file_names, user_id=None, top_k=8):
+    return smart_file_brain_query(
+        question,
+        file_names,
+        user_id=user_id,
+        intent=classify_technical_document_request(question),
+        top_k=top_k,
+    )
 
 
 def _help_state_key(tab_name):
@@ -1930,3963 +2825,6 @@ def set_help_popup_state(tab_name, is_open):
         updated_params.pop(query_key, None)
 
     _set_query_params(updated_params)
-
-
-def render_mobile_workspace_controls():
-    if not st.session_state.get("is_authenticated"):
-        return
-
-    show_sidebar = st.session_state.get("mobile_sidebar_visible", False)
-    if show_sidebar:
-        mobile_mode_css = """
-        <style>
-        @media (max-width: 767px) {
-            section.main,
-            [data-testid="stMain"],
-            div[data-testid="stMain"] {
-                display: none !important;
-            }
-            [data-testid="stSidebar"],
-            .stSidebar {
-                display: block !important;
-                width: 100% !important;
-                min-width: 0 !important;
-                max-width: 100% !important;
-                position: relative !important;
-                transform: none !important;
-                visibility: visible !important;
-                opacity: 1 !important;
-            }
-            [data-testid="stSidebar"] > div {
-                width: 100% !important;
-                max-width: 100% !important;
-            }
-        }
-        </style>
-        """
-    else:
-        mobile_mode_css = """
-        <style>
-        @media (max-width: 767px) {
-            [data-testid="stSidebar"],
-            .stSidebar {
-                display: none !important;
-                visibility: hidden !important;
-                width: 0 !important;
-                min-width: 0 !important;
-                max-width: 0 !important;
-                transform: translateX(-100%) !important;
-            }
-            section.main,
-            [data-testid="stMain"],
-            div[data-testid="stMain"],
-            div[data-testid="stAppViewContainer"] {
-                display: block !important;
-                width: 100% !important;
-                max-width: 100% !important;
-                margin-left: 0 !important;
-                padding-left: 0 !important;
-            }
-        }
-        </style>
-        """
-
-    st.markdown(
-        mobile_mode_css
-        + """
-        <style>
-        .st-key-mobile_show_files_btn,
-        .st-key-mobile_open_workspace_btn {
-            display: none;
-        }
-        @media (max-width: 767px) {
-            .st-key-mobile_show_files_btn,
-            .st-key-mobile_open_workspace_btn {
-                display: block !important;
-                margin-bottom: 0.75rem !important;
-            }
-            .st-key-mobile_show_files_btn button,
-            .st-key-mobile_open_workspace_btn button {
-                width: 100% !important;
-                min-height: 46px !important;
-                border-radius: 12px !important;
-                border: 2px solid #93c5fd !important;
-                background: #eff6ff !important;
-                color: #1e3a8a !important;
-                font-weight: 800 !important;
-            }
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def lazy_load_file_section(file_name, section_id, loader_func):
-    """Lazily load file sections on demand to reduce initial load time"""
-    cache_key = f"{file_name}_{section_id}"
-    cached_result = FILE_TEXT_CACHE.get(cache_key, ttl_seconds=7200)
-    if cached_result is not None:
-        return cached_result
-    
-    result = loader_func()
-    FILE_TEXT_CACHE.set(cache_key, result)
-    return result
-
-
-def optimize_tab_rendering():
-    """Optimize rendering by deferring non-active tab loading"""
-    active_tab = st.session_state.get("active_main_tab", "💬 Chat")
-    return active_tab
-
-
-def update_uploaded_file_status(file_name, status):
-    """Update the sidebar status badge for an uploaded file."""
-    for file_info in st.session_state.get("uploaded_files", []):
-        if file_info.get("name") == file_name:
-            file_info["status"] = status
-            break
-
-
-def ensure_file_processed(file_name):
-    """Process file with caching to avoid redundant extraction"""
-    file_info = get_uploaded_file_entry(file_name)
-    if not file_info:
-        return
-    update_uploaded_file_status(file_name, "processing")
-    file_name_lower = file_name.lower()
-    file_bytes = file_info["bytes"]
-    new_hash = get_file_hash(file_bytes)
-    hash_cache_key = f"{file_name}_hash"
-    has_changed = FILE_HASH_CACHE.get(hash_cache_key) != new_hash
-    FILE_HASH_CACHE[hash_cache_key] = new_hash
-    
-    # Check cache first
-    text_cache_key = f"{TEXT_EXTRACTION_SCHEMA_VERSION}:{file_name}"
-    cached_text = FILE_TEXT_CACHE.get(text_cache_key)
-    if cached_text is not None and not has_changed:
-        st.session_state.file_texts[file_name] = cached_text
-        if detect_file_type(file_name) == "excel":
-            cached_excel = EXCEL_DATA_CACHE.get(file_name)
-            if cached_excel is not None:
-                st.session_state.excel_data_by_file[file_name] = cached_excel
-        update_uploaded_file_status(file_name, "ready")
-        return
-    
-    # Process file if not in cache
-    if file_name not in st.session_state.file_texts or has_changed:
-        extracted_text = extract_text(file_name, file_bytes)
-        st.session_state.file_texts[file_name] = extracted_text
-        FILE_TEXT_CACHE.set(text_cache_key, extracted_text)
-
-    if detect_file_type(file_name) == "excel" and (file_name not in st.session_state.excel_data_by_file or has_changed):
-        excel_data = extract_excel_data(file_name, file_bytes)
-        st.session_state.excel_data_by_file[file_name] = excel_data
-        EXCEL_DATA_CACHE.set(file_name, excel_data)
-
-    update_uploaded_file_status(file_name, "ready")
-
-
-def detect_file_type(filename):
-    """Detect the normalized document type from a filename extension."""
-    ext = os.path.splitext(str(filename or ""))[1].lower()
-    mapping = {
-        ".pdf": "pdf",
-        ".docx": "word", ".doc": "word", ".odt": "word", ".rtf": "word",
-        ".pptx": "ppt", ".ppt": "ppt",
-        ".xlsx": "excel", ".xls": "excel",
-        ".csv": "csv",
-        ".txt": "text", ".md": "text", ".log": "text",
-        ".html": "html", ".htm": "html",
-        ".pages": "pages",
-        ".capl": "code", ".can": "code",
-        ".png": "image", ".jpg": "image", ".jpeg": "image", ".gif": "image", ".bmp": "image", ".webp": "image",
-    }
-    return mapping.get(ext, "unknown")
-
-
-def _read_uploaded_bytes(file):
-    """Return uploaded-file bytes without relying on the current file pointer."""
-    if file is None:
-        return b""
-    if isinstance(file, bytes):
-        return file
-    if isinstance(file, bytearray):
-        return bytes(file)
-    if hasattr(file, "getvalue"):
-        try:
-            return file.getvalue()
-        except Exception:
-            pass
-    try:
-        if hasattr(file, "seek"):
-            file.seek(0)
-        data = file.read()
-        return data.encode("utf-8", errors="ignore") if isinstance(data, str) else (data or b"")
-    except Exception:
-        return b""
-
-
-def _to_bytes_io(file):
-    return BytesIO(_read_uploaded_bytes(file))
-
-
-def clean_text(text):
-    """Normalize noisy extracted text while preserving paragraph boundaries for chunking."""
-    text = str(text or "").replace("\r\n", "\n").replace("\r", "\n")
-    text = re.sub(r"(?im)^\s*Page\s+\d+\s*$", "", text)
-    text = re.sub(r"[ \t\f\v]+", " ", text)
-    text = re.sub(r"\n\s*\n+", "\n", text)
-    text = re.sub(r" *\n *", "\n", text)
-    return text.strip()
-
-
-def combine_extracted_content(text_parts):
-    """Flatten typed extraction records into searchable text."""
-    combined = []
-    for content_type, content in text_parts or []:
-        if not content:
-            continue
-        if content_type == "TEXT":
-            combined.append(str(content))
-        elif content_type == "TABLE":
-            combined.append(f"TABLE:\n{content}")
-        elif content_type == "IMAGE":
-            combined.append(f"[IMAGE: {content}]")
-        elif content_type == "EMBEDDED_IMAGE":
-            combined.append(f"[EMBEDDED_IMAGE: {content}]")
-        elif content_type == "METADATA":
-            combined.append(str(content))
-        elif content_type == "ERROR":
-            combined.append(f"ERROR: {content}")
-        elif content_type == "UNSUPPORTED":
-            combined.append(str(content))
-    return clean_text("\n".join(combined))
-
-
-def extract_pdf(file):
-    """Extract PDF text, preferring PyMuPDF when available and falling back to pdfplumber."""
-    file_bytes = _read_uploaded_bytes(file)
-    if not file_bytes:
-        return ""
-
-    fitz_module = None
-    try:
-        fitz_module = importlib.import_module("fitz")
-    except Exception:
-        fitz_module = None
-
-    if fitz_module is not None:
-        try:
-            pdf_doc = fitz_module.open(stream=file_bytes, filetype="pdf")
-            pages = [page.get_text() for page in pdf_doc]
-            pdf_doc.close()
-            return clean_text("\n".join(pages))
-        except Exception:
-            pass
-
-    return combine_extracted_content(extract_pdf_content(BytesIO(file_bytes)))
-
-
-def extract_word(file, filename=None):
-    """Extract Word-like documents: DOCX directly, ODT/RTF via XML/plain-text helpers, DOC best-effort."""
-    file_bytes = _read_uploaded_bytes(file)
-    ext = os.path.splitext(str(filename or ""))[1].lower()
-    if ext == ".docx" or not ext:
-        try:
-            document = docx.Document(BytesIO(file_bytes))
-            paragraphs = [paragraph.text for paragraph in document.paragraphs if paragraph.text.strip()]
-            table_blocks = []
-            for table_index, table in enumerate(document.tables, start=1):
-                rows = [" | ".join(cell.text.strip() for cell in row.cells) for row in table.rows]
-                if any(row.strip() for row in rows):
-                    table_blocks.append(f"Table {table_index}:\n" + "\n".join(rows))
-            return clean_text("\n".join(paragraphs + table_blocks))
-        except Exception:
-            if not ext:
-                return ""
-    if ext == ".odt":
-        return combine_extracted_content(extract_odt_content(BytesIO(file_bytes)))
-    if ext == ".rtf":
-        return combine_extracted_content(extract_rtf_content(BytesIO(file_bytes)))
-    if ext == ".doc":
-        return combine_extracted_content(extract_legacy_office_content(BytesIO(file_bytes), "Legacy Word document"))
-    return ""
-
-
-def extract_ppt(file, filename=None):
-    """Extract PowerPoint slide text and simple table content."""
-    file_bytes = _read_uploaded_bytes(file)
-    ext = os.path.splitext(str(filename or ""))[1].lower()
-    if ext == ".ppt":
-        return combine_extracted_content(extract_legacy_office_content(BytesIO(file_bytes), "Legacy PowerPoint document"))
-    try:
-        presentation = Presentation(BytesIO(file_bytes))
-        slides = []
-        for index, slide in enumerate(presentation.slides, start=1):
-            content = []
-            for shape in slide.shapes:
-                if hasattr(shape, "text") and shape.text:
-                    content.append(shape.text)
-                if hasattr(shape, "table"):
-                    rows = []
-                    for row in shape.table.rows:
-                        rows.append(" | ".join(cell.text.strip() for cell in row.cells))
-                    if rows:
-                        content.append("Table:\n" + "\n".join(rows))
-            slides.append(f"Slide {index}:\n" + "\n".join(content))
-        return clean_text("\n\n".join(slides))
-    except Exception:
-        return combine_extracted_content(extract_pptx_content(BytesIO(file_bytes)))
-
-
-def extract_excel(file, filename=None):
-    """Extract spreadsheet data from every sheet into text."""
-    file_bytes = _read_uploaded_bytes(file)
-    try:
-        sheets = pd.read_excel(BytesIO(file_bytes), sheet_name=None)
-        text = []
-        for name, df in sheets.items():
-            text.append(f"Sheet: {name}")
-            text.append(df.fillna("").to_string(index=False))
-        return clean_text("\n\n".join(text))
-    except Exception:
-        ext = os.path.splitext(str(filename or ""))[1].lower()
-        if ext == ".xls":
-            return combine_extracted_content(extract_legacy_office_content(BytesIO(file_bytes), "Legacy Excel workbook"))
-        return combine_extracted_content(extract_xlsx_content(BytesIO(file_bytes)))
-
-
-def extract_csv(file):
-    """Extract CSV data into plain table text."""
-    try:
-        df = pd.read_csv(_to_bytes_io(file))
-        return clean_text(df.fillna("").to_string(index=False))
-    except Exception:
-        return combine_extracted_content(extract_csv_content(_to_bytes_io(file)))
-
-
-def extract_html(file):
-    """Extract visible text from HTML."""
-    try:
-        soup = BeautifulSoup(_read_uploaded_bytes(file), "html.parser")
-        for tag in soup(["script", "style", "nav", "footer"]):
-            tag.decompose()
-        return clean_text(soup.get_text("\n", strip=True))
-    except Exception:
-        return combine_extracted_content(extract_html_content(_to_bytes_io(file)))
-
-
-def extract_image_ocr(file):
-    """Extract text from an image with OCR when pytesseract/Tesseract are available."""
-    try:
-        pytesseract_module = importlib.import_module("pytesseract")
-        image = Image.open(_to_bytes_io(file))
-        return clean_text(pytesseract_module.image_to_string(image))
-    except Exception as exc:
-        return f"OCR unavailable for this image: {str(exc)[:160]}"
-
-
-def extract_code(file):
-    """Extract source/code-like files without aggressively normalizing syntax."""
-    return _read_uploaded_bytes(file).decode("utf-8", errors="ignore").strip()
-
-
-def extract_pages(file):
-    """Apple Pages is proprietary; ask the user for a reliable export format."""
-    return "Please convert the .pages file to PDF or DOCX for reliable chat analysis."
-
-
-def extract_text(file_or_name, filename_or_bytes=None):
-    """Unified loader for upload -> detect type -> format-specific extraction.
-
-    Supports both the new `(file, filename)` shape and the existing app calls
-    that pass `(file_name, file_bytes)`.
-    """
-    if isinstance(file_or_name, (str, os.PathLike)) and isinstance(filename_or_bytes, (bytes, bytearray)):
-        filename = str(file_or_name)
-        file = BytesIO(bytes(filename_or_bytes))
-    else:
-        file = file_or_name
-        filename = str(filename_or_bytes or getattr(file_or_name, "name", "") or "")
-
-    file_type = detect_file_type(filename)
-    try:
-        if file_type == "pdf":
-            return extract_pdf(file)
-        if file_type == "word":
-            return extract_word(file, filename)
-        if file_type == "ppt":
-            return extract_ppt(file, filename)
-        if file_type == "excel":
-            return extract_excel(file, filename)
-        if file_type == "csv":
-            return extract_csv(file)
-        if file_type == "html":
-            return extract_html(file)
-        if file_type == "text":
-            return clean_text(_read_uploaded_bytes(file).decode("utf-8", errors="ignore"))
-        if file_type == "image":
-            return extract_image_ocr(file)
-        if file_type == "code":
-            return extract_code(file)
-        if file_type == "pages":
-            return extract_pages(file)
-        return ""
-    except Exception as exc:
-        return f"ERROR: Error extracting content: {str(exc)}"
-
-
-def smart_chunk(text, chunk_size=1200):
-    """Paragraph-aware chunking before embedding."""
-    paragraphs = [paragraph.strip() for paragraph in str(text or "").split("\n") if paragraph.strip()]
-    chunks = []
-    current = ""
-
-    for paragraph in paragraphs:
-        if not current:
-            current = paragraph + "\n"
-        elif len(current) + len(paragraph) < chunk_size:
-            current += paragraph + "\n"
-        else:
-            chunks.append(current.strip())
-            current = paragraph + "\n"
-
-    if current.strip():
-        chunks.append(current.strip())
-    return chunks
-
-
-def create_documents(chunks, filename, file_type):
-    """Create LangChain documents with normalized and legacy-compatible metadata."""
-    return [
-        Document(
-            page_content=chunk,
-            metadata={
-                "source": filename,
-                "type": file_type,
-                "file_name": filename,
-                "file_type": file_type,
-                "page_number": "1",
-                "page_or_sheet": "Document",
-                "section": "Document",
-                "chunk_index": index,
-            },
-        )
-        for index, chunk in enumerate(chunks, start=1)
-    ]
-
-
-def process_file(file, filename):
-    """Run the upload -> detect -> extract -> normalize -> chunk -> document pipeline."""
-    file_type = detect_file_type(filename)
-    raw_text = extract_text(file, filename)
-    normalized_text = clean_text(raw_text)
-    if not normalized_text:
-        return []
-    return create_documents(smart_chunk(normalized_text), filename, file_type)
-
-
-def extract_pdf_content(bio):
-    """Extract searchable PDF text quickly.
-
-    Full table/image extraction is intentionally deferred to preview/download
-    helpers because scanning every page of a large manual is slow.
-    """
-    content = []
-    try:
-        with pdfplumber.open(bio) as pdf:
-            # Add metadata
-            if pdf.metadata:
-                metadata = []
-                for key, value in pdf.metadata.items():
-                    if value:
-                        metadata.append(f"{key}: {value}")
-                if metadata:
-                    content.append(("METADATA", "PDF Metadata:\n" + "\n".join(metadata)))
-            
-            content.append(("METADATA", f"Total Pages: {len(pdf.pages)}"))
-            
-            # Extract text from each page. Avoid table/image scans here so Chat
-            # can load large manuals without blocking on expensive page parsing.
-            for i, page in enumerate(pdf.pages):
-                page_text = page.extract_text() or ""
-                if page_text.strip():
-                    content.append(("TEXT", f"Page {i+1} Text:\n{page_text}"))
-    
-    except Exception as e:
-        content.append(("ERROR", f"PDF extraction failed: {str(e)}"))
-    
-    return content
-
-
-def table_to_png_bytes(table_data, title=None):
-    """Render table rows as a PNG image and return the bytes."""
-    try:
-        font = ImageFont.load_default()
-    except Exception:
-        font = None
-
-    padding = 10
-    row_height = 22
-    col_padding = 18
-
-    # Normalize table data
-    normalized_table = [[str(cell) for cell in row] for row in table_data]
-    col_widths = []
-    for col_idx in range(len(normalized_table[0])):
-        col_width = max(len(row[col_idx]) for row in normalized_table) * 7 + col_padding
-        col_widths.append(col_width)
-
-    width = sum(col_widths) + padding * 2
-    height = row_height * len(normalized_table) + padding * 2
-    if title:
-        height += row_height
-
-    image = Image.new("RGB", (width, height), "white")
-    draw = ImageDraw.Draw(image)
-    y = padding
-
-    if title:
-        draw.text((padding, y), title, fill="black", font=font)
-        y += row_height
-
-    for row in normalized_table:
-        x = padding
-        for col_idx, cell in enumerate(row):
-            draw.text((x, y), cell, fill="black", font=font)
-            x += col_widths[col_idx]
-        y += row_height
-
-    output = BytesIO()
-    image.save(output, format="PNG")
-    return output.getvalue()
-
-
-def image_bytes_to_png_bytes(image_bytes):
-    """Convert an uploaded image to PNG bytes."""
-    with Image.open(BytesIO(image_bytes)) as image:
-        png_buffer = BytesIO()
-        image.save(png_buffer, format="PNG")
-        return png_buffer.getvalue()
-
-
-def dataframe_to_table_rows(df):
-    """Convert a dataframe to table rows suitable for PNG rendering."""
-    safe_df = df.fillna("")
-    rows = [list(map(str, safe_df.columns.tolist()))]
-    rows.extend([list(map(str, row)) for row in safe_df.values.tolist()])
-    return rows
-
-
-def crop_pdf_region_to_png(page, bbox, resolution=150):
-    """Crop a rectangular region from a PDF page and return it as PNG bytes."""
-    cropped_page = page.crop(bbox)
-    cropped_image = cropped_page.to_image(resolution=resolution)
-    output = BytesIO()
-    cropped_image.original.save(output, format="PNG")
-    return output.getvalue()
-
-
-def extract_docx_content(bio):
-    """Extract text, tables, and images from DOCX."""
-    content = []
-    try:
-        doc = docx.Document(bio)
-        
-        # Extract metadata
-        core_props = doc.core_properties
-        metadata = []
-        if core_props.title:
-            metadata.append(f"Title: {core_props.title}")
-        if core_props.author:
-            metadata.append(f"Author: {core_props.author}")
-        if core_props.created:
-            metadata.append(f"Created: {core_props.created}")
-        if metadata:
-            content.append(("METADATA", "Document Metadata:\n" + "\n".join(metadata)))
-        
-        # Extract embedded images for preview and downloads
-        image_count = 0
-        if 'extracted_images' not in st.session_state:
-            st.session_state.extracted_images = {}
-        for rel in doc.part.rels.values():
-            if "image" in rel.reltype:
-                try:
-                    image_part = rel.target_part
-                    image_bytes = image_part.blob
-                    image_ext = image_part.content_type.split('/')[-1]
-                    if image_ext == 'jpeg':
-                        image_ext = 'jpg'
-                    image_key = f"docx_image_{image_count}"
-                    st.session_state.extracted_images[image_key] = {
-                        'bytes': image_bytes,
-                        'ext': image_ext,
-                        'filename': f"image_{image_count}.{image_ext}"
-                    }
-                    content.append(("EMBEDDED_IMAGE", f"Embedded Image {image_count + 1}: {image_key}"))
-                    image_count += 1
-                except Exception as e:
-                    content.append(("ERROR", f"Could not extract image {image_count + 1}: {e}"))
-        if image_count > 0:
-            content.append(("METADATA", f"Total Images: {image_count}"))
-
-        # Walk the document body in order and preserve headings, tables, and text.
-        current_section_title = None
-        current_section_lines = []
-        table_count = 0
-
-        def flush_current_section():
-            nonlocal current_section_title, current_section_lines
-            if current_section_title or current_section_lines:
-                if current_section_title:
-                    section_text = "\n\n".join(current_section_lines).strip()
-                    if section_text:
-                        content.append(("TEXT", f"Heading: {current_section_title}\n{section_text}"))
-                    else:
-                        content.append(("TEXT", f"Heading: {current_section_title}"))
-                else:
-                    section_text = "\n\n".join(current_section_lines).strip()
-                    if section_text:
-                        content.append(("TEXT", section_text))
-                current_section_title = None
-                current_section_lines = []
-
-        def is_docx_heading(para):
-            text = para.text.strip()
-            if not text:
-                return False
-            try:
-                style_name = (para.style.name or "").lower()
-            except Exception:
-                style_name = ""
-            if "heading" in style_name or style_name.startswith("title") or style_name.startswith("subtitle"):
-                return True
-            if re.match(r'^\d+(?:\.\d+)*\s+.+', text) and len(text) <= 120:
-                return True
-            return False
-
-        for element in doc.element.body:
-            if element.tag.endswith('}p'):
-                paragraph = Paragraph(element, doc)
-                paragraph_text = paragraph.text.strip()
-                if not paragraph_text:
-                    continue
-                if is_docx_heading(paragraph):
-                    flush_current_section()
-                    current_section_title = paragraph_text
-                else:
-                    current_section_lines.append(paragraph_text)
-            elif element.tag.endswith('}tbl'):
-                flush_current_section()
-                table_count += 1
-                table = Table(element, doc)
-                table_data = []
-                for row in table.rows:
-                    row_data = [cell.text.strip() for cell in row.cells]
-                    table_data.append(row_data)
-                if table_data:
-                    table_text = "\n".join([" | ".join(row) for row in table_data])
-                    content.append(("TABLE", f"Table {table_count}:\n{table_text}"))
-
-        flush_current_section()
-
-        if table_count > 0:
-            content.append(("METADATA", f"Total Tables: {table_count}"))
-
-        if not any(item[0] in ("TEXT", "TABLE", "EMBEDDED_IMAGE", "IMAGE", "METADATA") for item in content):
-            paragraphs = [para.text.strip() for para in doc.paragraphs if para.text.strip()]
-            if paragraphs:
-                content.append(("TEXT", "\n\n".join(paragraphs)))
-    except Exception as e:
-        content.append(("ERROR", f"DOCX extraction failed: {str(e)}"))
-    return content
-
-
-def extract_pptx_content(bio):
-    """Extract text, tables, and images from PPTX."""
-    content = []
-    try:
-        prs = Presentation(bio)
-        
-        content.append(("METADATA", f"Total Slides: {len(prs.slides)}"))
-        
-        # Extract and display images
-        image_count = 0
-        for slide in prs.slides:
-            for shape in slide.shapes:
-                if hasattr(shape, 'image'):
-                    try:
-                        image_bytes = shape.image.blob
-                        image_ext = shape.image.content_type.split('/')[-1]
-                        if image_ext == 'jpeg':
-                            image_ext = 'jpg'
-                        
-                        # Create a unique key for the image
-                        image_key = f"pptx_image_{image_count}"
-                        
-                        # Store image data for display
-                        if 'extracted_images' not in st.session_state:
-                            st.session_state.extracted_images = {}
-                        st.session_state.extracted_images[image_key] = {
-                            'bytes': image_bytes,
-                            'ext': image_ext,
-                            'filename': f"slide_image_{image_count}.{image_ext}"
-                        }
-                        
-                        content.append(("EMBEDDED_IMAGE", f"Slide Image {image_count + 1}: {image_key}"))
-                        image_count += 1
-                    except Exception as e:
-                        content.append(("ERROR", f"Could not extract slide image {image_count + 1}: {e}"))
-        
-        if image_count > 0:
-            content.append(("METADATA", f"Total Images: {image_count}"))
-        
-        # Extract text and tables from each slide
-        for i, slide in enumerate(prs.slides):
-            slide_content = []
-            
-            # Extract text shapes
-            for shape in slide.shapes:
-                if hasattr(shape, "text") and shape.text.strip():
-                    slide_content.append(shape.text)
-            
-            # Extract tables
-            for shape in slide.shapes:
-                if hasattr(shape, 'table'):
-                    table = shape.table
-                    table_data = []
-                    for row in table.rows:
-                        row_data = []
-                        for cell in row.cells:
-                            cell_text = cell.text.strip()
-                            row_data.append(cell_text)
-                        table_data.append(row_data)
-                    
-                    if table_data:
-                        table_text = "\n".join([" | ".join(row) for row in table_data])
-                        slide_content.append(f"Table:\n{table_text}")
-            
-            if slide_content:
-                content.append(("TEXT", f"Slide {i+1}:\n" + "\n\n".join(slide_content)))
-    
-    except Exception as e:
-        content.append(("ERROR", f"PPTX extraction failed: {str(e)}"))
-    
-    return content
-
-
-def extract_xlsx_content(bio):
-    """Extract data from all sheets in XLSX."""
-    content = []
-    try:
-        wb = openpyxl.load_workbook(bio, data_only=True)
-        
-        content.append(("METADATA", f"Workbook contains {len(wb.sheetnames)} sheets: {', '.join(wb.sheetnames)}"))
-        
-        # Extract data from each sheet
-        for sheet_name in wb.sheetnames:
-            sheet = wb[sheet_name]
-            sheet_data = []
-            
-            # Get all rows with data
-            for row in sheet.iter_rows(values_only=True):
-                if any(cell for cell in row):  # Skip empty rows
-                    row_data = [str(cell) if cell is not None else "" for cell in row]
-                    sheet_data.append(row_data)
-            
-            if sheet_data:
-                table_text = "\n".join([" | ".join(row) for row in sheet_data])
-                content.append(("TABLE", f"Sheet '{sheet_name}':\n{table_text}"))
-    
-    except Exception as e:
-        content.append(("ERROR", f"XLSX extraction failed: {str(e)}"))
-    
-    return content
-
-
-def extract_csv_content(bio):
-    """Extract CSV rows as table text for Chat, Compare, and Preview."""
-    content = []
-    try:
-        df = pd.read_csv(bio)
-        content.append(("METADATA", f"CSV rows: {len(df)} columns: {len(df.columns)}"))
-        if not df.empty:
-            preview_df = df.fillna("").head(500)
-            table_text = "\n".join(
-                " | ".join(map(str, row))
-                for row in [preview_df.columns.tolist()] + preview_df.values.tolist()
-            )
-            content.append(("TABLE", f"CSV Data:\n{table_text}"))
-    except Exception as e:
-        content.append(("ERROR", f"CSV extraction failed: {str(e)}"))
-    return content
-
-
-def extract_html_content(bio):
-    """Extract text and metadata from HTML."""
-    content = []
-    try:
-        html_content = bio.read()
-        soup = BeautifulSoup(html_content, "html.parser")
-        
-        # Extract title
-        title = soup.title.string if soup.title else "No title"
-        content.append(("METADATA", f"Title: {title}"))
-        
-        # Extract meta tags
-        meta_info = []
-        for meta in soup.find_all('meta'):
-            if meta.get('name') and meta.get('content'):
-                meta_info.append(f"{meta['name']}: {meta['content']}")
-        if meta_info:
-            content.append(("METADATA", "Meta Tags:\n" + "\n".join(meta_info)))
-        
-        # Count images
-        images = soup.find_all('img')
-        if images:
-            content.append(("IMAGE", f"{len(images)} images found in HTML"))
-        
-        # Extract text content
-        text = soup.get_text(separator="\n")
-        if text.strip():
-            content.append(("TEXT", text))
-    
-    except Exception as e:
-        content.append(("ERROR", f"HTML extraction failed: {str(e)}"))
-    
-    return content
-
-
-def xml_text_content(xml_bytes):
-    """Extract readable text from XML-based office documents."""
-    try:
-        root = ET.fromstring(xml_bytes)
-    except Exception:
-        soup = BeautifulSoup(xml_bytes, "xml")
-        return soup.get_text("\n", strip=True)
-
-    text_items = []
-    for element in root.iter():
-        tag_name = element.tag.split("}", 1)[-1].lower()
-        if tag_name in {"p", "h", "span", "line-break", "tab"} and element.text:
-            text_items.append(element.text.strip())
-        if element.tail:
-            text_items.append(element.tail.strip())
-    return "\n".join(item for item in text_items if item)
-
-
-def extract_odt_content(bio):
-    """Extract text and simple tables from OpenDocument Text files."""
-    content = []
-    try:
-        with zipfile.ZipFile(bio) as odt_zip:
-            if "meta.xml" in odt_zip.namelist():
-                meta_text = xml_text_content(odt_zip.read("meta.xml"))
-                if meta_text.strip():
-                    content.append(("METADATA", "ODT Metadata:\n" + meta_text[:2000]))
-
-            if "content.xml" not in odt_zip.namelist():
-                content.append(("ERROR", "ODT content.xml was not found."))
-                return content
-
-            content_xml = odt_zip.read("content.xml")
-            soup = BeautifulSoup(content_xml, "xml")
-            text_blocks = []
-            for node in soup.find_all(["text:h", "text:p"]):
-                text_value = node.get_text(" ", strip=True)
-                if text_value:
-                    text_blocks.append(text_value)
-            if not text_blocks:
-                fallback_text = xml_text_content(content_xml)
-                if fallback_text.strip():
-                    text_blocks.append(fallback_text)
-            if text_blocks:
-                content.append(("TEXT", "\n".join(text_blocks)))
-
-            for table_index, table in enumerate(soup.find_all("table:table"), start=1):
-                rows = []
-                for row in table.find_all("table:table-row"):
-                    cells = [cell.get_text(" ", strip=True) for cell in row.find_all("table:table-cell")]
-                    if any(cells):
-                        rows.append(" | ".join(cells))
-                if rows:
-                    content.append(("TABLE", f"Table {table_index}:\n" + "\n".join(rows)))
-    except Exception as e:
-        content.append(("ERROR", f"ODT extraction failed: {str(e)}"))
-    return content
-
-
-def strip_rtf_to_text(rtf_text):
-    """Best-effort RTF to plain text conversion without external dependencies."""
-    text = rtf_text
-    text = re.sub(r"\\'[0-9a-fA-F]{2}", lambda m: bytes.fromhex(m.group(0)[2:]).decode("latin-1", errors="ignore"), text)
-    text = re.sub(r"\\(par|line)\b", "\n", text)
-    text = re.sub(r"\\tab\b", "\t", text)
-    text = re.sub(r"\\[a-zA-Z]+-?\d* ?", "", text)
-    text = text.replace("\\{", "{").replace("\\}", "}").replace("\\\\", "\\")
-    text = re.sub(r"[{}]", "", text)
-    text = re.sub(r"\n\s*\n\s*\n+", "\n\n", text)
-    return html.unescape(text).strip()
-
-
-def extract_rtf_content(bio):
-    """Extract text from Rich Text Format documents."""
-    content = []
-    try:
-        raw = bio.read()
-        rtf_text = raw.decode("utf-8", errors="ignore")
-        if not rtf_text.strip():
-            rtf_text = raw.decode("latin-1", errors="ignore")
-        plain_text = strip_rtf_to_text(rtf_text)
-        if plain_text:
-            content.append(("TEXT", plain_text))
-        else:
-            content.append(("ERROR", "No readable text was found in the RTF file."))
-    except Exception as e:
-        content.append(("ERROR", f"RTF extraction failed: {str(e)}"))
-    return content
-
-
-def extract_legacy_office_content(bio, label):
-    """Best-effort text recovery for legacy binary Office files."""
-    content = []
-    try:
-        raw = bio.read()
-        decoded = raw.decode("utf-16le", errors="ignore") + "\n" + raw.decode("latin-1", errors="ignore")
-        strings = re.findall(r"[A-Za-z0-9][A-Za-z0-9\s.,;:!?()/_+\-]{3,}", decoded)
-        cleaned = []
-        seen = set()
-        for value in strings:
-            value = re.sub(r"\s+", " ", value).strip()
-            if len(value) < 4 or len(value) > 240:
-                continue
-            if value.lower() in seen:
-                continue
-            seen.add(value.lower())
-            cleaned.append(value)
-            if len(cleaned) >= 1000:
-                break
-
-        if cleaned:
-            content.append(("METADATA", f"{label}: recovered readable text using best-effort binary extraction."))
-            content.append(("TEXT", "\n".join(cleaned)))
-        else:
-            content.append(("ERROR", f"{label} text could not be recovered. Save/export as DOCX, PPTX, XLSX, PDF, RTF, or TXT for full analysis."))
-    except Exception as e:
-        content.append(("ERROR", f"{label} extraction failed: {str(e)}"))
-    return content
-
-
-def extract_pages_content(bio):
-    """Extract readable text from Apple Pages files when XML/text previews exist."""
-    content = []
-    try:
-        with zipfile.ZipFile(bio) as pages_zip:
-            names = pages_zip.namelist()
-            readable_parts = [
-                name for name in names
-                if name.lower().endswith((".xml", ".txt", ".html", ".xhtml"))
-                and not name.lower().startswith(("metadata/", "quicklook/thumbnail"))
-            ]
-
-            extracted_blocks = []
-            for name in readable_parts[:20]:
-                try:
-                    part_bytes = pages_zip.read(name)
-                    if name.lower().endswith((".html", ".xhtml")):
-                        text_value = BeautifulSoup(part_bytes, "html.parser").get_text("\n", strip=True)
-                    elif name.lower().endswith(".xml"):
-                        text_value = xml_text_content(part_bytes)
-                    else:
-                        text_value = part_bytes.decode("utf-8", errors="ignore")
-                    text_value = re.sub(r"\s+", " ", text_value).strip()
-                    if text_value:
-                        extracted_blocks.append(f"{name}\n{text_value}")
-                except Exception:
-                    pass
-
-            if extracted_blocks:
-                content.append(("TEXT", "\n\n".join(extracted_blocks)))
-            else:
-                content.append(("ERROR", "No readable text preview was found in this Pages file. Export it as DOCX/PDF for full analysis."))
-    except zipfile.BadZipFile:
-        content.append(("ERROR", "Pages extraction failed because this file is not a readable Pages ZIP package."))
-    except Exception as e:
-        content.append(("ERROR", f"Pages extraction failed: {str(e)}"))
-    return content
-
-
-def get_uploaded_file_entry(file_name):
-    for file_info in st.session_state.uploaded_files:
-        if file_info["name"] == file_name:
-            return file_info
-    return None
-
-
-def create_preview_link(file_name, highlight_term=None, page_num=None):
-    file_entry = get_uploaded_file_entry(file_name)
-    if not file_entry:
-        return None
-
-    token = None
-    for existing_token, token_data in list(PREVIEW_TOKENS.items()):
-        if token_data.get("file_name") == file_name and existing_token in PREVIEW_STORE:
-            token = existing_token
-            token_data["timestamp"] = datetime.now()
-            PREVIEW_STORE[existing_token] = file_entry
-            break
-
-    if token is None:
-        token = str(uuid.uuid4())
-        PREVIEW_TOKENS[token] = {'file_name': file_name, 'timestamp': datetime.now()}
-        PREVIEW_STORE[token] = file_entry
-        save_preview_data()
-
-    params = [f"preview_token={token}"]
-    if highlight_term:
-        params.append(f"highlight={urllib.parse.quote_plus(highlight_term)}")
-    if page_num is not None:
-        params.append(f"page={urllib.parse.quote_plus(str(page_num))}")
-    return "?" + "&".join(params)
-
-
-def create_heading_anchor(text):
-    anchor_text = str(text or "").strip().lower()
-    anchor_text = re.sub(r'[^a-z0-9]+', '-', anchor_text)
-    anchor_text = re.sub(r'-{2,}', '-', anchor_text).strip('-')
-    if not anchor_text:
-        anchor_text = 'preview'
-    return f"heading-{anchor_text}"
-
-
-def highlight_for_preview(text, highlight_term=None):
-    if not highlight_term:
-        return html.escape(text)
-    escaped = html.escape(text)
-    pattern = re.compile(re.escape(highlight_term), re.IGNORECASE)
-    highlighted = pattern.sub(
-        lambda m: f"<mark style='background:#fff3a3; padding:0 2px;'>{html.escape(m.group(0))}</mark>",
-        escaped
-    )
-    return highlighted
-
-
-def render_text_block(text, highlight_term=None, anchor_id=None):
-    if not highlight_term:
-        return None
-
-    escaped = html.escape(text)
-    pattern = re.compile(re.escape(highlight_term), re.IGNORECASE)
-    first_match = True
-
-    def replace_match(match):
-        nonlocal first_match
-        content = html.escape(match.group(0))
-        if first_match and anchor_id:
-            first_match = False
-            return f"<span id='{anchor_id}'></span><mark style='background:#fff3a3; padding:0 2px;'>{content}</mark>"
-        first_match = False
-        return f"<mark style='background:#fff3a3; padding:0 2px;'>{content}</mark>"
-
-    highlighted = pattern.sub(replace_match, escaped)
-    return f"<pre style='white-space: pre-wrap; word-break: break-word; background:#f4f7fb; padding:12px; border-radius:8px; font-family: inherit;'>{highlighted}</pre>"
-
-
-def render_document_preview(file_name, file_entry=None, highlight_term=None, highlight_page=None):
-    """Render document preview with caching and error handling"""
-    st.markdown(f"**Preview: {file_name}**")
-    file_name_lower = file_name.lower()
-    
-    # Ensure file entry exists
-    if file_entry is None:
-        if not file_name_lower.endswith(".pdf"):
-            ensure_file_processed(file_name)
-        file_entry = get_uploaded_file_entry(file_name)
-    else:
-        # Keep PDF rendering lazy. Full PDF text extraction happens only when an
-        # analysis panel explicitly asks for it.
-        if file_name not in st.session_state.file_texts and not file_name_lower.endswith(".pdf"):
-            extracted = extract_text(file_name, file_entry["bytes"])
-            st.session_state.file_texts[file_name] = extracted
-            FILE_TEXT_CACHE.set(file_name, extracted)
-        if file_name.lower().endswith(".xlsx") and file_name not in st.session_state.excel_data_by_file:
-            excel_data = extract_excel_data(file_name, file_entry["bytes"])
-            st.session_state.excel_data_by_file[file_name] = excel_data
-            EXCEL_DATA_CACHE.set(file_name, excel_data)
-    
-    if not file_entry:
-        st.error("❌ File preview unavailable - file could not be loaded.")
-        return
-
-    image_download_items = []
-    table_download_items = []
-
-    # Special handling for PDF files: render actual page images for true preview
-    if file_name_lower.endswith(".pdf"):
-        try:
-            pdf_bio = BytesIO(file_entry["bytes"])
-            with pdfplumber.open(pdf_bio) as pdf:
-                total_pages = len(pdf.pages)
-                if total_pages == 0:
-                    st.warning("⚠️ PDF has no readable pages")
-                    return
-                    
-                st.markdown(f"**PDF Pages: {total_pages}**")
-                
-                preview_key_base = hashlib.md5(file_name.encode("utf-8")).hexdigest()[:12]
-                batch_key = f"pdf_preview_batch_{preview_key_base}"
-                scroll_anchor_id = f"pdf-viewer-top-{preview_key_base}"
-                batch_size = 5
-                max_batch = max(0, (total_pages - 1) // batch_size)
-                default_batch = 0
-                if highlight_page and 1 <= highlight_page <= total_pages:
-                    default_batch = (highlight_page - 1) // batch_size
-                elif highlight_page is not None:
-                    st.warning(f"⚠️ Page {highlight_page} not found. Showing the first page batch.")
-
-                if batch_key not in st.session_state:
-                    st.session_state[batch_key] = default_batch
-                st.session_state[batch_key] = max(0, min(int(st.session_state[batch_key]), max_batch))
-
-                batch_start = st.session_state[batch_key] * batch_size
-                batch_end = min(total_pages, batch_start + batch_size)
-                pages_to_show = range(batch_start, batch_end)
-
-                render_scroll_anchor(scroll_anchor_id)
-                render_tables = st.checkbox(
-                    "Detect tables on previewed pages",
-                    value=False,
-                    key=f"pdf_preview_tables_{preview_key_base}",
-                    help="Table detection is slower, so it only runs when enabled.",
-                )
-                st.caption(f"Showing pages {batch_start + 1} to {batch_end} of {total_pages}. Five pages are rendered per batch for faster previews.")
-
-                # Render pages
-                highlight_found = False
-                for i in pages_to_show:
-                    page = pdf.pages[i]
-                    
-                    try:
-                        # Extract page text for highlighting
-                        page_text = page.extract_text() or ""
-                        page_anchor_id = None
-                        
-                        if highlight_term and highlight_term.lower() in page_text.lower():
-                            page_anchor_id = create_heading_anchor(highlight_term)
-                            highlight_found = True
-                            if page_anchor_id:
-                                st.markdown(f"<div id='{page_anchor_id}'></div>", unsafe_allow_html=True)
-                        
-                        # Render page image with caching
-                        page_cache_key = f"{file_name}_page_{i}_image_{PDF_PREVIEW_RESOLUTION}"
-                        cached_image = FILE_TEXT_CACHE.get(page_cache_key)
-                        
-                        if cached_image is None:
-                            page_image = page.to_image(resolution=PDF_PREVIEW_RESOLUTION)
-                            image_bytes_io = BytesIO()
-                            page_image.original.save(image_bytes_io, format="PNG")
-                            image_bytes = image_bytes_io.getvalue()
-                            FILE_TEXT_CACHE.set(page_cache_key, image_bytes)
-                        else:
-                            image_bytes = cached_image
-                        
-                        st.image(image_bytes, caption=f"Page {i+1}", use_container_width=True)
-                        
-                        # Show highlighted text if match found
-                        if page_anchor_id and highlight_term:
-                            st.markdown("### Highlighted Text", unsafe_allow_html=True)
-                            st.markdown(render_text_block(page_text, highlight_term, anchor_id=None), unsafe_allow_html=True)
-                        
-                        # Extract tables only when requested; this is slow on large manuals.
-                        tables = page.extract_tables() if render_tables else []
-                        if tables:
-                            for j, table in enumerate(tables):
-                                if table and any(any(cell for cell in row) for row in table):
-                                    table_cache_key = f"{file_name}_page_{i}_table_{j}"
-                                    cached_table = FILE_TEXT_CACHE.get(table_cache_key)
-                                    
-                                    if cached_table is None:
-                                        table_png = table_to_png_bytes(table, title=f"Page {i+1} Table {j+1}")
-                                        FILE_TEXT_CACHE.set(table_cache_key, table_png)
-                                    else:
-                                        table_png = cached_table
-                                    
-                                    st.image(table_png, caption=f"Page {i+1} Table {j+1}", use_container_width=True)
-                                    table_download_items.append({
-                                        "label": f"📥 Download Table {j+1} as PNG",
-                                        "data": table_png,
-                                        "file_name": f"{os.path.splitext(file_name)[0]}_page_{i+1}_table_{j+1}.png",
-                                        "mime": "image/png",
-                                        "key": f"download_pdf_table_{file_name}_{i}_{j}"
-                                    })
-                        
-                        image_download_items.append({
-                            "label": f"📥 Download Page {i+1} as PNG",
-                            "data": image_bytes,
-                            "file_name": f"{os.path.splitext(file_name)[0]}_page_{i+1}.png",
-                            "mime": "image/png",
-                            "key": f"download_pdf_page_{file_name}_{i}"
-                        })
-                    
-                    except Exception as page_err:
-                        st.warning(f"⚠️ Could not render page {i+1} as image: {str(page_err)[:100]}")
-                        page_text = page.extract_text() or ""
-                        if page_text.strip():
-                            st.markdown(f"#### Page {i+1} Text")
-                            st.code(page_text[:1000], language="text")
-
-                st.markdown("---")
-                nav_cols = st.columns([1, 1], vertical_alignment="center")
-                with nav_cols[0]:
-                    if st.button(
-                        "⬅ Previous",
-                        key=f"pdf_prev_batch_{preview_key_base}",
-                        use_container_width=True,
-                        disabled=st.session_state[batch_key] <= 0,
-                    ):
-                        set_paginated_index(batch_key, int(st.session_state[batch_key]) - 1, 0, max_batch, scroll_anchor_id)
-                        st.rerun()
-                with nav_cols[1]:
-                    if st.button(
-                        "Next ➡",
-                        key=f"pdf_next_batch_{preview_key_base}",
-                        use_container_width=True,
-                        disabled=batch_end >= total_pages,
-                    ):
-                        set_paginated_index(batch_key, int(st.session_state[batch_key]) + 1, 0, max_batch, scroll_anchor_id)
-                        st.rerun()
-                
-                # Download sections
-                if image_download_items:
-                    with st.expander("🖼️ Image Downloads", expanded=False):
-                        for item in image_download_items[:10]:  # Limit to first 10
-                            st.download_button(
-                                label=item["label"],
-                                data=item["data"],
-                                file_name=item["file_name"],
-                                mime=item["mime"],
-                                key=item["key"]
-                            )
-                
-                if table_download_items:
-                    with st.expander("📊 Table Downloads", expanded=False):
-                        for item in table_download_items[:10]:
-                            st.download_button(
-                                label=item["label"],
-                                data=item["data"],
-                                file_name=item["file_name"],
-                                mime=item["mime"],
-                                key=item["key"]
-                            )
-            
-            return
-        
-        except Exception as pdf_err:
-            st.error(f"❌ PDF rendering error: {str(pdf_err)[:200]}")
-            st.info("Falling back to text-based document preview...")
-
-    # Special handling for images
-    if file_name_lower.endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp")):
-        try:
-            st.image(file_entry["bytes"], caption=file_name, use_container_width=True)
-            png_bytes = image_bytes_to_png_bytes(file_entry["bytes"])
-            ext = file_name_lower.split('.')[-1]
-            mime_type = f"image/{ext}"
-            if ext == "jpg":
-                mime_type = "image/jpeg"
-            st.download_button(
-                "📥 Download Image",
-                png_bytes,
-                file_name=file_name,
-                mime=mime_type
-            )
-            return
-        except Exception as img_err:
-            st.error(f"❌ Could not display image: {str(img_err)[:100]}")
-
-    # Fallback: text-based preview
-    try:
-        file_text = st.session_state.file_texts.get(file_name, "")
-        if not file_text.strip():
-            file_text = extract_text(file_name, file_entry["bytes"])
-        
-        if file_text.strip():
-            preview_length = 2000
-            preview_text = file_text[:preview_length]
-            if len(file_text) > preview_length:
-                preview_text += f"\n\n... ({len(file_text) - preview_length} more characters)"
-            
-            if highlight_term:
-                st.markdown(render_text_block(preview_text, highlight_term), unsafe_allow_html=True)
-            else:
-                st.code(preview_text, language="text")
-        else:
-            st.info("📄 No readable content found in document.")
-    
-    except Exception as fallback_err:
-        st.error(f"❌ Preview error: {str(fallback_err)[:100]}")
-    # Special handling for Excel files (show as table)
-    if file_name_lower.endswith(".xlsx"):
-        with st.spinner("Loading preview..."):
-            data = st.session_state.excel_data_by_file.get(file_name, [])
-            if data:
-                st.markdown("### Excel Preview")
-                preview_df = pd.DataFrame(data).head(20)
-                st.dataframe(preview_df, use_container_width=True, hide_index=True)
-                st.download_button(
-                    label="Download table as CSV",
-                    data=preview_df.to_csv(index=False),
-                    file_name=f"{os.path.splitext(file_name)[0]}_preview.csv",
-                    mime="text/csv",
-                    key=f"download_excel_csv_{file_name}"
-                )
-                try:
-                    table_png = table_to_png_bytes(
-                        dataframe_to_table_rows(preview_df),
-                        title=f"{file_name} Preview"
-                    )
-                    st.download_button(
-                        label="Download table as PNG",
-                        data=table_png,
-                        file_name=f"{os.path.splitext(file_name)[0]}_preview.png",
-                        mime="image/png",
-                        key=f"download_excel_png_{file_name}"
-                    )
-                except Exception:
-                    pass
-            else:
-                st.info("No preview data available for this spreadsheet.")
-        return
-
-    # For all other files, show comprehensive extracted content
-    with st.spinner("Loading preview..."):
-        # Ensure text extraction has run
-        if file_name not in st.session_state.file_texts:
-            st.session_state.file_texts[file_name] = extract_text(file_name, file_entry["bytes"])
-        
-        full_content = st.session_state.file_texts.get(file_name, "")
-        
-        if not full_content.strip():
-            st.warning("No content could be extracted from this file. This might indicate an issue with the file format or content extraction.")
-            # Try to show basic file info
-            file_size = len(file_entry["bytes"])
-            st.info(f"File size: {file_size} bytes")
-            st.info(f"File type: {file_name.split('.')[-1].upper()}")
-            return
-
-        # Parse the content into sections
-        sections = parse_extracted_content(full_content)
-        
-        # For PDF files, if parsing doesn't produce good content, show raw text
-        if file_name_lower.endswith('.pdf') and sections:
-            # Check if we have meaningful text content
-            has_meaningful_text = any(
-                section_type == "TEXT" and section_content.strip()
-                for section_type, _, section_content in sections
-            )
-            if not has_meaningful_text:
-                # Fall back to showing raw content
-                st.markdown("### Document Content")
-                anchor_id = create_heading_anchor(highlight_term) if highlight_term else None
-                with st.expander("Show extracted text", expanded=True):
-                    if highlight_term:
-                        st.markdown(render_text_block(full_content.strip(), highlight_term, anchor_id=anchor_id), unsafe_allow_html=True)
-                    else:
-                        st.code(full_content.strip(), language="text")
-                return
-        
-        if not sections:
-            st.warning("Content was extracted but could not be parsed into displayable sections.")
-            anchor_id = create_heading_anchor(highlight_term) if highlight_term else None
-            if highlight_term:
-                st.markdown(render_text_block(full_content[:1000] + ("..." if len(full_content) > 1000 else ""), highlight_term, anchor_id=anchor_id), unsafe_allow_html=True)
-            else:
-                st.code(full_content[:1000] + ("..." if len(full_content) > 1000 else ""), language="text")
-            return
-        
-        # Display each section
-        for section_type, section_title, section_content in sections:
-            if section_type == "METADATA":
-                with st.expander(f"📋 {section_title}", expanded=False):
-                    if section_content.strip():
-                        if highlight_term:
-                            st.markdown(render_text_block(section_content, highlight_term), unsafe_allow_html=True)
-                        else:
-                            st.code(section_content, language="text")
-                    else:
-                        st.info("No metadata available")
-            elif section_type == "TEXT":
-                section_anchor_id = create_heading_anchor(section_title)
-                st.markdown(f"<div id='{section_anchor_id}'></div>", unsafe_allow_html=True)
-                st.markdown(f"### {section_title}")
-                if section_content.strip():
-                    if len(section_content) > 2000:
-                        with st.expander("Show text content", expanded=False):
-                            if highlight_term:
-                                st.markdown(render_text_block(section_content, highlight_term, anchor_id=None), unsafe_allow_html=True)
-                            else:
-                                st.code(section_content, language="text")
-                    else:
-                        if highlight_term:
-                            st.markdown(render_text_block(section_content, highlight_term, anchor_id=None), unsafe_allow_html=True)
-                        else:
-                            st.code(section_content, language="text")
-                else:
-                    st.info("No text content available for this section.")
-            elif section_type == "TABLE":
-                with st.expander(f"📊 {section_title}", expanded=True):
-                    # Try to parse table and display as dataframe
-                    try:
-                        lines = section_content.strip().split('\n')
-                        if lines:
-                            # Parse table data
-                            table_data = []
-                            for line in lines:
-                                if ' | ' in line:
-                                    row = [cell.strip() for cell in line.split(' | ')]
-                                    table_data.append(row)
-                            
-                            if table_data:
-                                df = pd.DataFrame(table_data[1:] if len(table_data) > 1 else table_data, 
-                                                columns=table_data[0] if len(table_data) > 1 else None)
-                                st.dataframe(df, use_container_width=True, hide_index=True)
-                                
-                                # Add download button for table as CSV
-                                csv_data = df.to_csv(index=False)
-                                st.download_button(
-                                    label="Download as CSV",
-                                    data=csv_data,
-                                    file_name=f"{section_title.replace(' ', '_')}.csv",
-                                    mime="text/csv",
-                                    key=f"download_table_{file_name}_{section_title}"
-                                )
-                                try:
-                                    table_png = table_to_png_bytes(table_data, title=section_title)
-                                    table_download_items.append({
-                                        "label": f"Download {section_title} as PNG",
-                                        "data": table_png,
-                                        "file_name": f"{section_title.replace(' ', '_')}.png",
-                                        "mime": "image/png",
-                                        "key": f"download_table_png_{file_name}_{section_title}"
-                                    })
-                                except Exception:
-                                    pass
-                            else:
-                                if highlight_term:
-                                    st.markdown(render_text_block(section_content, highlight_term), unsafe_allow_html=True)
-                                else:
-                                    st.code(section_content, language="text")
-                    except Exception:
-                        if highlight_term:
-                            st.markdown(render_text_block(section_content, highlight_term), unsafe_allow_html=True)
-                        else:
-                            st.code(section_content, language="text")
-            elif section_type == "EMBEDDED_IMAGE":
-                # Display embedded image
-                image_key = section_content.split(": ")[-1] if ": " in section_content else section_content
-                if 'extracted_images' in st.session_state and image_key in st.session_state.extracted_images:
-                    image_data = st.session_state.extracted_images[image_key]
-                    try:
-                        st.image(image_data['bytes'], caption=image_data['filename'], use_container_width=True)
-                        # Add download button
-                        mime_type = f"image/{image_data['ext']}"
-                        if image_data['ext'] == "jpg":
-                            mime_type = "image/jpeg"
-                        st.download_button(
-                            label="Download Image",
-                            data=image_data['bytes'],
-                            file_name=image_data['filename'],
-                            mime=mime_type,
-                            key=f"download_embedded_{image_key}"
-                        )
-                        try:
-                            png_bytes = image_bytes_to_png_bytes(image_data['bytes'])
-                            st.download_button(
-                                label="Download as PNG",
-                                data=png_bytes,
-                                file_name=f"{os.path.splitext(image_data['filename'])[0]}.png",
-                                mime="image/png",
-                                key=f"download_embedded_png_{image_key}"
-                            )
-                        except Exception:
-                            pass
-                    except Exception as e:
-                        st.error(f"Could not display image: {e}")
-                else:
-                    st.info(f"🖼️ {section_content}")
-            elif section_type == "IMAGE":
-                st.info(f"🖼️ {section_content}")
-            elif section_type == "ERROR":
-                st.error(f"❌ {section_content}")
-            elif section_type == "UNSUPPORTED":
-                st.warning(f"⚠️ {section_content}")
-
-        if image_download_items:
-            with st.expander("🖼️ Image Downloads", expanded=False):
-                for item in image_download_items:
-                    st.download_button(
-                        label=item["label"],
-                        data=item["data"],
-                        file_name=item["file_name"],
-                        mime=item["mime"],
-                        key=item["key"]
-                    )
-        if table_download_items:
-            with st.expander("📊 Table Downloads", expanded=False):
-                for item in table_download_items:
-                    st.download_button(
-                        label=item["label"],
-                        data=item["data"],
-                        file_name=item["file_name"],
-                        mime=item["mime"],
-                        key=item["key"]
-                    )
-
-
-def parse_extracted_content(content):
-    """Parse the extracted content into sections for display."""
-    sections = []
-    lines = content.split('\n')
-    current_section = None
-    current_content = []
-
-    def flush_section():
-        nonlocal current_section, current_content
-        if not current_section:
-            return
-
-        section_type, section_title, section_value = current_section
-        if section_type in ("TEXT", "TABLE"):
-            sections.append((section_type, section_title, '\n'.join(current_content).strip()))
-        else:
-            final_value = section_value
-            if current_content:
-                final_value = '\n'.join(current_content).strip()
-            sections.append((section_type, section_title, final_value))
-
-        current_section = None
-        current_content = []
-    
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-            
-        # Check for section markers
-        if line.startswith('TABLE:'):
-            # Save previous section
-            flush_section()
-            
-            # Start new table section
-            current_section = ("TABLE", "Table Content", "")
-            current_content = []
-            
-        elif line.startswith('[IMAGE:'):
-            # Save previous section
-            flush_section()
-            
-            # Add image info
-            sections.append(("IMAGE", "Images", line))
-            current_section = None
-            current_content = []
-            
-        elif line.startswith('[EMBEDDED_IMAGE:'):
-            # Save previous section
-            flush_section()
-            
-            # Add embedded image info
-            image_info = line.replace('[EMBEDDED_IMAGE: ', '').replace(']', '')
-            sections.append(("EMBEDDED_IMAGE", "Embedded Image", image_info))
-            current_section = None
-            current_content = []
-            
-        elif line.startswith('PDF Metadata:') or line.startswith('Document Metadata:') or line.startswith('Meta Tags:') or line.startswith('Title:') or 'Pages:' in line or 'Slides:' in line or 'sheets:' in line:
-            # Save previous section
-            flush_section()
-            
-            # Start metadata section
-            if 'Metadata:' in line or 'Tags:' in line:
-                section_title = line.split(':')[0] + " Information"
-            else:
-                section_title = "Document Information"
-            
-            current_section = ("METADATA", section_title, line)
-            current_content = [line]
-            
-        elif line.startswith('Heading:'):
-            # Save previous section
-            flush_section()
-            
-            heading_title = line.replace('Heading:', '', 1).strip()
-            current_section = ("TEXT", heading_title or "Heading", "")
-            current_content = []
-
-        elif line.startswith('Page ') and 'Text:' in line:
-            # Save previous section
-            flush_section()
-            
-            # Start new text section
-            current_section = ("TEXT", f"Page {line.split()[1]} Content", "")
-            current_content = []
-            
-        elif line.startswith('Slide ') and ':' in line:
-            # Save previous section
-            flush_section()
-            
-            # Start new slide section
-            slide_num = line.split(':')[0]
-            current_section = ("TEXT", f"{slide_num} Content", "")
-            current_content = []
-            
-        elif line.startswith('Sheet ') and ':' in line:
-            # Save previous section
-            flush_section()
-            
-            # Start new sheet section
-            sheet_name = line.split(':')[0].replace("'", "")
-            current_section = ("TABLE", f"{sheet_name} Data", "")
-            current_content = []
-            
-        elif current_section:
-            # Add to current section
-            if current_section[0] == "METADATA":
-                current_content.append(line)
-                current_section = (current_section[0], current_section[1], '\n'.join(current_content))
-            else:
-                current_content.append(line)
-        else:
-            # Start default text section
-            if not current_section:
-                current_section = ("TEXT", "Document Content", "")
-                current_content = []
-            current_content.append(line)
-    
-    # Save final section
-    flush_section()
-    
-    # If no sections were created but we have content, create a default text section
-    if not sections and content.strip():
-        sections.append(("TEXT", "Document Content", content.strip()))
-    
-    return sections
-
-
-@st.cache_data(show_spinner=False)
-def build_summary_download_assets(file_name, file_bytes):
-    file_name_lower = file_name.lower()
-    image_items = []
-    table_items = []
-
-    try:
-        if file_name_lower.endswith(".pdf"):
-            with pdfplumber.open(BytesIO(file_bytes)) as pdf:
-                for page_index, page in enumerate(pdf.pages[:PDF_ASSET_SCAN_PAGE_LIMIT], start=1):
-                    for image_index, image_info in enumerate(page.images or [], start=1):
-                        try:
-                            bbox = (
-                                image_info.get("x0", 0),
-                                image_info.get("top", 0),
-                                image_info.get("x1", 0),
-                                image_info.get("bottom", 0)
-                            )
-                            if bbox[0] < bbox[2] and bbox[1] < bbox[3]:
-                                image_items.append({
-                                    "label": f"{file_name} - Page {page_index} Image {image_index}",
-                                    "data": crop_pdf_region_to_png(page, bbox),
-                                    "file_name": f"{os.path.splitext(file_name)[0]}_page_{page_index}_image_{image_index}.png",
-                                    "mime": "image/png"
-                                })
-                        except Exception:
-                            pass
-
-                    for table_index, table in enumerate(page.extract_tables() or [], start=1):
-                        if table and any(any(cell for cell in row) for row in table):
-                            try:
-                                table_items.append({
-                                    "label": f"{file_name} - Page {page_index} Table {table_index}",
-                                    "data": table_to_png_bytes(table, title=f"Page {page_index} Table {table_index}"),
-                                    "file_name": f"{os.path.splitext(file_name)[0]}_page_{page_index}_table_{table_index}.png",
-                                    "mime": "image/png"
-                                })
-                            except Exception:
-                                pass
-
-        elif file_name_lower.endswith(".docx"):
-            doc = docx.Document(BytesIO(file_bytes))
-            image_index = 1
-            for rel in doc.part.rels.values():
-                if "image" in rel.reltype:
-                    try:
-                        image_bytes = rel.target_part.blob
-                        image_items.append({
-                            "label": f"{file_name} - Image {image_index}",
-                            "data": image_bytes_to_png_bytes(image_bytes),
-                            "file_name": f"{os.path.splitext(file_name)[0]}_image_{image_index}.png",
-                            "mime": "image/png"
-                        })
-                        image_index += 1
-                    except Exception:
-                        pass
-
-            for table_index, table in enumerate(doc.tables, start=1):
-                table_data = [[cell.text.strip() for cell in row.cells] for row in table.rows]
-                if table_data:
-                    try:
-                        table_items.append({
-                            "label": f"{file_name} - Table {table_index}",
-                            "data": table_to_png_bytes(table_data, title=f"Table {table_index}"),
-                            "file_name": f"{os.path.splitext(file_name)[0]}_table_{table_index}.png",
-                            "mime": "image/png"
-                        })
-                    except Exception:
-                        pass
-
-        elif file_name_lower.endswith(".pptx"):
-            prs = Presentation(BytesIO(file_bytes))
-            image_index = 1
-            table_index = 1
-            for slide_index, slide in enumerate(prs.slides, start=1):
-                for shape in slide.shapes:
-                    if hasattr(shape, "image"):
-                        try:
-                            image_items.append({
-                                "label": f"{file_name} - Slide {slide_index} Image {image_index}",
-                                "data": image_bytes_to_png_bytes(shape.image.blob),
-                                "file_name": f"{os.path.splitext(file_name)[0]}_slide_{slide_index}_image_{image_index}.png",
-                                "mime": "image/png"
-                            })
-                            image_index += 1
-                        except Exception:
-                            pass
-                    if hasattr(shape, "table"):
-                        try:
-                            table_data = [
-                                [cell.text.strip() for cell in row.cells]
-                                for row in shape.table.rows
-                            ]
-                            table_items.append({
-                                "label": f"{file_name} - Slide {slide_index} Table {table_index}",
-                                "data": table_to_png_bytes(table_data, title=f"Slide {slide_index} Table {table_index}"),
-                                "file_name": f"{os.path.splitext(file_name)[0]}_slide_{slide_index}_table_{table_index}.png",
-                                "mime": "image/png"
-                            })
-                            table_index += 1
-                        except Exception:
-                            pass
-
-        elif file_name_lower.endswith(".xlsx"):
-            data = extract_excel_data(file_name, file_bytes)
-            if data:
-                preview_df = pd.DataFrame(data).head(20)
-                table_items.append({
-                    "label": f"{file_name} - Preview Table",
-                    "data": table_to_png_bytes(dataframe_to_table_rows(preview_df), title=f"{file_name} Preview"),
-                    "file_name": f"{os.path.splitext(file_name)[0]}_preview.png",
-                    "mime": "image/png"
-                })
-
-        elif file_name_lower.endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp")):
-            image_items.append({
-                "label": f"{file_name} - Image",
-                "data": image_bytes_to_png_bytes(file_bytes),
-                "file_name": f"{os.path.splitext(file_name)[0]}.png",
-                "mime": "image/png"
-            })
-    except Exception:
-        return {"images": [], "tables": []}
-
-    return {"images": image_items, "tables": table_items}
-
-
-def render_extracted_assets_preview(file_name, file_entry):
-    st.markdown(f"**Preview: {file_name}**")
-    assets = build_summary_download_assets(file_name, file_entry["bytes"])
-    image_items = assets.get("images", [])
-    table_items = assets.get("tables", [])
-
-    if not image_items and not table_items:
-        st.info("No extractable images or tables were found in this file.")
-        return
-
-    if image_items:
-        st.markdown("### Extracted Images")
-        for index, item in enumerate(image_items):
-            st.image(item["data"], caption=item["label"], use_container_width=True)
-            st.download_button(
-                label=f"Download {item['label']} as PNG",
-                data=item["data"],
-                file_name=item["file_name"],
-                mime=item["mime"],
-                key=f"preview_image_download_{index}_{item['file_name']}"
-            )
-
-    if table_items:
-        st.markdown("### Extracted Tables")
-        for index, item in enumerate(table_items):
-            st.image(item["data"], caption=item["label"], use_container_width=True)
-            st.download_button(
-                label=f"Download {item['label']} as PNG",
-                data=item["data"],
-                file_name=item["file_name"],
-                mime=item["mime"],
-                key=f"preview_table_download_{index}_{item['file_name']}"
-            )
-
-
-def format_file_size(byte_count):
-    """Return a readable file size label."""
-    try:
-        size = float(byte_count or 0)
-        for unit in ["B", "KB", "MB", "GB"]:
-            if size < 1024 or unit == "GB":
-                return f"{size:.1f} {unit}" if unit != "B" else f"{int(size)} {unit}"
-            size /= 1024
-    except Exception:
-        return "Unknown"
-
-
-@st.cache_data(show_spinner=False)
-def get_preview_metadata(file_name, file_bytes, extracted_text):
-    """Collect lightweight metadata without rendering the whole document."""
-    metadata = {
-        "File name": file_name,
-        "File type": os.path.splitext(file_name)[1].lower().lstrip(".").upper() or "Unknown",
-        "File size": format_file_size(len(file_bytes or b"")),
-        "Extracted text": f"{len(str(extracted_text or '')):,} characters",
-        "Pages / Slides / Sheets": "Not available",
-        "Tables": "0",
-        "Images": "0",
-    }
-
-    file_name_lower = file_name.lower()
-    try:
-        if file_name_lower.endswith(".pdf"):
-            with pdfplumber.open(BytesIO(file_bytes)) as pdf:
-                metadata["Pages / Slides / Sheets"] = f"{len(pdf.pages)} pages"
-        elif file_name_lower.endswith(".pptx"):
-            prs = Presentation(BytesIO(file_bytes))
-            metadata["Pages / Slides / Sheets"] = f"{len(prs.slides)} slides"
-        elif file_name_lower.endswith(".xlsx"):
-            wb = openpyxl.load_workbook(BytesIO(file_bytes), read_only=True, data_only=True)
-            metadata["Pages / Slides / Sheets"] = f"{len(wb.sheetnames)} sheets"
-        elif file_name_lower.endswith(".docx"):
-            doc = docx.Document(BytesIO(file_bytes))
-            metadata["Tables"] = str(len(doc.tables))
-
-        page_count, image_count, table_count = get_document_asset_counts(file_name, file_bytes, extracted_text)
-        if page_count and metadata["Pages / Slides / Sheets"] == "Not available":
-            metadata["Pages / Slides / Sheets"] = str(page_count)
-        metadata["Tables"] = str(max(int(metadata.get("Tables", "0") or 0), table_count))
-        metadata["Images"] = str(image_count)
-    except Exception:
-        pass
-
-    return metadata
-
-
-def render_preview_metadata_cards(metadata):
-    """Render compact metadata cards for the document viewer."""
-    try:
-        labels = list(metadata.items())
-        cols = st.columns(3)
-        for index, (label, value) in enumerate(labels):
-            with cols[index % 3]:
-                st.metric(label, value)
-    except Exception as e:
-        st.warning(f"Could not render preview metadata: {e}")
-
-
-def chunk_preview_text(text, chunk_size=1200, overlap=180):
-    """Split extracted text into chunks for search and Q&A."""
-    try:
-        clean_text = re.sub(r"\s+", " ", str(text or "")).strip()
-        if not clean_text:
-            return []
-        chunks = []
-        start = 0
-        while start < len(clean_text):
-            end = min(len(clean_text), start + chunk_size)
-            chunk = clean_text[start:end].strip()
-            if chunk:
-                chunks.append(chunk)
-            if end >= len(clean_text):
-                break
-            start = max(0, end - overlap)
-        return chunks
-    except Exception:
-        return []
-
-
-@st.cache_data(show_spinner=False)
-def keyword_search_preview_chunks(text, query, limit=8):
-    """Fast fallback search for preview Q&A and Search tabs."""
-    try:
-        query_terms = [
-            term.lower()
-            for term in re.findall(r"[A-Za-z0-9_+\-/]{2,}", str(query or ""))
-        ]
-        if not query_terms:
-            return []
-
-        scored = []
-        for chunk in chunk_preview_text(text):
-            chunk_lower = chunk.lower()
-            score = sum(chunk_lower.count(term) for term in query_terms)
-            if score:
-                scored.append((score, chunk))
-        scored.sort(key=lambda item: item[0], reverse=True)
-        return [chunk for _, chunk in scored[:limit]]
-    except Exception:
-        return []
-
-
-def semantic_search_preview_chunks(file_name, text, query, limit=5):
-    """Retrieve relevant chunks with FAISS when available, then fall back to keyword search."""
-    try:
-        if not str(query or "").strip() or not str(text or "").strip():
-            return []
-        vector_key = f"preview_vector::{file_name}"
-        if vector_key not in st.session_state.vector_stores:
-            st.session_state.vector_stores[vector_key] = create_vector_store(str(text)[:MAX_VECTOR_TEXT_CHARS])
-        docs = st.session_state.vector_stores[vector_key].similarity_search(query, k=limit)
-        return [doc.page_content for doc in docs if getattr(doc, "page_content", "")]
-    except Exception:
-        return keyword_search_preview_chunks(text, query, limit=limit)
-
-
-def build_preview_answer(file_name, text, question):
-    """Create an extractive answer from retrieved chunks."""
-    try:
-        chunks = semantic_search_preview_chunks(file_name, text, question, limit=5)
-        if not chunks:
-            return "No relevant information was found in the document text."
-        answer_parts = []
-        for chunk in chunks[:3]:
-            sentences = re.split(r"(?<=[.!?])\s+", chunk)
-            useful = [normalize_extracted_line(sentence) for sentence in sentences if len(sentence.strip()) > 30]
-            answer_parts.extend(useful[:2])
-        answer = "\n".join(f"- {part}" for part in answer_parts[:6])
-        return answer or "\n\n".join(chunks[:2])
-    except Exception as e:
-        return f"Could not answer the question: {e}"
-
-
-def extract_preview_tables(file_name, file_bytes, extracted_text):
-    """Extract interactive tables from spreadsheets or pipe-delimited extracted text."""
-    tables = []
-    file_name_lower = file_name.lower()
-    try:
-        if file_name_lower.endswith(".csv"):
-            tables.append(("CSV Data", pd.read_csv(BytesIO(file_bytes))))
-        elif file_name_lower.endswith(".xlsx"):
-            workbook = pd.read_excel(BytesIO(file_bytes), sheet_name=None)
-            for sheet_name, df in workbook.items():
-                tables.append((sheet_name, df))
-        elif file_name_lower.endswith(".xls"):
-            try:
-                workbook = pd.read_excel(BytesIO(file_bytes), sheet_name=None)
-                for sheet_name, df in workbook.items():
-                    tables.append((sheet_name, df))
-            except Exception:
-                pass
-        else:
-            current_rows = []
-            table_index = 1
-            for line in str(extracted_text or "").splitlines():
-                if " | " in line:
-                    current_rows.append([cell.strip() for cell in line.split(" | ")])
-                elif current_rows:
-                    width = max(len(row) for row in current_rows)
-                    normalized = [row + [""] * (width - len(row)) for row in current_rows]
-                    tables.append((f"Extracted Table {table_index}", pd.DataFrame(normalized)))
-                    table_index += 1
-                    current_rows = []
-            if current_rows:
-                width = max(len(row) for row in current_rows)
-                normalized = [row + [""] * (width - len(row)) for row in current_rows]
-                tables.append((f"Extracted Table {table_index}", pd.DataFrame(normalized)))
-    except Exception:
-        pass
-    return tables
-
-
-def dataframe_to_xlsx_bytes(df):
-    """Convert a dataframe to an XLSX download."""
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="Data")
-    return output.getvalue()
-
-
-def ocr_image_best_effort(file_bytes):
-    """Run optional OCR for image files when pytesseract is installed."""
-    try:
-        pytesseract = importlib.import_module("pytesseract")
-        with Image.open(BytesIO(file_bytes)) as image:
-            return pytesseract.image_to_string(image).strip()
-    except Exception as e:
-        return f"OCR is unavailable or failed: {e}"
-
-
-def build_preview_summary_markdown(file_name, file_bytes, extracted_text):
-    """Build a concise markdown summary for downloads."""
-    try:
-        plain_lines = [
-            normalize_extracted_line(line)
-            for line in str(extracted_text or "").splitlines()
-            if 20 <= len(line.strip()) <= 220
-        ]
-        words = re.findall(r"[A-Za-z][A-Za-z0-9_+\-/]{2,}", str(extracted_text or ""))
-        keyword_counts = Counter(
-            word.lower()
-            for word in words
-            if len(word) > 3 and word.lower() not in SUMMARY_STOPWORDS
-        )
-        keywords = [word.title() for word, _ in keyword_counts.most_common(8)]
-
-        sections = [
-            f"# Document Intelligence Summary: {file_name}",
-            "## Overview",
-            f"- File type: {os.path.splitext(file_name)[1].lower() or 'unknown'}",
-            f"- Extracted text length: {len(str(extracted_text or '')):,} characters",
-            f"- Main themes: {', '.join(keywords) if keywords else 'Not enough readable text detected'}",
-            "## Key Insights",
-        ]
-        key_lines = plain_lines[:5] or ["No reliable readable text was extracted."]
-        sections.extend(f"- {line}" for line in key_lines)
-        sections.extend([
-            "## Practical Use",
-            "- Use the Viewer tab for visual inspection.",
-            "- Use Search and Q&A for targeted analysis over relevant passages.",
-            "- Use Tables, Images, and Downloads to export reusable assets.",
-        ])
-        return "\n".join(sections)
-    except Exception as e:
-        return f"# Summary unavailable\n\n{e}"
-
-
-def render_paginated_text_document_viewer(file_name, extracted_text, page_size=9000):
-    """Render long text-like documents with explicit pagination or full-load mode."""
-    try:
-        text = str(extracted_text or "").strip()
-        if not text:
-            st.info("No readable text was extracted for this document.")
-            return
-
-        base_key = hashlib.md5(file_name.encode("utf-8")).hexdigest()[:12]
-        scroll_anchor_id = f"text-viewer-top-{base_key}"
-        full_key = f"text_full_view_{base_key}"
-        render_scroll_anchor(scroll_anchor_id)
-        st.checkbox("Load full document", key=full_key, help="Shows all extracted text. For very large files this may be slower.")
-
-        if st.session_state.get(full_key):
-            st.info("Full document mode is active. No content is truncated.")
-            st.text_area("Full extracted document", value=text, height=720, key=f"text_full_area_{base_key}")
-            return
-
-        total_sections = max(1, (len(text) + page_size - 1) // page_size)
-        st.info("Preview mode: showing one section at a time. Use Load full document to view everything at once.")
-
-        nav_cols = st.columns([1, 1, 2], vertical_alignment="center")
-        page_key = f"text_section_{base_key}"
-        if page_key not in st.session_state:
-            st.session_state[page_key] = 1
-        with nav_cols[0]:
-            if st.button("Previous section", key=f"text_prev_{base_key}", use_container_width=True):
-                set_paginated_index(page_key, int(st.session_state[page_key]) - 1, 1, total_sections, scroll_anchor_id)
-                st.rerun()
-        with nav_cols[1]:
-            if st.button("Next section", key=f"text_next_{base_key}", use_container_width=True):
-                set_paginated_index(page_key, int(st.session_state[page_key]) + 1, 1, total_sections, scroll_anchor_id)
-                st.rerun()
-        with nav_cols[2]:
-            section_number = st.number_input(
-                "Jump to section",
-                min_value=1,
-                max_value=total_sections,
-                value=int(st.session_state[page_key]),
-                key=f"text_jump_{base_key}",
-            )
-            if int(section_number) != int(st.session_state[page_key]):
-                set_paginated_index(page_key, int(section_number), 1, total_sections, scroll_anchor_id)
-                st.rerun()
-
-        start = (int(st.session_state[page_key]) - 1) * page_size
-        end = min(len(text), start + page_size)
-        st.caption(f"Showing section {st.session_state[page_key]} of {total_sections}. Characters {start + 1:,}-{end:,} of {len(text):,}.")
-        st.text_area("Document section", value=text[start:end], height=620, key=f"text_section_area_{base_key}_{st.session_state[page_key]}")
-    except Exception as e:
-        st.error(f"Could not render text document viewer: {e}")
-
-
-def render_spreadsheet_document_viewer(file_name, file_bytes):
-    """Render CSV/XLS/XLSX with sheet selection and table pagination."""
-    try:
-        file_name_lower = file_name.lower()
-        base_key = hashlib.md5(file_name.encode("utf-8")).hexdigest()[:12]
-        scroll_anchor_id = f"sheet-viewer-top-{base_key}"
-        render_scroll_anchor(scroll_anchor_id)
-
-        if file_name_lower.endswith(".csv"):
-            sheets = {"CSV Data": pd.read_csv(BytesIO(file_bytes))}
-        else:
-            try:
-                sheets = pd.read_excel(BytesIO(file_bytes), sheet_name=None)
-            except Exception as e:
-                st.warning(f"Spreadsheet preview is best-effort for this format: {e}")
-                rows = extract_excel_data(file_name, file_bytes)
-                sheets = {"Recovered Data": pd.DataFrame(rows)}
-
-        if not sheets:
-            st.info("No sheets or rows were found.")
-            return
-
-        sheet_name = st.selectbox("Sheet", list(sheets.keys()), key=f"sheet_select_{base_key}")
-        df = sheets[sheet_name]
-        total_rows = len(df)
-        rows_per_page = st.selectbox("Rows per page", [25, 50, 100, 250, 500, 1000], index=1, key=f"rows_page_{base_key}")
-        total_pages = max(1, (total_rows + rows_per_page - 1) // rows_per_page)
-
-        page_key = f"sheet_page_{base_key}_{sheet_name}"
-        if page_key not in st.session_state:
-            st.session_state[page_key] = 1
-
-        nav_cols = st.columns([1, 1, 2], vertical_alignment="center")
-        with nav_cols[0]:
-            if st.button("Previous rows", key=f"sheet_prev_{base_key}", use_container_width=True):
-                set_paginated_index(page_key, int(st.session_state[page_key]) - 1, 1, total_pages, scroll_anchor_id)
-                st.rerun()
-        with nav_cols[1]:
-            if st.button("Next rows", key=f"sheet_next_{base_key}", use_container_width=True):
-                set_paginated_index(page_key, int(st.session_state[page_key]) + 1, 1, total_pages, scroll_anchor_id)
-                st.rerun()
-        with nav_cols[2]:
-            jump_page = st.number_input(
-                "Jump to row page",
-                min_value=1,
-                max_value=total_pages,
-                value=int(st.session_state[page_key]),
-                key=f"sheet_jump_{base_key}",
-            )
-            if int(jump_page) != int(st.session_state[page_key]):
-                set_paginated_index(page_key, int(jump_page), 1, total_pages, scroll_anchor_id)
-                st.rerun()
-
-        start = (int(st.session_state[page_key]) - 1) * rows_per_page
-        end = min(total_rows, start + rows_per_page)
-        st.caption(f"Sheet '{sheet_name}': showing rows {start + 1:,}-{end:,} of {total_rows:,}. All sheets are selectable above.")
-        st.dataframe(df.iloc[start:end], use_container_width=True, hide_index=True)
-    except Exception as e:
-        st.error(f"Could not render spreadsheet viewer: {e}")
-
-
-def render_presentation_document_viewer(file_name, file_bytes, extracted_text):
-    """Render PPTX slides on demand, with best-effort text pagination for PPT."""
-    try:
-        base_key = hashlib.md5(file_name.encode("utf-8")).hexdigest()[:12]
-        scroll_anchor_id = f"slide-viewer-top-{base_key}"
-        render_scroll_anchor(scroll_anchor_id)
-        if file_name.lower().endswith(".pptx"):
-            prs = Presentation(BytesIO(file_bytes))
-            total_slides = len(prs.slides)
-            if total_slides == 0:
-                st.info("No slides were found.")
-                return
-
-            slide_key = f"slide_number_{base_key}"
-            if slide_key not in st.session_state:
-                st.session_state[slide_key] = 1
-
-            nav_cols = st.columns([1, 1, 2], vertical_alignment="center")
-            with nav_cols[0]:
-                if st.button("Previous slide", key=f"slide_prev_{base_key}", use_container_width=True):
-                    set_paginated_index(slide_key, int(st.session_state[slide_key]) - 1, 1, total_slides, scroll_anchor_id)
-                    st.rerun()
-            with nav_cols[1]:
-                if st.button("Next slide", key=f"slide_next_{base_key}", use_container_width=True):
-                    set_paginated_index(slide_key, int(st.session_state[slide_key]) + 1, 1, total_slides, scroll_anchor_id)
-                    st.rerun()
-            with nav_cols[2]:
-                slide_number = st.number_input(
-                    "Jump to slide",
-                    min_value=1,
-                    max_value=total_slides,
-                    value=int(st.session_state[slide_key]),
-                    key=f"slide_jump_{base_key}",
-                )
-                if int(slide_number) != int(st.session_state[slide_key]):
-                    set_paginated_index(slide_key, int(slide_number), 1, total_slides, scroll_anchor_id)
-                    st.rerun()
-
-            slide = prs.slides[int(st.session_state[slide_key]) - 1]
-            st.caption(f"Showing slide {st.session_state[slide_key]} of {total_slides}. Slides are rendered on demand.")
-            slide_lines = []
-            for shape in slide.shapes:
-                if hasattr(shape, "text") and shape.text.strip():
-                    slide_lines.append(shape.text.strip())
-                if hasattr(shape, "table"):
-                    table_rows = []
-                    for row in shape.table.rows:
-                        table_rows.append([cell.text.strip() for cell in row.cells])
-                    if table_rows:
-                        st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
-            if slide_lines:
-                st.markdown("### Slide Content")
-                st.markdown("\n\n".join(html.escape(line) for line in slide_lines), unsafe_allow_html=True)
-            else:
-                st.info("This slide has no readable text. Native PPTX image rendering is not available without an external converter.")
-        else:
-            st.warning("Legacy PPT preview uses best-effort extracted text. Convert to PPTX for slide-level rendering.")
-            render_paginated_text_document_viewer(file_name, extracted_text, page_size=7000)
-    except Exception as e:
-        st.error(f"Could not render presentation viewer: {e}")
-
-
-def render_universal_document_viewer(file_name, file_entry, extracted_text, highlight_term=None, highlight_page=None):
-    """Route the Viewer tab to a full-navigation renderer by file type."""
-    try:
-        file_bytes = file_entry["bytes"]
-        file_name_lower = file_name.lower()
-        if file_name_lower.endswith(".pdf"):
-            render_document_preview(file_name, file_entry=file_entry, highlight_term=highlight_term, highlight_page=highlight_page)
-        elif file_name_lower.endswith((".pptx", ".ppt")):
-            render_presentation_document_viewer(file_name, file_bytes, extracted_text)
-        elif file_name_lower.endswith((".xlsx", ".xls", ".csv")):
-            render_spreadsheet_document_viewer(file_name, file_bytes)
-        elif file_name_lower.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp")):
-            st.image(file_bytes, caption=file_name, use_container_width=True)
-        else:
-            render_paginated_text_document_viewer(file_name, extracted_text)
-    except Exception as e:
-        st.error(f"Could not render universal document viewer: {e}")
-
-
-def get_preview_extracted_text(file_name, file_bytes):
-    """Extract full text only when an analysis panel actually needs it."""
-    try:
-        if file_name not in st.session_state.file_texts:
-            with st.spinner("Extracting full document text for this analysis panel..."):
-                extracted = extract_text(file_name, file_bytes)
-                st.session_state.file_texts[file_name] = extracted
-                FILE_TEXT_CACHE.set(file_name, extracted)
-        return st.session_state.file_texts.get(file_name, "")
-    except Exception as e:
-        st.warning(f"Could not extract full document text: {e}")
-        return ""
-
-
-def render_professional_document_preview(file_name, file_entry=None, highlight_term=None, highlight_page=None):
-    """Render a professional multi-tab document intelligence preview."""
-    global PDF_PREVIEW_RESOLUTION
-
-    try:
-        if file_entry is None:
-            file_entry = get_uploaded_file_entry(file_name)
-        if not file_entry:
-            st.error("File preview unavailable - file could not be loaded.")
-            return
-
-        file_bytes = file_entry["bytes"]
-        file_name_lower = file_name.lower()
-        reliable_formats = (".pdf", ".docx", ".pptx", ".xlsx", ".csv", ".odt", ".rtf", ".txt", ".md", ".html", ".htm", ".png", ".jpg", ".jpeg", ".webp")
-        best_effort_formats = (".doc", ".ppt", ".xls", ".pages")
-
-        extracted_text = st.session_state.file_texts.get(file_name, "")
-
-        metadata = get_preview_metadata(file_name, file_bytes, extracted_text)
-
-        st.markdown(
-            """
-            <style>
-                .preview-shell {
-                    padding: 12px 0 2px;
-                }
-                .preview-note {
-                    border: 1px solid #dbeafe;
-                    background: #f8fbff;
-                    border-radius: 10px;
-                    padding: 12px 14px;
-                    color: #173152;
-                    margin: 8px 0 16px;
-                }
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        st.sidebar.markdown("### Preview Controls")
-        zoom_percent = st.sidebar.slider("PDF render zoom", 80, 180, 100, 10)
-        PDF_PREVIEW_RESOLUTION = max(72, int(zoom_percent))
-        quick_search = st.sidebar.text_input("What ", value=highlight_term or "")
-        st.sidebar.caption("Large files are rendered in pages, chunks, and cached extraction layers.")
-
-        st.markdown(f"## {html.escape(file_name)}")
-        render_preview_metadata_cards(metadata)
-
-        if file_name_lower.endswith(best_effort_formats):
-            st.warning(
-                "This is a binary or proprietary format. Preview and extraction use best-effort recovery. "
-                "For reliable formatting and analysis, convert to DOCX, PPTX, XLSX, PDF, ODT, RTF, TXT, or HTML."
-            )
-        elif not file_name_lower.endswith(reliable_formats):
-            st.warning("This file type is not fully supported. The app will attempt best-effort extraction.")
-
-        active_preview_panel = st.radio(
-            "Preview panel",
-            ["Viewer", "Summary", "Search", "Q&A", "Tables", "Images", "Downloads"],
-            horizontal=True,
-            key=f"preview_panel_{hashlib.md5(file_name.encode('utf-8')).hexdigest()[:12]}",
-        )
-
-        if active_preview_panel == "Viewer":
-            st.markdown("<div class='preview-note'>Viewer mode supports full-document navigation. PDFs, slides, sheets, and long text documents are rendered on demand instead of silently truncating content.</div>", unsafe_allow_html=True)
-            viewer_text = extracted_text
-            if file_name_lower.endswith((".doc", ".docx", ".odt", ".rtf", ".txt", ".md", ".html", ".htm", ".pages", ".ppt")):
-                viewer_text = get_preview_extracted_text(file_name, file_bytes)
-            render_universal_document_viewer(
-                file_name,
-                file_entry,
-                viewer_text,
-                highlight_term=quick_search or highlight_term,
-                highlight_page=highlight_page,
-            )
-
-        elif active_preview_panel == "Summary":
-            extracted_text = get_preview_extracted_text(file_name, file_bytes)
-            summary_md = build_preview_summary_markdown(file_name, file_bytes, extracted_text)
-            st.markdown(summary_md)
-            st.download_button(
-                "Download summary as Markdown",
-                data=summary_md.encode("utf-8"),
-                file_name=f"{os.path.splitext(file_name)[0]}_summary.md",
-                mime="text/markdown",
-                key=f"preview_summary_md_{file_name}",
-            )
-            st.download_button(
-                "Download summary as TXT",
-                data=summary_md.encode("utf-8"),
-                file_name=f"{os.path.splitext(file_name)[0]}_summary.txt",
-                mime="text/plain",
-                key=f"preview_summary_txt_{file_name}",
-            )
-
-        elif active_preview_panel == "Search":
-            extracted_text = get_preview_extracted_text(file_name, file_bytes)
-            search_query = st.text_input("Search extracted text", value=quick_search, key=f"preview_search_{file_name}")
-            if search_query:
-                chunks = keyword_search_preview_chunks(extracted_text, search_query, limit=20)
-                st.caption(f"{len(chunks)} relevant passages found.")
-                for index, chunk in enumerate(chunks, start=1):
-                    with st.expander(f"Match {index}", expanded=index == 1):
-                        st.write(chunk)
-            else:
-                st.info("Enter a search term to search extracted text chunks.")
-
-        elif active_preview_panel == "Q&A":
-            extracted_text = get_preview_extracted_text(file_name, file_bytes)
-            question = st.text_input("Ask a question about this document", key=f"preview_qa_{file_name}")
-            if question:
-                answer = build_preview_answer(file_name, extracted_text, question)
-                st.markdown("### Answer")
-                st.markdown(answer)
-                st.download_button(
-                    "Download Q&A result",
-                    data=f"Question: {question}\n\nAnswer:\n{answer}".encode("utf-8"),
-                    file_name=f"{os.path.splitext(file_name)[0]}_qa.txt",
-                    mime="text/plain",
-                    key=f"preview_qa_download_{file_name}",
-                )
-            else:
-                st.info("Ask a focused question. The app retrieves only relevant chunks before answering.")
-
-        elif active_preview_panel == "Tables":
-            if not file_name_lower.endswith((".csv", ".xlsx", ".xls")):
-                extracted_text = get_preview_extracted_text(file_name, file_bytes)
-            tables = extract_preview_tables(file_name, file_bytes, extracted_text)
-            if not tables:
-                st.info("No tables were detected. For scanned PDFs, enable page-level table detection in the Viewer tab.")
-            for index, (table_name, df) in enumerate(tables, start=1):
-                with st.expander(table_name, expanded=index == 1):
-                    st.dataframe(df, use_container_width=True, hide_index=True)
-                    st.download_button(
-                        "Download CSV",
-                        data=df.to_csv(index=False).encode("utf-8"),
-                        file_name=f"{os.path.splitext(file_name)[0]}_{index}.csv",
-                        mime="text/csv",
-                        key=f"preview_table_csv_{file_name}_{index}",
-                    )
-                    st.download_button(
-                        "Download XLSX",
-                        data=dataframe_to_xlsx_bytes(df),
-                        file_name=f"{os.path.splitext(file_name)[0]}_{index}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        key=f"preview_table_xlsx_{file_name}_{index}",
-                    )
-
-        elif active_preview_panel == "Images":
-            if file_name_lower.endswith((".png", ".jpg", ".jpeg", ".webp")):
-                st.image(file_bytes, caption=file_name, use_container_width=True)
-                if st.checkbox("Run OCR if available", key=f"preview_ocr_{file_name}"):
-                    st.text_area("OCR text", value=ocr_image_best_effort(file_bytes), height=220)
-            render_extracted_assets_preview(file_name, file_entry)
-
-        elif active_preview_panel == "Downloads":
-            extracted_text = get_preview_extracted_text(file_name, file_bytes)
-            summary_md = build_preview_summary_markdown(file_name, file_bytes, extracted_text)
-            st.download_button(
-                "Summary - Markdown",
-                data=summary_md.encode("utf-8"),
-                file_name=f"{os.path.splitext(file_name)[0]}_summary.md",
-                mime="text/markdown",
-                key=f"preview_download_summary_md_{file_name}",
-            )
-            st.download_button(
-                "Extracted text - TXT",
-                data=str(extracted_text or "").encode("utf-8"),
-                file_name=f"{os.path.splitext(file_name)[0]}_extracted_text.txt",
-                mime="text/plain",
-                key=f"preview_download_text_{file_name}",
-            )
-            report_bytes = None
-            try:
-                report_doc = docx.Document()
-                report_doc.add_heading(f"Document Intelligence Report: {file_name}", level=1)
-                report_doc.add_paragraph(summary_md)
-                report_output = BytesIO()
-                report_doc.save(report_output)
-                report_bytes = report_output.getvalue()
-            except Exception:
-                report_bytes = None
-            if report_bytes:
-                st.download_button(
-                    "Generated report - DOCX",
-                    data=report_bytes,
-                    file_name=f"{os.path.splitext(file_name)[0]}_report.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    key=f"preview_download_report_{file_name}",
-                )
-            with st.expander("Recommended install commands"):
-                st.code(
-                    "pip install streamlit pandas openpyxl python-docx python-pptx pdfplumber beautifulsoup4 pillow plotly faiss-cpu langchain-community langchain-text-splitters sentence-transformers pytesseract",
-                    language="bash",
-                )
-    except Exception as e:
-        st.error(f"Error rendering professional document preview: {e}")
-
-
-@st.cache_data(show_spinner=False)
-def extract_excel_data(file_name, file_bytes):
-    data = []
-    bio = BytesIO(file_bytes)
-    file_name_lower = file_name.lower()
-    try:
-        if file_name_lower.endswith(".xlsx"):
-            wb = openpyxl.load_workbook(bio, data_only=True)
-            for sheet in wb:
-                headers = None
-                for i, row in enumerate(sheet.iter_rows(values_only=True)):
-                    if i == 0:
-                        headers = list(row)
-                    else:
-                        if row and any(cell is not None for cell in row):
-                            data.append(dict(zip(headers, row)))
-    except Exception:
-        data = []
-    return data
-
-
-@st.cache_data(show_spinner=False)
-def create_vector_store(text):
-    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
-    chunks = splitter.split_text(text[:MAX_VECTOR_TEXT_CHARS])
-    emb = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-    return FAISS.from_texts(chunks, emb)
-
-
-@st.cache_resource(show_spinner=False)
-def get_chatpdf_embeddings():
-    """Shared embedding model for metadata-preserving ChatPDF retrieval."""
-    return HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-
-
-def get_active_user_id():
-    """Stable local user id used to isolate document vectors and memory."""
-    return str(st.session_state.get("logged_in_username") or "local_user").strip() or "local_user"
-
-
-def get_document_id(file_name, file_bytes):
-    """Stable document id from file name + content hash."""
-    digest = hashlib.sha1(file_bytes or b"").hexdigest()[:16]
-    clean_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(file_name or "document")).strip("_")
-    return f"{clean_name}_{digest}"
-
-
-def get_chatpdf_file_type(file_name):
-    """Normalize supported document extensions for ChatPDF metadata."""
-    file_type = detect_file_type(file_name)
-    return "document" if file_type == "unknown" else file_type
-
-
-def build_chatpdf_citation_label(metadata):
-    """Format citations in ChatPDF style for each supported file type."""
-    meta = metadata or {}
-    file_name = str(meta.get("file_name") or "document")
-    file_type = str(meta.get("file_type") or get_chatpdf_file_type(file_name)).lower()
-    locator = str(meta.get("page_or_sheet") or meta.get("page_number") or "").strip()
-    section = re.sub(r"\s+", " ", str(meta.get("section") or "")).strip()
-
-    if file_type == "pdf" and locator:
-        return f"{file_name} (PDF Page {locator})"
-    if file_type in {"ppt", "pptx"} and locator:
-        return f"{file_name} (Slide {locator})"
-    if file_type in {"excel", "xlsx"} and locator:
-        return f"{file_name} (Sheet: {locator})"
-
-    generic_sections = {
-        "",
-        "document",
-        "text content",
-        "extracted content",
-        "html",
-        "odt content",
-        "rtf content",
-    }
-    if section.lower() not in generic_sections:
-        return f"{file_name} (Section: {section[:90]})"
-    return file_name
-
-
-def get_chatpdf_collection_id(user_id, file_names):
-    selection_parts = []
-    for name in sorted(str(file_name) for file_name in file_names):
-        file_entry = get_uploaded_file_entry(name)
-        file_hash = get_file_hash(file_entry.get("bytes", b"")) if file_entry else "missing"
-        selection_parts.append(f"{name}:{file_hash}")
-    selection = "|".join(selection_parts)
-    return hashlib.sha1(f"{CHATPDF_SCHEMA_VERSION}|{user_id}|{selection}".encode("utf-8")).hexdigest()[:24]
-
-
-def get_chatpdf_vector_dir(user_id, file_names):
-    collection_id = get_chatpdf_collection_id(user_id, file_names)
-    safe_user = re.sub(r"[^A-Za-z0-9_.-]+", "_", user_id)
-    return os.path.join(APP_DIR, "chatpdf_vectorstores", safe_user, collection_id)
-
-
-def get_chatpdf_memory_key(user_id, file_names):
-    collection_id = get_chatpdf_collection_id(user_id, file_names)
-    return f"{user_id}:{collection_id}"
-
-
-def init_chatpdf_memory():
-    if "document_chat_memory" not in st.session_state or not isinstance(st.session_state.document_chat_memory, dict):
-        st.session_state.document_chat_memory = {}
-
-
-def get_chatpdf_memory(user_id, file_names):
-    init_chatpdf_memory()
-    key = get_chatpdf_memory_key(user_id, file_names)
-    return st.session_state.document_chat_memory.setdefault(key, [])
-
-
-def append_chatpdf_memory(user_id, file_names, question, answer):
-    memory = get_chatpdf_memory(user_id, file_names)
-    memory.append({"question": str(question), "answer": str(answer)})
-    st.session_state.document_chat_memory[get_chatpdf_memory_key(user_id, file_names)] = memory[-10:]
-
-
-def init_file_brain_registry():
-    """Session-local global memory registry for uploaded file brains."""
-    if "file_brains" not in st.session_state or not isinstance(st.session_state.file_brains, dict):
-        st.session_state.file_brains = {}
-    if "global_memory_registry" not in st.session_state or not isinstance(st.session_state.global_memory_registry, dict):
-        st.session_state.global_memory_registry = {"files": {}}
-    st.session_state.global_memory_registry.setdefault("files", {})
-    return st.session_state.global_memory_registry
-
-
-def normalize_brain_cell(value):
-    if value is None or (isinstance(value, float) and math.isnan(value)):
-        return ""
-    if isinstance(value, (datetime,)):
-        return value.isoformat()
-    return str(value)
-
-
-def summarize_table_for_index(table):
-    headers = " | ".join(str(header) for header in table.get("headers", [])[:20])
-    sample_rows = []
-    for row in table.get("rows", [])[:8]:
-        sample_rows.append(" | ".join(str(cell) for cell in row[:20]))
-    table_text = "\n".join([headers] + sample_rows).strip()
-    locator = table.get("sheet") or table.get("page") or table.get("table") or "Table"
-    return clean_text(f"{locator}\n{table_text}")
-
-
-def extract_pdf_pages(file):
-    """Extract PDF pages one at a time while preserving basic block structure."""
-    file_bytes = _read_uploaded_bytes(file)
-    pages = []
-    diagrams = []
-    if not file_bytes:
-        return pages, diagrams
-
-    try:
-        fitz_module = importlib.import_module("fitz")
-    except Exception:
-        fitz_module = None
-
-    if fitz_module is not None:
-        pdf_doc = None
-        try:
-            pdf_doc = fitz_module.open(stream=file_bytes, filetype="pdf")
-            for index, page in enumerate(pdf_doc, start=1):
-                text = clean_text(page.get_text("text"))
-                blocks = page.get_text("blocks") or []
-                page_record = {"page": index, "text": text, "blocks": blocks}
-                pages.append(page_record)
-                if any(keyword in text.lower() for keyword in ["figure", "diagram", "block", "flow", "layout"]):
-                    diagrams.append({
-                        "page": index,
-                        "text": text[:500],
-                        "kind": "pdf-text-reference",
-                    })
-            return pages, diagrams
-        except Exception:
-            pages = []
-            diagrams = []
-        finally:
-            try:
-                if pdf_doc is not None:
-                    pdf_doc.close()
-            except Exception:
-                pass
-
-    try:
-        with pdfplumber.open(BytesIO(file_bytes)) as pdf:
-            for index, page in enumerate(pdf.pages, start=1):
-                text = clean_text(page.extract_text() or "")
-                pages.append({"page": index, "text": text, "blocks": []})
-                if any(keyword in text.lower() for keyword in ["figure", "diagram", "block", "flow", "layout"]):
-                    diagrams.append({
-                        "page": index,
-                        "text": text[:500],
-                        "kind": "pdf-text-reference",
-                    })
-    except Exception as exc:
-        pages.append({"page": 1, "text": f"PDF extraction failed: {str(exc)[:160]}", "blocks": []})
-    return pages, diagrams
-
-
-def extract_word_pages_and_tables(file, filename=None):
-    file_bytes = _read_uploaded_bytes(file)
-    pages = []
-    tables = []
-    ext = os.path.splitext(str(filename or ""))[1].lower()
-    if ext and ext != ".docx":
-        text = extract_word(BytesIO(file_bytes), filename)
-        return [{"page": 1, "text": text, "blocks": []}], tables
-
-    try:
-        document = docx.Document(BytesIO(file_bytes))
-        section = "Document"
-        buffer = []
-        page_number = 1
-        for paragraph in document.paragraphs:
-            paragraph_text = paragraph.text.strip()
-            if not paragraph_text:
-                continue
-            style_name = str(getattr(paragraph.style, "name", "") or "")
-            if style_name.lower().startswith("heading") and buffer:
-                pages.append({"page": page_number, "section": section, "text": clean_text("\n".join(buffer)), "blocks": []})
-                buffer = []
-                page_number += 1
-                section = paragraph_text[:120]
-            buffer.append(paragraph_text)
-            if len("\n".join(buffer)) >= FILE_BRAIN_PAGE_CONTEXT_CHARS:
-                pages.append({"page": page_number, "section": section, "text": clean_text("\n".join(buffer)), "blocks": []})
-                buffer = []
-                page_number += 1
-        if buffer:
-            pages.append({"page": page_number, "section": section, "text": clean_text("\n".join(buffer)), "blocks": []})
-
-        for table_index, table in enumerate(document.tables, start=1):
-            rows = []
-            for row in table.rows:
-                rows.append([clean_text(cell.text) for cell in row.cells])
-            if rows:
-                headers = rows[0]
-                body = rows[1:FILE_BRAIN_MAX_TABLE_ROWS + 1]
-                tables.append({
-                    "table": f"Table {table_index}",
-                    "headers": headers,
-                    "rows": body,
-                    "row_count": max(len(rows) - 1, 0),
-                    "truncated": len(rows) - 1 > FILE_BRAIN_MAX_TABLE_ROWS,
-                })
-        return pages or [{"page": 1, "text": extract_word(BytesIO(file_bytes), filename), "blocks": []}], tables
-    except Exception:
-        return [{"page": 1, "text": extract_word(BytesIO(file_bytes), filename), "blocks": []}], tables
-
-
-def extract_ppt_pages(file, filename=None):
-    file_bytes = _read_uploaded_bytes(file)
-    ext = os.path.splitext(str(filename or ""))[1].lower()
-    if ext == ".ppt":
-        return [{"page": 1, "text": extract_ppt(BytesIO(file_bytes), filename), "blocks": []}], []
-
-    pages = []
-    tables = []
-    try:
-        presentation = Presentation(BytesIO(file_bytes))
-        for slide_index, slide in enumerate(presentation.slides, start=1):
-            slide_lines = []
-            for shape in slide.shapes:
-                if hasattr(shape, "text") and shape.text:
-                    slide_lines.append(shape.text)
-                if hasattr(shape, "table"):
-                    rows = []
-                    for row in shape.table.rows:
-                        rows.append([clean_text(cell.text) for cell in row.cells])
-                    if rows:
-                        tables.append({
-                            "sheet": f"Slide {slide_index}",
-                            "table": f"Slide {slide_index} table",
-                            "headers": rows[0],
-                            "rows": rows[1:FILE_BRAIN_MAX_TABLE_ROWS + 1],
-                            "row_count": max(len(rows) - 1, 0),
-                            "truncated": len(rows) - 1 > FILE_BRAIN_MAX_TABLE_ROWS,
-                        })
-            pages.append({"page": slide_index, "text": clean_text("\n".join(slide_lines)), "blocks": []})
-    except Exception:
-        pages.append({"page": 1, "text": extract_ppt(BytesIO(file_bytes), filename), "blocks": []})
-    return pages, tables
-
-
-def extract_tables_excel(file, filename=None):
-    """Extract spreadsheet tables as structured rows instead of flattened text."""
-    file_bytes = _read_uploaded_bytes(file)
-    tables = []
-    try:
-        sheets = pd.read_excel(BytesIO(file_bytes), sheet_name=None)
-        for name, df in sheets.items():
-            normalized_df = df.fillna("")
-            rows = [
-                [normalize_brain_cell(cell) for cell in row]
-                for row in normalized_df.values.tolist()[:FILE_BRAIN_MAX_TABLE_ROWS]
-            ]
-            tables.append({
-                "sheet": str(name),
-                "headers": [normalize_brain_cell(header) for header in list(normalized_df.columns)],
-                "rows": rows,
-                "row_count": len(normalized_df.index),
-                "truncated": len(normalized_df.index) > FILE_BRAIN_MAX_TABLE_ROWS,
-            })
-    except Exception:
-        if str(filename or "").lower().endswith(".xls"):
-            text = extract_excel(BytesIO(file_bytes), filename)
-            tables.append({"sheet": "Workbook", "headers": [], "rows": [[text]], "row_count": 1, "truncated": False})
-    return tables
-
-
-def extract_csv_tables(file):
-    file_bytes = _read_uploaded_bytes(file)
-    try:
-        df = pd.read_csv(BytesIO(file_bytes)).fillna("")
-        return [{
-            "sheet": "CSV",
-            "headers": [normalize_brain_cell(header) for header in list(df.columns)],
-            "rows": [
-                [normalize_brain_cell(cell) for cell in row]
-                for row in df.values.tolist()[:FILE_BRAIN_MAX_TABLE_ROWS]
-            ],
-            "row_count": len(df.index),
-            "truncated": len(df.index) > FILE_BRAIN_MAX_TABLE_ROWS,
-        }]
-    except Exception:
-        text = extract_csv(BytesIO(file_bytes))
-        return [{"sheet": "CSV", "headers": [], "rows": [[text]], "row_count": 1, "truncated": False}]
-
-
-def extract_generic_pages(file, filename=None):
-    text = extract_text(BytesIO(_read_uploaded_bytes(file)), filename)
-    chunks = smart_chunk(text, chunk_size=FILE_BRAIN_PAGE_CONTEXT_CHARS)
-    if not chunks:
-        chunks = [text]
-    return [{"page": index, "text": clean_text(chunk), "blocks": []} for index, chunk in enumerate(chunks, start=1)]
-
-
-def extract_file_structure(file_name, file_bytes):
-    file_type = detect_file_type(file_name)
-    bio = BytesIO(file_bytes or b"")
-    if file_type == "pdf":
-        pages, diagrams = extract_pdf_pages(bio)
-        return pages, [], diagrams
-    if file_type == "word":
-        pages, tables = extract_word_pages_and_tables(bio, file_name)
-        return pages, tables, []
-    if file_type == "ppt":
-        pages, tables = extract_ppt_pages(bio, file_name)
-        diagrams = [
-            {"page": p.get("page"), "text": p.get("text", "")[:500], "kind": "slide-visual-reference"}
-            for p in pages
-            if any(keyword in str(p.get("text", "")).lower() for keyword in ["figure", "diagram", "flow", "block", "architecture"])
-        ]
-        return pages, tables, diagrams
-    if file_type == "excel":
-        tables = extract_tables_excel(bio, file_name)
-        pages = [
-            {"page": table.get("sheet") or index, "section": table.get("sheet") or "Sheet", "text": summarize_table_for_index(table), "blocks": []}
-            for index, table in enumerate(tables, start=1)
-        ]
-        return pages, tables, []
-    if file_type == "csv":
-        tables = extract_csv_tables(bio)
-        pages = [{"page": 1, "section": "CSV", "text": summarize_table_for_index(tables[0]) if tables else "", "blocks": []}]
-        return pages, tables, []
-    pages = extract_generic_pages(bio, file_name)
-    diagrams = [
-        {"page": p.get("page"), "text": p.get("text", "")[:500], "kind": "text-reference"}
-        for p in pages
-        if any(keyword in str(p.get("text", "")).lower() for keyword in ["figure", "diagram", "flow", "block", "architecture"])
-    ]
-    return pages, [], diagrams
-
-
-def extract_lightweight_entities(text):
-    entities = set()
-    for token in re.findall(r"\b[A-Za-z][A-Za-z0-9_-]{2,}\b", str(text or "")):
-        if token.isupper() or re.search(r"[A-Z]{2,}|\d", token):
-            entities.add(token[:80])
-    return entities
-
-
-def extract_lightweight_facts(text, page, limit=8):
-    fact_markers = [
-        "supports", "provides", "requires", "shall", "must", "can", "enables",
-        "contains", "includes", "used for", "configured", "connects", "consists",
-    ]
-    facts = []
-    sentences = re.split(r"(?<=[.!?])\s+|\n+", str(text or ""))
-    for sentence in sentences:
-        clean_sentence = clean_text(sentence)
-        if len(clean_sentence) < 35:
-            continue
-        if any(marker in clean_sentence.lower() for marker in fact_markers):
-            facts.append({"page": page, "fact": clean_sentence[:350]})
-        if len(facts) >= limit:
-            break
-    return facts
-
-
-def build_file_brain(file_name, file_bytes):
-    """Build a mini knowledge system for one uploaded file."""
-    pages, tables, diagrams = extract_file_structure(file_name, file_bytes)
-    brain = {
-        "schema": FILE_BRAIN_SCHEMA_VERSION,
-        "file_name": file_name,
-        "file_type": detect_file_type(file_name),
-        "file_hash": get_file_hash(file_bytes or b""),
-        "pages": pages,
-        "page_index": [],
-        "facts": [],
-        "entities": set(),
-        "tables": tables,
-        "diagrams": diagrams,
-    }
-
-    for page_record in pages:
-        page_text = clean_text(page_record.get("text", ""))
-        page_id = page_record.get("page")
-        token_counts = Counter(tokenize_chatpdf_text(page_text))
-        keywords = [word for word, _ in token_counts.most_common(30)]
-        brain["page_index"].append({
-            "page": page_id,
-            "section": page_record.get("section", f"Page {page_id}"),
-            "preview": page_text[:FILE_BRAIN_PREVIEW_CHARS],
-            "keywords": keywords,
-            "char_count": len(page_text),
-        })
-        brain["entities"].update(extract_lightweight_entities(page_text))
-        brain["facts"].extend(extract_lightweight_facts(page_text, page_id))
-
-    for table_index, table in enumerate(tables, start=1):
-        table_text = summarize_table_for_index(table)
-        brain["entities"].update(extract_lightweight_entities(table_text))
-        if table_text:
-            brain["facts"].append({
-                "page": table.get("sheet") or table.get("page") or f"Table {table_index}",
-                "fact": f"Structured table available: {table_text[:300]}",
-            })
-
-    brain["entities"] = sorted(brain["entities"])[:500]
-    brain["semantic_metadata"] = build_semantic_metadata(
-        file_name=file_name,
-        file_type=brain["file_type"],
-        pages=pages,
-        tables=tables,
-        diagrams=diagrams,
-        entities=brain["entities"],
-    )
-    return brain
-
-
-def register_file(file_id, brain):
-    registry = init_file_brain_registry()
-    registry["files"][file_id] = brain
-    return brain
-
-
-def file_brain_has_current_semantics(brain):
-    semantic = brain.get("semantic_metadata", {}) if isinstance(brain, dict) else {}
-    if not isinstance(semantic, dict):
-        return False
-    required_keys = {
-        "executive_summary",
-        "technical_summary",
-        "key_concepts",
-        "architecture_components",
-        "semantic_relationships",
-        "section_summaries",
-    }
-    return required_keys.issubset(set(semantic.keys()))
-
-
-def ensure_file_brain(file_name):
-    init_file_brain_registry()
-    file_entry = get_uploaded_file_entry(file_name)
-    if not file_entry:
-        return None
-    file_bytes = file_entry.get("bytes", b"")
-    file_hash = get_file_hash(file_bytes)
-    cached = st.session_state.file_brains.get(file_name)
-    if (
-        isinstance(cached, dict)
-        and cached.get("hash") == file_hash
-        and isinstance(cached.get("brain"), dict)
-        and file_brain_has_current_semantics(cached["brain"])
-    ):
-        register_file(file_name, cached["brain"])
-        return cached["brain"]
-
-    brain = build_file_brain(file_name, file_bytes)
-    st.session_state.file_brains[file_name] = {"hash": file_hash, "brain": brain}
-    register_file(file_name, brain)
-    return brain
-
-
-def get_file_brains(file_names):
-    brains = {}
-    for file_name in file_names or []:
-        brain = ensure_file_brain(file_name)
-        if brain:
-            brains[file_name] = brain
-    return brains
-
-
-def retrieve_pages(query, brain, top_k=8):
-    """BM25 + keyword page retrieval over the page index, not full file text."""
-    query_tokens = set(tokenize_chatpdf_text(query))
-    if not query_tokens or not brain:
-        return []
-
-    bm25_scores = []
-    bm25_okapi_class = get_bm25_okapi_class()
-    page_index = brain.get("page_index", [])
-    if bm25_okapi_class is not None and page_index:
-        try:
-            corpus_tokens = [
-                tokenize_chatpdf_text(
-                    " ".join([
-                        str(page_record.get("section", "")),
-                        str(page_record.get("preview", "")),
-                        " ".join(str(keyword) for keyword in page_record.get("keywords", [])),
-                    ])
-                )
-                for page_record in page_index
-            ]
-            bm25 = bm25_okapi_class(corpus_tokens)
-            bm25_scores = list(bm25.get_scores(list(query_tokens)))
-        except Exception:
-            bm25_scores = []
-
-    scored = []
-    for index, page_record in enumerate(page_index):
-        preview = str(page_record.get("preview", "")).lower()
-        section = str(page_record.get("section", "")).lower()
-        keywords = set(page_record.get("keywords", []))
-        score = len(query_tokens.intersection(keywords)) * 3
-        score += sum(1 for token in query_tokens if token in preview)
-        score += sum(1 for token in query_tokens if token in section)
-        if bm25_scores:
-            score += float(bm25_scores[index])
-        if str(query or "").lower().strip() and str(query or "").lower().strip() in preview:
-            score += 5
-        if score:
-            scored.append((score, page_record))
-    scored.sort(key=lambda item: item[0], reverse=True)
-    return [page for _, page in scored[:top_k]]
-
-
-def search_tables(query, tables, top_k=5):
-    query_tokens = set(tokenize_chatpdf_text(query))
-    if not query_tokens:
-        return []
-    results = []
-    for table in tables or []:
-        headers_text = " ".join(str(header) for header in table.get("headers", []))
-        rows_text = " ".join(" ".join(str(cell) for cell in row) for row in table.get("rows", [])[:120])
-        table_text = f"{table.get('sheet', '')} {headers_text} {rows_text}".lower()
-        score = sum(1 for token in query_tokens if token in table_text)
-        if any(term in str(query).lower() for term in ["table", "sheet", "row", "column", "csv", "excel"]):
-            score += 1 if score else 0
-        if score:
-            results.append((score, table))
-    results.sort(key=lambda item: item[0], reverse=True)
-    return [table for _, table in results[:top_k]]
-
-
-def search_diagrams(query, diagrams, top_k=5):
-    query_tokens = set(tokenize_chatpdf_text(query))
-    diagram_terms = {"diagram", "figure", "image", "flow", "block", "architecture", "layout", "pin", "connector"}
-    wants_diagram = bool(query_tokens.intersection(diagram_terms))
-    results = []
-    for diagram in diagrams or []:
-        diagram_text = str(diagram.get("text", "")).lower()
-        score = sum(1 for token in query_tokens if token in diagram_text)
-        if wants_diagram:
-            score += 1
-        if score:
-            results.append((score, diagram))
-    results.sort(key=lambda item: item[0], reverse=True)
-    return [diagram for _, diagram in results[:top_k]]
-
-
-def cross_file_search(query, file_names=None, top_k=5):
-    registry = init_file_brain_registry()
-    query_tokens = set(tokenize_chatpdf_text(query))
-    if not query_tokens:
-        return []
-    allowed = set(file_names or registry.get("files", {}).keys())
-    results = []
-    for file_id, brain in registry.get("files", {}).items():
-        if file_id not in allowed:
-            continue
-        score = 0
-        for fact in brain.get("facts", []):
-            fact_text = str(fact.get("fact", "")).lower()
-            if any(token in fact_text for token in query_tokens):
-                score += 2
-        for entity in brain.get("entities", []):
-            if str(entity).lower() in query_tokens:
-                score += 3
-        if score:
-            results.append((score, file_id))
-    results.sort(key=lambda item: item[0], reverse=True)
-    return results[:top_k]
-
-
-def get_page_record_by_id(brain, page_id):
-    for page_record in brain.get("pages", []):
-        if str(page_record.get("page")) == str(page_id):
-            return page_record
-    return None
-
-
-def table_to_context_text(table, max_rows=30):
-    headers = [str(header) for header in table.get("headers", [])]
-    lines = []
-    if headers:
-        lines.append(" | ".join(headers))
-    for row in table.get("rows", [])[:max_rows]:
-        lines.append(" | ".join(str(cell) for cell in row))
-    if table.get("truncated"):
-        lines.append(f"... table truncated after {max_rows} displayed rows; total rows indexed: {table.get('row_count')}")
-    return clean_text("\n".join(lines))
-
-
-def chunk_selected_documents(docs, chunk_chars=FILE_BRAIN_SELECTED_CHUNK_CHARS):
-    """Chunk only the retrieved candidates before optional lazy embedding."""
-    selected_chunks = []
-    for doc in docs or []:
-        content = clean_text(getattr(doc, "page_content", ""))
-        if not content:
-            continue
-        if len(content) <= chunk_chars:
-            selected_chunks.append(doc)
-            continue
-
-        chunks = smart_chunk(content, chunk_size=chunk_chars)
-        for chunk_index, chunk in enumerate(chunks, start=1):
-            metadata = dict(getattr(doc, "metadata", {}) or {})
-            metadata["selected_chunk_index"] = chunk_index
-            selected_chunks.append(Document(page_content=chunk, metadata=metadata))
-    return selected_chunks
-
-
-def selected_content_cache_key(question, docs):
-    signature_parts = [str(question or "")]
-    for doc in docs or []:
-        meta = getattr(doc, "metadata", {}) or {}
-        signature_parts.append(
-            "|".join([
-                str(meta.get("file_name", "")),
-                str(meta.get("page_or_sheet") or meta.get("page_number") or ""),
-                str(meta.get("section", "")),
-                hashlib.sha1(str(getattr(doc, "page_content", "")).encode("utf-8", errors="ignore")).hexdigest()[:12],
-            ])
-        )
-    return hashlib.sha1("\n".join(signature_parts).encode("utf-8", errors="ignore")).hexdigest()[:24]
-
-
-def lazy_embed_selected_documents(question, docs, top_k=8):
-    """Embed only already-retrieved page/table/diagram candidates for final ordering."""
-    docs = chunk_selected_documents([doc for doc in (docs or []) if getattr(doc, "page_content", "")])
-    if len(docs) <= 1:
-        return docs[:top_k]
-
-    cache = st.session_state.setdefault("selected_chunk_vector_cache", {})
-    cache_key = selected_content_cache_key(question, docs)
-    vector_store = cache.get(cache_key)
-    if vector_store is None:
-        try:
-            vector_store = FAISS.from_documents(docs, get_chatpdf_embeddings())
-            cache[cache_key] = vector_store
-            # Keep the lazy selected-content cache small across reruns.
-            if len(cache) > 12:
-                for old_key in list(cache.keys())[:-12]:
-                    cache.pop(old_key, None)
-            st.session_state.selected_chunk_vector_cache = cache
-        except Exception:
-            return rerank_chatpdf_documents(question, docs, top_k=top_k)
-
-    try:
-        embedded_docs = vector_store.similarity_search(str(question or ""), k=min(top_k, len(docs)))
-        if embedded_docs:
-            return embedded_docs
-    except Exception:
-        pass
-    return rerank_chatpdf_documents(question, docs, top_k=top_k)
-
-
-def retrieve_file_brain_documents(question, file_names, user_id=None, top_k=8):
-    """Retrieve only selected page/table/diagram content, then convert to Documents."""
-    del user_id  # User isolation is already handled by session state and uploaded file selection.
-    brains = get_file_brains(file_names)
-    if not brains:
-        return []
-
-    selected_documents = []
-    per_file_page_k = max(2, min(top_k, math.ceil(top_k / max(len(brains), 1)) + 2))
-    for file_name, brain in brains.items():
-        file_type = brain.get("file_type") or get_chatpdf_file_type(file_name)
-        for page_index_record in retrieve_pages(question, brain, top_k=per_file_page_k):
-            page_record = get_page_record_by_id(brain, page_index_record.get("page"))
-            if not page_record:
-                continue
-            page_text = clean_text(page_record.get("text", ""))[:FILE_BRAIN_PAGE_CONTEXT_CHARS]
-            if not page_text:
-                continue
-            selected_documents.append(Document(
-                page_content=page_text,
-                metadata={
-                    "file_name": file_name,
-                    "file_type": file_type,
-                    "page_number": str(page_record.get("page")),
-                    "page_or_sheet": str(page_record.get("page")),
-                    "document_id": get_document_id(file_name, get_uploaded_file_entry(file_name).get("bytes", b"")),
-                    "section": page_index_record.get("section") or f"Page {page_record.get('page')}",
-                    "retrieval_layer": "file_brain_page",
-                },
-            ))
-
-        for table in search_tables(question, brain.get("tables", []), top_k=3):
-            table_text = table_to_context_text(table)
-            if not table_text:
-                continue
-            locator = table.get("sheet") or table.get("table") or "Table"
-            selected_documents.append(Document(
-                page_content=table_text,
-                metadata={
-                    "file_name": file_name,
-                    "file_type": "excel" if file_type == "excel" else file_type,
-                    "page_number": str(locator),
-                    "page_or_sheet": str(locator),
-                    "document_id": get_document_id(file_name, get_uploaded_file_entry(file_name).get("bytes", b"")),
-                    "section": f"Structured table: {locator}",
-                    "retrieval_layer": "file_brain_table",
-                },
-            ))
-
-        for diagram in search_diagrams(question, brain.get("diagrams", []), top_k=2):
-            diagram_text = clean_text(diagram.get("text", ""))[:1200]
-            if not diagram_text:
-                continue
-            locator = diagram.get("page") or "Diagram"
-            selected_documents.append(Document(
-                page_content=diagram_text,
-                metadata={
-                    "file_name": file_name,
-                    "file_type": file_type,
-                    "page_number": str(locator),
-                    "page_or_sheet": str(locator),
-                    "document_id": get_document_id(file_name, get_uploaded_file_entry(file_name).get("bytes", b"")),
-                    "section": f"Diagram metadata: {diagram.get('kind', 'visual reference')}",
-                    "retrieval_layer": "file_brain_diagram",
-                },
-            ))
-
-    if not selected_documents:
-        for _, file_name in cross_file_search(question, file_names=file_names, top_k=top_k):
-            brain = brains.get(file_name)
-            if not brain:
-                continue
-            for fact in brain.get("facts", [])[:2]:
-                selected_documents.append(Document(
-                    page_content=str(fact.get("fact", "")),
-                    metadata={
-                        "file_name": file_name,
-                        "file_type": brain.get("file_type") or get_chatpdf_file_type(file_name),
-                        "page_number": str(fact.get("page") or "Memory"),
-                        "page_or_sheet": str(fact.get("page") or "Memory"),
-                        "document_id": get_document_id(file_name, get_uploaded_file_entry(file_name).get("bytes", b"")),
-                        "section": "File brain fact",
-                        "retrieval_layer": "file_brain_fact",
-                    },
-                ))
-
-    selected_documents = rerank_chatpdf_documents(question, selected_documents, top_k=max(top_k * 2, top_k))
-    return lazy_embed_selected_documents(question, selected_documents, top_k=top_k)
-
-
-def retrieve_document_understanding_documents(question, file_names, user_id=None, top_k=10):
-    """Retrieve document-level understanding notes for broad requests."""
-    del user_id
-    brains = get_file_brains(file_names)
-    documents = []
-    for file_name, brain in brains.items():
-        file_entry = get_uploaded_file_entry(file_name)
-        file_bytes = file_entry.get("bytes", b"") if file_entry else b""
-        document_id = get_document_id(file_name, file_bytes)
-        semantic = brain.get("semantic_metadata", {}) or {}
-        file_type = brain.get("file_type") or get_chatpdf_file_type(file_name)
-
-        summary = semantic.get("document_summary", "")
-        if summary:
-            documents.append(Document(
-                page_content=summary,
-                metadata={
-                    "file_name": file_name,
-                    "file_type": file_type,
-                    "page_number": "Document",
-                    "page_or_sheet": "Document",
-                    "document_id": document_id,
-                    "section": "Document summary",
-                    "retrieval_layer": "semantic_document_summary",
-                },
-            ))
-
-        understanding_notes = []
-        concepts = [
-            str(item) for item in semantic.get("key_concepts", [])[:8]
-            if str(item).strip() and not _is_low_signal_theme(item)
-        ]
-        components = [
-            str(item) for item in semantic.get("architecture_components", [])[:8]
-            if str(item).strip() and not _is_low_signal_theme(item)
-        ]
-        if concepts:
-            understanding_notes.append(
-                "Important ideas to connect in the answer: " + _human_join(concepts, limit=5) + "."
-            )
-        if components:
-            understanding_notes.append(
-                "Important elements that may shape the explanation: " + _human_join(components, limit=5) + "."
-            )
-        if brain.get("tables"):
-            understanding_notes.append("The document includes structured data that may support table-oriented questions.")
-        if brain.get("diagrams"):
-            understanding_notes.append("The document includes visual references that may support diagram-oriented questions.")
-        if understanding_notes:
-            documents.append(Document(
-                page_content=clean_text(" ".join(understanding_notes)),
-                metadata={
-                    "file_name": file_name,
-                    "file_type": file_type,
-                    "page_number": "Document",
-                    "page_or_sheet": "Document",
-                    "document_id": document_id,
-                    "section": "Document understanding",
-                    "retrieval_layer": "document_understanding",
-                },
-            ))
-
-        for section_summary in semantic.get("section_summaries", [])[:max(top_k, 8)]:
-            summary_text = section_summary.get("summary", "")
-            if not summary_text:
-                continue
-            documents.append(Document(
-                page_content=summary_text,
-                metadata={
-                    "file_name": file_name,
-                    "file_type": file_type,
-                    "page_number": str(section_summary.get("page") or "Section"),
-                    "page_or_sheet": str(section_summary.get("page") or "Section"),
-                    "document_id": document_id,
-                    "section": section_summary.get("section") or "Section summary",
-                    "retrieval_layer": "semantic_section_summary",
-                },
-            ))
-
-    return rerank_chatpdf_documents(question, documents, top_k=top_k)
-
-
-def extract_chatpdf_structured_pages(file_name, file_bytes):
-    """Extract page/slide/sheet-aware text records with traceable metadata."""
-    records = []
-    bio = BytesIO(file_bytes)
-    file_lower = str(file_name).lower()
-    file_type = get_chatpdf_file_type(file_name)
-    document_id = get_document_id(file_name, file_bytes)
-
-    def add_record(text, page_number="1", section="Document", page_or_sheet=None):
-        clean_text = re.sub(r"\s+", " ", str(text or "")).strip()
-        if not clean_text:
-            return
-        locator = str(page_or_sheet if page_or_sheet is not None else page_number)
-        records.append({
-            "text": clean_text,
-            "metadata": {
-                "file_name": file_name,
-                "file_type": file_type,
-                "page_number": str(page_number),
-                "page_or_sheet": locator,
-                "document_id": document_id,
-                "section": section or "Document",
-            },
-        })
-
-    try:
-        if file_lower.endswith(".pdf"):
-            with pdfplumber.open(bio) as pdf:
-                for page_index, page in enumerate(pdf.pages, start=1):
-                    add_record(page.extract_text() or "", page_index, f"Page {page_index}", page_index)
-
-        elif file_lower.endswith(".docx"):
-            document = docx.Document(bio)
-            section = "Document"
-            paragraph_buffer = []
-            page_number = 1
-            for paragraph in document.paragraphs:
-                text = paragraph.text.strip()
-                if not text:
-                    continue
-                if paragraph.style and str(paragraph.style.name).lower().startswith("heading"):
-                    if paragraph_buffer:
-                        add_record("\n".join(paragraph_buffer), page_number, section, section)
-                        paragraph_buffer = []
-                    section = text[:120]
-                paragraph_buffer.append(text)
-                if len(" ".join(paragraph_buffer)) > 3500:
-                    add_record("\n".join(paragraph_buffer), page_number, section, section)
-                    paragraph_buffer = []
-                    page_number += 1
-            if paragraph_buffer:
-                add_record("\n".join(paragraph_buffer), page_number, section, section)
-            for table_index, table in enumerate(document.tables, start=1):
-                rows = [" | ".join(str(cell.text).strip() for cell in row.cells) for row in table.rows]
-                add_record("\n".join(rows), f"T{table_index}", f"Table {table_index}", f"Table {table_index}")
-
-        elif file_lower.endswith(".pptx"):
-            presentation = Presentation(bio)
-            for slide_index, slide in enumerate(presentation.slides, start=1):
-                slide_lines = []
-                for shape in slide.shapes:
-                    if hasattr(shape, "text") and shape.text:
-                        slide_lines.append(shape.text)
-                add_record("\n".join(slide_lines), slide_index, f"Slide {slide_index}", slide_index)
-
-        elif file_lower.endswith(".xlsx"):
-            workbook = openpyxl.load_workbook(bio, data_only=True, read_only=True)
-            for sheet in workbook.worksheets:
-                rows = []
-                for row_index, row in enumerate(sheet.iter_rows(values_only=True), start=1):
-                    values = [str(value) for value in row if value is not None]
-                    if values:
-                        rows.append(" | ".join(values))
-                    if len(rows) >= 120:
-                        add_record("\n".join(rows), sheet.title, f"Sheet {sheet.title}", sheet.title)
-                        rows = []
-                if rows:
-                    add_record("\n".join(rows), sheet.title, f"Sheet {sheet.title}", sheet.title)
-
-        elif file_lower.endswith((".html", ".htm")):
-            soup = BeautifulSoup(bio.read().decode("utf-8", errors="ignore"), "html.parser")
-            for tag in soup(["script", "style", "nav", "footer"]):
-                tag.decompose()
-            section = soup.title.get_text(" ", strip=True) if soup.title else "HTML"
-            add_record(soup.get_text("\n", strip=True), 1, section, section)
-
-        elif file_lower.endswith(".odt"):
-            with zipfile.ZipFile(bio) as odt_zip:
-                xml_text = odt_zip.read("content.xml").decode("utf-8", errors="ignore")
-            root = ET.fromstring(xml_text)
-            text_nodes = [node.text for node in root.iter() if node.text and node.text.strip()]
-            add_record("\n".join(text_nodes), 1, "ODT content", "ODT content")
-
-        elif file_lower.endswith(".rtf"):
-            raw = bio.read().decode("utf-8", errors="ignore")
-            plain = re.sub(r"\\'[0-9a-fA-F]{2}", " ", raw)
-            plain = re.sub(r"\\[a-zA-Z]+\d* ?", " ", plain)
-            plain = re.sub(r"[{}]", " ", plain)
-            add_record(plain, 1, "RTF content", "RTF content")
-
-        elif file_lower.endswith((".txt", ".md", ".log", ".can")):
-            add_record(bio.read().decode("utf-8", errors="ignore"), 1, "Text content", "Text content")
-
-        else:
-            fallback_text = extract_text(file_name, file_bytes)
-            for match in re.finditer(r"Page\s+(\d+)\s+Text:\s*(.*?)(?=Page\s+\d+\s+Text:|\Z)", fallback_text, re.DOTALL | re.IGNORECASE):
-                add_record(match.group(2), match.group(1), f"Page {match.group(1)}", match.group(1))
-            if not records:
-                add_record(fallback_text, 1, "Extracted content", "Extracted content")
-
-    except Exception as exc:
-        fallback_text = st.session_state.get("file_texts", {}).get(file_name) or extract_text(file_name, file_bytes)
-        add_record(fallback_text, 1, f"Fallback extraction: {str(exc)[:80]}", "Extracted content")
-
-    return records
-
-
-def build_chatpdf_documents(file_names):
-    """Create metadata-preserving LangChain documents for selected files."""
-    documents = []
-    for file_name in file_names:
-        file_entry = get_uploaded_file_entry(file_name)
-        if not file_entry:
-            continue
-        file_bytes = file_entry.get("bytes", b"")
-        document_id = get_document_id(file_name, file_bytes)
-        for document in process_file(BytesIO(file_bytes), file_name):
-            metadata = dict(getattr(document, "metadata", {}) or {})
-            metadata["document_id"] = document_id
-            document.metadata = metadata
-            if len(document.page_content) > MAX_VECTOR_TEXT_CHARS:
-                document.page_content = document.page_content[:MAX_VECTOR_TEXT_CHARS]
-            documents.append(document)
-    return documents
-
-
-def get_chatpdf_documents_for_selection(file_names, user_id=None):
-    """Session-cached structured chunks for hybrid retrieval."""
-    user_id = user_id or get_active_user_id()
-    cache = st.session_state.setdefault("chatpdf_documents", {})
-    cache_key = get_chatpdf_collection_id(user_id, file_names)
-    if cache_key not in cache:
-        cache[cache_key] = build_chatpdf_documents(file_names)
-        st.session_state.chatpdf_documents = cache
-    return cache.get(cache_key, [])
-
-
-def tokenize_chatpdf_text(text):
-    """Tokenize text for BM25 and fallback reranking."""
-    tokens = re.findall(r"[A-Za-z0-9_]+", str(text or "").lower())
-    return [token for token in tokens if len(token) > 1 and token not in SUMMARY_STOPWORDS]
-
-
-def get_bm25_okapi_class():
-    """Load rank_bm25 dynamically so missing optional dependency does not break imports."""
-    try:
-        return getattr(importlib.import_module("rank_bm25"), "BM25Okapi", None)
-    except Exception:
-        return None
-
-
-def get_chatpdf_bm25_index(file_names, user_id=None):
-    """Build a lightweight sparse keyword index for selected documents."""
-    bm25_okapi_class = get_bm25_okapi_class()
-    if bm25_okapi_class is None:
-        return None, []
-    user_id = user_id or get_active_user_id()
-    cache = st.session_state.setdefault("chatpdf_bm25_indexes", {})
-    cache_key = get_chatpdf_collection_id(user_id, file_names)
-    if cache_key in cache:
-        entry = cache[cache_key]
-        return entry.get("bm25"), entry.get("documents", [])
-
-    documents = get_chatpdf_documents_for_selection(file_names, user_id=user_id)
-    corpus_tokens = [tokenize_chatpdf_text(doc.page_content) for doc in documents]
-    usable_pairs = [(doc, tokens) for doc, tokens in zip(documents, corpus_tokens) if tokens]
-    if not usable_pairs:
-        return None, documents
-
-    indexed_documents = [doc for doc, _ in usable_pairs]
-    indexed_tokens = [tokens for _, tokens in usable_pairs]
-    bm25 = bm25_okapi_class(indexed_tokens)
-    cache[cache_key] = {"bm25": bm25, "documents": indexed_documents}
-    st.session_state.chatpdf_bm25_indexes = cache
-    return bm25, indexed_documents
-
-
-def chatpdf_document_key(doc):
-    meta = getattr(doc, "metadata", {}) or {}
-    content_hash = hashlib.sha1(str(getattr(doc, "page_content", "")).encode("utf-8", errors="ignore")).hexdigest()[:12]
-    return (
-        meta.get("document_id", ""),
-        meta.get("file_name", ""),
-        str(meta.get("page_or_sheet") or meta.get("page_number") or ""),
-        str(meta.get("section", "")),
-        str(meta.get("chunk_index", "")),
-        content_hash,
-    )
-
-
-def sparse_chatpdf_search(question, file_names, user_id=None, top_k=12):
-    """BM25 keyword search over the same chunks used by dense retrieval."""
-    bm25, documents = get_chatpdf_bm25_index(file_names, user_id=user_id)
-    if bm25 is None or not documents:
-        return []
-    query_tokens = tokenize_chatpdf_text(question)
-    if not query_tokens:
-        return []
-    scores = bm25.get_scores(query_tokens)
-    ranked_indices = sorted(range(len(scores)), key=lambda index: scores[index], reverse=True)
-    return [documents[index] for index in ranked_indices[:top_k] if scores[index] > 0]
-
-
-def merge_chatpdf_results(*result_groups):
-    """Merge dense and sparse candidates while preserving first-seen rank order."""
-    merged = []
-    seen = set()
-    for group in result_groups:
-        for doc in group or []:
-            key = chatpdf_document_key(doc)
-            if key in seen:
-                continue
-            seen.add(key)
-            merged.append(doc)
-    return merged
-
-
-@st.cache_resource(show_spinner=False)
-def load_chatpdf_reranker():
-    """Optional cross-encoder reranker; falls back silently if unavailable."""
-    try:
-        from sentence_transformers import CrossEncoder
-        model_name = os.environ.get("CHATPDF_RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
-        return CrossEncoder(model_name)
-    except Exception:
-        return None
-
-
-def lexical_rerank_score(question, doc):
-    query_tokens = set(tokenize_chatpdf_text(question))
-    doc_tokens = tokenize_chatpdf_text(getattr(doc, "page_content", ""))
-    if not query_tokens or not doc_tokens:
-        return 0
-    doc_token_set = set(doc_tokens)
-    overlap = len(query_tokens.intersection(doc_token_set))
-    phrase_bonus = 0
-    question_l = str(question or "").lower().strip()
-    content_l = str(getattr(doc, "page_content", "") or "").lower()
-    if question_l and question_l in content_l:
-        phrase_bonus = 4
-    return (overlap * 3) + phrase_bonus + min(len(doc_tokens), 500) / 1000
-
-
-def rerank_chatpdf_documents(question, docs, top_k=8):
-    """Rerank merged candidates with a cross-encoder when possible."""
-    if not docs:
-        return []
-    reranker = load_chatpdf_reranker()
-    if reranker is not None:
-        try:
-            pairs = [[str(question), str(getattr(doc, "page_content", ""))[:4000]] for doc in docs]
-            scores = reranker.predict(pairs)
-            ranked = [doc for _, doc in sorted(zip(scores, docs), key=lambda item: item[0], reverse=True)]
-            return ranked[:top_k]
-        except Exception:
-            pass
-    return sorted(docs, key=lambda doc: lexical_rerank_score(question, doc), reverse=True)[:top_k]
-
-
-def rewrite_chatpdf_query(llm, question):
-    """Optionally rewrite the user question into a compact retrieval query."""
-    original_question = re.sub(r"\s+", " ", str(question or "")).strip()
-    if not original_question:
-        return original_question
-    lower_question = original_question.lower()
-    if re.fullmatch(r"(analy[sz]e|analysis|summary|summari[sz]e|overview)", lower_question):
-        return (
-            "introduction overview purpose main features capabilities architecture components "
-            "workflow applications use cases technical details key takeaways"
-        )
-    if llm is None:
-        return original_question
-
-    rewrite_prompt = f"""Rewrite this question to improve document search.
-
-Rules:
-- Preserve the user's intent.
-- Keep important names, numbers, acronyms, and technical terms.
-- Return only one concise search query.
-- Do not answer the question.
-
-Question: {original_question}
-
-Search query:"""
-    try:
-        rewritten = str(llm.invoke(rewrite_prompt)).strip()
-    except Exception:
-        return original_question
-
-    rewritten = re.sub(r"(?is)^.*?search query:\s*", "", rewritten).strip()
-    rewritten = re.sub(r"\s+", " ", rewritten).strip(" `\"'")
-    if not rewritten:
-        return original_question
-    if len(rewritten) > 260:
-        rewritten = rewritten[:260].rsplit(" ", 1)[0].strip() or original_question
-    if rewritten.lower() in {"none", "n/a", "not available"}:
-        return original_question
-    return rewritten
-
-
-def hybrid_chatpdf_retrieve(question, file_names, user_id=None, dense_k=12, sparse_k=12, final_k=8, search_query=None):
-    """Dense FAISS + sparse BM25 retrieval followed by reranking."""
-    user_id = user_id or get_active_user_id()
-    vector_store = get_chatpdf_vector_store(file_names, user_id=user_id)
-    search_queries = [str(question or "").strip()]
-    if search_query and str(search_query).strip() not in search_queries:
-        search_queries.append(str(search_query).strip())
-
-    result_groups = []
-    for query_text in [query for query in search_queries if query]:
-        dense_results = []
-        if vector_store is not None:
-            try:
-                dense_results = vector_store.similarity_search(query_text, k=dense_k)
-            except Exception:
-                dense_results = []
-        sparse_results = sparse_chatpdf_search(query_text, file_names, user_id=user_id, top_k=sparse_k)
-        result_groups.extend([dense_results, sparse_results])
-
-    candidates = merge_chatpdf_results(*result_groups)
-    return rerank_chatpdf_documents(question, candidates, top_k=final_k)
-
-
-def get_chatpdf_vector_store(file_names, user_id=None):
-    """Build or load persistent FAISS collection for user/document selection."""
-    user_id = user_id or get_active_user_id()
-    ensure_files_processed(file_names)
-    collection_key = f"chatpdf::{user_id}::{get_chatpdf_collection_id(user_id, file_names)}"
-    cached_vs = VECTOR_STORE_CACHE.get(collection_key)
-    if cached_vs is not None:
-        return cached_vs
-    if collection_key in st.session_state.get("vector_stores", {}):
-        return st.session_state.vector_stores[collection_key]
-
-    embeddings = get_chatpdf_embeddings()
-    vector_dir = get_chatpdf_vector_dir(user_id, file_names)
-    if os.path.exists(vector_dir):
-        try:
-            vs = FAISS.load_local(vector_dir, embeddings, allow_dangerous_deserialization=True)
-            st.session_state.vector_stores[collection_key] = vs
-            VECTOR_STORE_CACHE.set(collection_key, vs)
-            return vs
-        except Exception:
-            pass
-
-    documents = get_chatpdf_documents_for_selection(file_names, user_id=user_id)
-    if not documents:
-        return None
-    vs = FAISS.from_documents(documents, embeddings)
-    os.makedirs(vector_dir, exist_ok=True)
-    try:
-        vs.save_local(vector_dir)
-    except Exception:
-        pass
-    st.session_state.vector_stores[collection_key] = vs
-    VECTOR_STORE_CACHE.set(collection_key, vs)
-    return vs
-
-
-def format_chatpdf_context(docs):
-    blocks = []
-    for index, doc in enumerate(docs, start=1):
-        meta = getattr(doc, "metadata", {}) or {}
-        source = build_chatpdf_citation_label(meta)
-        blocks.append(
-            f"[Reference {index}: {source}]\n"
-            f"{getattr(doc, 'page_content', str(doc))}"
-        )
-    return "\n\n---\n\n".join(blocks)
-
-
-def format_chatpdf_sources(docs, include_snippets=False):
-    sources = []
-    seen = set()
-    for doc in docs:
-        meta = getattr(doc, "metadata", {}) or {}
-        line_label = build_chatpdf_citation_label(meta)
-        key = (
-            meta.get("file_name", "document"),
-            meta.get("file_type", ""),
-            str(meta.get("page_or_sheet") or meta.get("page_number") or ""),
-            meta.get("section", ""),
-        )
-        if key in seen:
-            continue
-        seen.add(key)
-        line = f"- {line_label}"
-        if include_snippets:
-            snippet = re.sub(r"\s+", " ", getattr(doc, "page_content", "")).strip()[:220]
-            if snippet:
-                line += f"\n  Snippet: {snippet}"
-        sources.append(line)
-    return "\n".join(sources) if sources else "- No sources found"
-
-
-def build_chatpdf_prompt(question, docs, memory):
-    memory_text = "\n".join(
-        f"User: {item.get('question', '')}\nAssistant: {item.get('answer', '')}"
-        for item in memory[-4:]
-    )
-    context = format_chatpdf_context(docs)
-    return RAG_QA_PROMPT.format(
-        memory=memory_text or "No previous conversation.",
-        context=context,
-        question=question,
-    )
-
-
-SMART_QUERY_INTENT_TERMS = {
-    "FULL_DOCUMENT_ANALYSIS": (
-        "introduction overview purpose main features capabilities architecture components "
-        "workflow applications use cases technical details constraints key takeaways"
-    ),
-    "SHORT_SUMMARY": "overview purpose key points main findings summary takeaways",
-    "OVERVIEW": "overview purpose usage audience main concept areas covered",
-    "FEATURES_ONLY": "features capabilities functions benefits modules components",
-    "SPECIFIC_COMPONENT_DETAILS": "component module interface connector configuration usage limitations details",
-    "PIN_DIAGRAMS_CONNECTORS_TABLES": "pin connector pinout signal mapping table channel diagram figure",
-    "WORKFLOW_OR_PROCESS": "workflow process steps procedure input output operation usage flow",
-    "USE_CASES_APPLICATIONS": "use cases applications users scenarios benefits practical usage",
-    "COMPARISON": "compare difference similarities criteria usage capabilities limitations",
-    "TABLE_EXTRACTION": "table sheet rows columns csv data structured values",
-    "IMAGE_OR_DIAGRAM_EXPLANATION": "diagram figure image flow block architecture visual layout",
-    "DOWNLOADABLE_REPORT": "overview purpose findings features workflow tables recommendations report",
-    "TROUBLESHOOTING_OR_LIMITATIONS": "troubleshooting limitations constraints issue problem error cause recommendation",
-    "REQUIREMENTS_OR_SPECIFICATION_EXTRACTION": "requirements specifications shall must value condition applies notes",
-}
-
-
-def build_retrieval_query_for_intent(question, intent):
-    """Blend user terms with intent terms so retrieval stays focused but robust."""
-    question_text = re.sub(r"\s+", " ", str(question or "")).strip()
-    intent_terms = SMART_QUERY_INTENT_TERMS.get(str(intent or ""), "")
-    if not intent_terms:
-        return question_text
-    if not question_text:
-        return intent_terms
-    return f"{question_text} {intent_terms}"
-
-
-def build_smart_document_prompt(question, intent, docs, memory, cross_file_hits=None):
-    document_intent = classify_query_intent(question, previous_messages=memory)
-    memory_text = "\n".join(
-        f"User: {item.get('question', '')}\nAssistant: {item.get('answer', '')}"
-        for item in (memory or [])[-4:]
-    ) or "No previous conversation."
-    context = format_chatpdf_context(docs)
-    cross_file_text = "\n".join(
-        f"- Related prior context from {file_id}"
-        for score, file_id in (cross_file_hits or [])
-    ) or "No additional cross-file memory hits."
-    return build_document_intelligence_prompt(
-        query=question,
-        document_intent=document_intent,
-        context=context,
-        memory=memory_text,
-        cross_file_hints=cross_file_text,
-    )
-
-
-def smart_file_brain_query(question, file_names, user_id=None, intent=None, top_k=8):
-    """End-to-end query engine: intent-aware retrieval, selected chunking, lazy embedding, citations."""
-    user_id = user_id or get_active_user_id()
-    file_names = list(dict.fromkeys(file_names or []))
-    if not file_names:
-        return "Answer:\nPlease select one or more documents before asking a question.\n\nSources:\n- No sources found", []
-
-    document_intent = classify_query_intent(question, previous_messages=get_chatpdf_memory(user_id, file_names))
-    intent = intent or to_technical_intent(document_intent)
-    if intent in {"SHORT_SUMMARY"} and document_intent == "factual_query":
-        intent = classify_technical_document_request(question)
-    if document_intent == "analysis_request":
-        top_k = max(top_k, 12)
-    elif requires_document_scope(document_intent):
-        top_k = max(top_k, 9)
-    retrieval_query = build_retrieval_query_for_intent(question, intent)
-    docs = []
-    if requires_document_scope(document_intent) or intent in {
-        "FULL_DOCUMENT_ANALYSIS",
-        "SHORT_SUMMARY",
-        "OVERVIEW",
-        "DOWNLOADABLE_REPORT",
-    }:
-        docs.extend(retrieve_document_understanding_documents(retrieval_query, file_names, user_id=user_id, top_k=top_k))
-
-    docs = merge_chatpdf_results(
-        docs,
-        retrieve_file_brain_documents(retrieval_query, file_names, user_id=user_id, top_k=top_k),
-    )
-
-    if str(retrieval_query).strip().lower() != str(question or "").strip().lower():
-        direct_docs = retrieve_file_brain_documents(question, file_names, user_id=user_id, top_k=max(3, top_k // 2))
-        docs = merge_chatpdf_results(docs, direct_docs)
-        docs = rerank_chatpdf_documents(question, docs, top_k=max(top_k * 2, top_k))
-        docs = lazy_embed_selected_documents(question, docs, top_k=top_k)
-
-    if not docs:
-        docs = sparse_chatpdf_search(retrieval_query or question, file_names, user_id=user_id, top_k=top_k)
-        docs = rerank_chatpdf_documents(question, docs, top_k=top_k)
-
-    if not docs:
-        brains = get_file_brains(file_names)
-        return build_best_effort_response(
-            question,
-            document_intent,
-            brains,
-            "\n".join(f"- {file_name}" for file_name in file_names),
-        ), []
-
-    memory = get_chatpdf_memory(user_id, file_names)
-    cross_hits = cross_file_search(question, file_names=file_names, top_k=5)
-    llm = load_llm()
-    if llm is None:
-        if requires_document_scope(document_intent):
-            answer = synthesize_document_response(
-                query=question,
-                document_intent=document_intent,
-                brains=get_file_brains(file_names),
-                docs=docs,
-                sources_text=format_chatpdf_sources(docs),
-            )
-        else:
-            answer = build_extractive_chatpdf_answer(question, docs)
-    else:
-        prompt = build_smart_document_prompt(question, intent, docs, memory, cross_hits)
-        try:
-            answer = str(llm.invoke(prompt)).strip()
-        except Exception:
-            answer = build_extractive_chatpdf_answer(question, docs)
-
-        if not answer:
-            answer = synthesize_document_response(
-                query=question,
-                document_intent=document_intent,
-                brains=get_file_brains(file_names),
-                docs=docs,
-                sources_text=format_chatpdf_sources(docs),
-            )
-        if requires_document_scope(document_intent) and response_looks_like_metadata_dump(answer):
-            answer = synthesize_document_response(
-                query=question,
-                document_intent=document_intent,
-                brains=get_file_brains(file_names),
-                docs=docs,
-                sources_text=format_chatpdf_sources(docs),
-            )
-        if "Sources:" not in answer:
-            answer = answer.rstrip() + "\n\nSources:\n" + format_chatpdf_sources(docs)
-        elif not any((getattr(doc, "metadata", {}) or {}).get("file_name", "") in answer for doc in docs):
-            answer = answer.rstrip() + "\n" + format_chatpdf_sources(docs)
-
-    append_chatpdf_memory(user_id, file_names, question, answer)
-    return strip_llm_suggestions_from_response(answer), docs
-
-
-def build_extractive_chatpdf_answer(question, docs):
-    """Fallback answer when no LLM is available; remains grounded without dumping raw context blocks."""
-    if not docs:
-        return (
-            "Answer:\nI could not find strong matching evidence in the selected documents. "
-            "Try a broader wording or ask for a summary/overview so the document-level memory can be used.\n\n"
-            "Sources:\n- No sources found"
-        )
-    bullets = []
-    for doc in docs[:4]:
-        text = getattr(doc, "page_content", "")
-        for sentence in document_intelligence_meaningful_sentences(text, limit=3):
-            sentence = normalize_synthesis_text(sentence)
-            if sentence and sentence not in bullets:
-                bullets.append(sentence[:360])
-            if len(bullets) >= 5:
-                break
-        if len(bullets) >= 5:
-            break
-    if not bullets:
-        return (
-            "Answer:\nI found candidate context, but it did not contain enough readable detail to answer confidently.\n\n"
-            "Sources:\n- No sources found"
-        )
-    answer_intro = "Based on the available document context, here is the most relevant synthesis:"
-    return "Answer:\n" + answer_intro + "\n\n" + "\n".join(f"- {item}" for item in bullets) + "\n\nSources:\n" + format_chatpdf_sources(docs)
-
-
-def answer_chatpdf_question(question, file_names, user_id=None, top_k=8):
-    """File-brain first answer with citations and per-document memory.
-
-    The dense FAISS path is retained as a fallback. Normal queries retrieve
-    page/table/diagram candidates from the file brain and avoid embedding the
-    whole uploaded selection.
-    """
-    return smart_file_brain_query(
-        question,
-        file_names,
-        user_id=user_id,
-        intent=classify_technical_document_request(question),
-        top_k=top_k,
-    )
-
-
-@st.cache_resource(show_spinner=False)
-def load_llm():
-    try:
-        from transformers import pipeline
-    except Exception:
-        st.warning(
-            "LLM is unavailable because transformers could not be imported (torchvision unmet).\nInstall torch & torchvision if you want AI features.")
-        return None
-
-    candidate_tasks = ["text2text-generation", "text-generation", "image-text-to-text", "table-question-answering"]
-    task_errors = []
-
-    for task in candidate_tasks:
-        try:
-            pipe = pipeline(task, model="google/flan-t5-small", max_new_tokens=384, return_full_text=False)
-            st.session_state.llm_task = task
-            return HuggingFacePipeline(pipeline=pipe)
-        except Exception as e:
-            task_errors.append((task, str(e)))
-
-    # Only show a single warning if no task could be initialized
-    if task_errors:
-        st.warning("LLM initialization failed for all candidate tasks; AI features are unavailable.")
-        st.session_state.llm_task = None
-
-    return None
-
-
-def ensure_files_processed(file_names):
-    for file_name in file_names:
-        ensure_file_processed(file_name)
-        ensure_file_brain(file_name)
-
-
-def process_selected_files():
-    """Fully extract all currently selected files so every tab uses the same data."""
-    ensure_files_processed(st.session_state.selected_files)
 
 
 def init_workspace_db():
@@ -6992,8 +3930,9 @@ def classify_technical_document_request(user_query):
     if any(term in query for term in ["short summary", "brief summary", "concise summary", "main points", "key points", "3 key takeaways", "summary", "summarize", "summarise"]):
         return "SHORT_SUMMARY"
 
-    # Default to SHORT_SUMMARY if unclear
-    return "SHORT_SUMMARY"
+    # Unclear natural-language questions should stay as grounded Q&A.
+    # Summary/analyze/overview modes are used only when the user asks for them.
+    return "QUESTION_ANSWERING"
 
 
 def evaluate_context_quality(text):
@@ -7184,74 +4123,183 @@ def build_map_reduce_document_analysis(file_name, text):
 
 
 def build_fast_document_summary(file_name, text):
-    """Build a quick cached summary using the fast prompt, with deterministic fallback."""
+    """Build a concise executive summary focused on meaning and intent.
+    
+    Filters out: OCR noise, metadata, table of contents, headers/footers, formatting artifacts.
+    Focuses on: What the document is about, its purpose, key insights, and takeaways.
+    
+    Returns expert-level explanation written for a senior analyst.
+    """
     cached = get_document_summary_cache_entry(file_name, text, "summary")
     if cached:
         return cached
 
-    source_text = get_document_summary_cache_entry(file_name, text, "analysis")
-    if not source_text:
-        source_text = build_summary_source_text(text, max_lines=220)
-    if not source_text.strip():
-        response = f"No readable content found in {html.escape(file_name)}."
+    # Filter to meaningful content only
+    meaningful_lines = get_meaningful_document_lines(text, min_len=18, max_len=300, limit=200)
+    if not meaningful_lines:
+        response = f"No readable explanatory content found in {html.escape(file_name)}."
         set_document_summary_cache_entry(file_name, text, "summary", response)
         return response
 
+    source_text = "\n".join(meaningful_lines)[:40000]
+    
     llm = load_llm()
-    candidate = invoke_document_summary_prompt(llm, FAST_SUMMARY_PROMPT, source_text[:50000]) if llm is not None else ""
-    if generated_summary_is_useful(candidate):
-        response = f"### Summary: {file_name}\n\n{candidate}"
-    else:
-        file_entry = get_uploaded_file_entry(file_name)
-        file_bytes = file_entry["bytes"] if file_entry else b""
-        response = build_short_document_summary(file_name, file_bytes, text)
+    if llm is not None:
+        prompt = f"""You are a senior technical analyst creating a concise executive summary.
 
+Ignore: OCR noise, metadata, table of contents, page numbers, headers, footers, copyright text, repeated section titles.
+
+Focus on explaining:
+1. What this document is fundamentally about
+2. Its primary purpose
+3. The most important insights (not frequency-based)
+4. 2-3 key takeaways
+
+Write naturally like an expert who understands the system.
+Do NOT output keyword lists, extracted text, or metadata.
+Keep it concise (under 300 words).
+
+Document content:
+{source_text}"""
+        try:
+            candidate = llm.invoke(prompt)
+            response = str(candidate).strip()
+            if response and len(response) > 100:
+                response = f"### Executive Summary: {html.escape(file_name)}\n\n{response}"
+                set_document_summary_cache_entry(file_name, text, "summary", response)
+                return response
+        except Exception:
+            pass
+    
+    # Fallback: deterministic summary from meaningful content
+    fallback_parts = [f"### Summary: {html.escape(file_name)}"]
+    
+    # Extract what it is
+    what_it_is = None
+    for line in meaningful_lines[:40]:
+        if any(term in line.lower() for term in ["is a", "is an", "provides", "enables", "supports", "system", "device", "process"]):
+            what_it_is = line
+            break
+    if what_it_is:
+        fallback_parts.append(f"\n**What it is:** {what_it_is}")
+    
+    # Extract purpose
+    purpose = None
+    for line in meaningful_lines:
+        if any(term in line.lower() for term in ["used for", "used to", "purpose", "designed for", "application", "enables"]):
+            purpose = line
+            break
+    if purpose:
+        fallback_parts.append(f"\n**Purpose:** {purpose}")
+    
+    # Extract key insights
+    insights = []
+    for line in meaningful_lines:
+        lower_line = line.lower()
+        if any(term in lower_line for term in ["key", "important", "critical", "feature", "capability", "enables", "supports"]):
+            insights.append(f"- {line}")
+        if len(insights) >= 3:
+            break
+    if insights:
+        fallback_parts.append(f"\n**Key Points:**\n" + "\n".join(insights))
+    
+    fallback_parts.append("\n**Takeaway:** Review the document for specific details on architecture, components, workflow, and practical applications.")
+    
+    response = "".join(fallback_parts)
     set_document_summary_cache_entry(file_name, text, "summary", response)
     return response
 
 
 def classify_intent(query):
-    """Classify a chat request into the production document-agent intent set."""
+    """Classify a document chat request based on semantic intent.
+    
+    Returns one of:
+    - ANALYZE: Deep expert analysis of architecture, design, and implications
+    - SHORT_SUMMARY: Concise executive summary
+    - OVERVIEW: High-level orientation for quick understanding
+    - SEARCH: Find exact text or count occurrences
+    - COMPARISON: Compare multiple documents
+    - TABLE_EXTRACTION: Extract structured data
+    - DIAGRAM_ANALYSIS: Explain diagrams or figures
+    - COMPONENT_EXTRACTION: Extract and explain specific components
+    - QUESTION_ANSWERING: Answer specific questions
+    """
     q = re.sub(r"\s+", " ", str(query or "").lower()).strip()
     compact = re.sub(r"[^a-z0-9]+", " ", q).strip()
-    if compact in {"analyze", "analyse", "analysis", "full analysis"}:
-        return "FULL_DOCUMENT_ANALYSIS"
-    if compact in {"summary", "summarize", "summarise", "short summary"}:
+    
+    # Analyze: deeper understanding of meaning and implications
+    if compact in {"analyze", "analyse", "analysis", "full analysis", "deep analysis", "explain", "detailed explanation"}:
+        return "ANALYZE"
+    
+    # Summary: concise executive summary
+    if compact in {"summary", "summarize", "summarise", "short summary", "brief summary"}:
         return "SHORT_SUMMARY"
+    
+    # Overview: quick orientation
     if compact == "overview" or re.search(r"\boverview\b", q):
         return "OVERVIEW"
-    if any(term in q for term in ["find", "search", "highlight", "count", "occurrence", "locate"]):
+    
+    # Search: exact text queries
+    if any(term in q for term in ["find", "search", "locate", "highlight", "count", "occurrence", "exact", "where is"]):
         return "SEARCH"
-    if any(term in q for term in ["compare", "difference", "versus", " vs "]):
+    
+    # Comparison: multi-document comparison
+    if any(term in q for term in ["compare", "comparison", "difference", "different", "versus", " vs "]):
         return "COMPARISON"
-    if any(term in q for term in ["table", "spreadsheet", "sheet", "row", "column", "csv", "data"]):
+    
+    # Table extraction: structured data
+    if any(term in q for term in ["table", "spreadsheet", "sheet", "row", "column", "csv", "data", "structured"]):
         return "TABLE_EXTRACTION"
-    if any(term in q for term in ["diagram", "flowchart", "flow", "figure", "image", "visual", "pin diagram"]):
+    
+    # Diagram analysis: visual content
+    if any(term in q for term in ["diagram", "flowchart", "flow", "figure", "image", "visual", "picture", "chart", "pin diagram"]):
         return "DIAGRAM_ANALYSIS"
-    if any(term in q for term in ["component", "module", "interface", "connector", "device", "part"]):
+    
+    # Component extraction: specific items/parts
+    if any(term in q for term in ["component", "module", "interface", "connector", "device", "part", "system", "subsystem"]):
         return "COMPONENT_EXTRACTION"
+    
+    # Default: general question answering
     return "QUESTION_ANSWERING"
 
 
 def handle_query(user_input, combined_text, file_name):
-    """Master router for a single document where no vector file list is available."""
+    """Route document chat queries to appropriate handlers based on semantic intent."""
     intent = classify_intent(user_input)
-    if intent == "FULL_DOCUMENT_ANALYSIS":
-        return build_map_reduce_document_analysis(file_name, combined_text)
+    
+    if intent == "ANALYZE":
+        # Deep expert analysis of architecture, design, relationships, and implications
+        return build_deep_analysis_response({file_name: combined_text})
+    
     if intent == "SHORT_SUMMARY":
+        # Concise executive summary
         return build_fast_document_summary(file_name, combined_text)
+    
     if intent == "OVERVIEW":
+        # High-level orientation
         return build_overview_response({file_name: combined_text})
+    
     if intent == "TABLE_EXTRACTION":
+        # Structured data
         return build_table_extraction_response({file_name: combined_text})
+    
     if intent == "DIAGRAM_ANALYSIS":
+        # Visual content explanation
         return build_image_or_diagram_extraction_response({file_name: combined_text}, user_input)
+    
     if intent == "COMPONENT_EXTRACTION":
+        # Specific component/part explanation
         return build_component_extraction_response({file_name: combined_text}, user_input)
+    
     if intent == "COMPARISON":
+        # Multi-document comparison
         return build_component_comparison_response({file_name: combined_text}, user_input)
+    
     if intent == "SEARCH":
+        # Exact text search and counting
         return build_extraction_response_for_query(user_input, {file_name: combined_text})
+    
+    # Default: general question answering
     return None
 
 
@@ -7264,19 +4312,36 @@ def handle_document_chat_query(user_input, file_texts, file_names=None, user_id=
 
 
 def infer_response_confidence(response, file_texts=None, citation_docs=None):
-    """Estimate answer confidence from context availability and answer quality."""
+    """Estimate answer confidence based on context availability and completeness.
+    
+    Returns: High, Medium, or Low
+    - High: Sufficient context with multiple sources or detailed content
+    - Medium: Adequate context but potentially incomplete
+    - Low: Insufficient context or acknowledged gaps
+    """
     response_text = str(response or "").lower()
     context_chars = sum(len(str(text or "")) for text in (file_texts or {}).values())
     citation_count = len(citation_docs or [])
-    if not context_chars or "no readable content" in response_text:
+    
+    # Low confidence indicators
+    if not context_chars or "no readable" in response_text or "no content" in response_text:
         return "Low"
+    
     if "not specified in the provided context" in response_text:
-        return "Medium" if context_chars > 2000 else "Low"
-    if "this information is not available" in response_text or "insufficient meaningful" in response_text:
-        return "Low"
-    if citation_count >= 2 or context_chars > 8000:
+        return "Medium" if context_chars > 3000 else "Low"
+    
+    if "not available" in response_text or "not found" in response_text:
+        return "Low" if context_chars < 2000 else "Medium"
+    
+    # High confidence indicators
+    if (citation_count >= 2 or context_chars > 10000) and "not specified" not in response_text:
         return "High"
-    return "Medium"
+    
+    if context_chars > 5000 and citation_count > 0:
+        return "High"
+    
+    # Default: Medium when reasonable context is available
+    return "Medium" if context_chars > 2000 else "Low"
 
 
 def append_confidence_to_response(response, file_texts=None, citation_docs=None):
@@ -7356,67 +4421,238 @@ def build_component_extraction_response(file_texts, user_query=""):
     return join_response_blocks(blocks)
 
 
-def build_overview_response(file_texts):
-    """Provide high-level overview: What it is, Who it is for, What it is used for, Main concept, Main areas covered."""
+def build_deep_analysis_response(file_texts):
+    """Provide deep expert analysis of document architecture and implications.
+    
+    Goes beyond summary to explain:
+    - System purpose and core concept
+    - Architecture and structure
+    - Key components and relationships
+    - Design patterns and implications
+    - Strengths and limitations
+    - Actionable insights
+    
+    Filters: OCR noise, metadata, TOC, headers/footers, isolated data.
+    Focuses: Meaning, intent, and relationships between concepts.
+    
+    Written for technical experts seeking deep understanding.
+    """
     blocks = []
     for file_name, text in (file_texts or {}).items():
-        meaningful = get_meaningful_document_lines(text, min_len=18, max_len=260, limit=180)
-        if len(meaningful) < 3:
-            blocks.append(f"**{html.escape(file_name)}**\n\nInsufficient meaningful explanatory content found.")
+        meaningful = get_meaningful_document_lines(text, min_len=18, max_len=300, limit=250)
+        if len(meaningful) < 5:
+            blocks.append(f"**{html.escape(file_name)}**\n\nInsufficient content for deep analysis.")
             continue
 
+        # Use LLM for expert analysis if available
+        llm = load_llm()
+        if llm is not None:
+            source_text = "\n".join(meaningful)[:50000]
+            prompt = f"""You are a senior technical analyst conducting a deep expert review.
+
+Ignore: OCR artifacts, metadata, table of contents, page numbers, headers, footers, copyright text, 
+repeated section titles, isolated technical specifications (unless they define the system).
+
+Provide a structured analysis covering:
+
+1. **What the document is about** - What the document is fundamentally about in one clear paragraph
+2. **Purpose & Core Concept** - Why this document exists and its central idea
+3. **Architecture / Structure** - How the system is organized (components, layers, interfaces)
+4. **Key Components & Relationships** - Important parts and how they interact
+5. **Design Patterns & Strengths** - What the design does well and why
+6. **Limitations & Constraints** - What is missing, incomplete, or explicitly constrained
+7. **Practical Implications** - How this matters for implementation or use
+8. **Key Takeaways** - 3-4 most important insights
+
+Write naturally like an experienced technical architect who understands the problem domain.
+Do NOT output keyword lists, metadata, or raw extracted text.
+Connect ideas across sections to reveal meaning.
+
+Document content:
+{source_text}"""
+            try:
+                response = llm.invoke(prompt)
+                response_text = str(response).strip()
+                if response_text and len(response_text) > 200:
+                    blocks.append(
+                        f"<div style='margin-bottom:18px; line-height:1.6;'>"
+                        f"<h3 style='margin:0 0 14px 0; color:#173152;'>Deep Analysis: {html.escape(file_name)}</h3>"
+                        f"<div style='color:#374151; font-size:0.94rem;'>{response_text}</div>"
+                        "</div>"
+                    )
+                    continue
+            except Exception:
+                pass
+        
+        # Fallback: deterministic structured analysis
+        analysis_parts = [f"### Deep Analysis: {html.escape(file_name)}"]
+        
+        # Purpose
+        analysis_parts.append("\n#### What the document is about")
+        purpose_lines = [line for line in meaningful[:20] if any(term in line.lower() for term in ["purpose", "provides", "enables", "system", "is a", "is an"])]
+        if purpose_lines:
+            analysis_parts.append(purpose_lines[0])
+        else:
+            analysis_parts.append("This document describes a technical system, specification, or operational process.")
+        
+        # Core concept
+        analysis_parts.append("\n#### Core Concept")
+        concept_summary = " ".join(meaningful[1:4])[:320]
+        analysis_parts.append(concept_summary or "A technical specification and reference guide.")
+        
+        # Architecture
+        analysis_parts.append("\n#### Architecture / Structure")
+        arch_lines = [line for line in meaningful if any(term in line.lower() for term in ["component", "interface", "module", "layer", "workflow", "pipeline"])][:4]
+        if arch_lines:
+            analysis_parts.append("- " + "\n- ".join(arch_lines))
+        else:
+            analysis_parts.append("- Architecture details are embedded throughout the document")
+        
+        # Key components
+        analysis_parts.append("\n#### Key Components & Relationships")
+        component_lines = [line for line in meaningful if any(term in line.lower() for term in ["supports", "communicates", "connects", "provides", "receives", "transmits"])][:4]
+        if component_lines:
+            analysis_parts.append("- " + "\n- ".join(component_lines))
+        else:
+            analysis_parts.append("- Components and their interactions are detailed in the specification sections")
+        
+        # Strengths
+        analysis_parts.append("\n#### Design Strengths")
+        strength_lines = [line for line in meaningful if any(term in line.lower() for term in ["feature", "capability", "flexibility", "robust", "efficient", "optimization"])][:3]
+        if strength_lines:
+            analysis_parts.append("- " + "\n- ".join(strength_lines))
+        else:
+            analysis_parts.append("- Well-structured specification supporting the stated purpose")
+        
+        # Limitations
+        analysis_parts.append("\n#### Limitations & Constraints")
+        limit_lines = [line for line in meaningful if any(term in line.lower() for term in ["limitation", "constraint", "requirement", "only", "not supported", "warning", "caution"])][:3]
+        if limit_lines:
+            analysis_parts.append("- " + "\n- ".join(limit_lines))
+        else:
+            analysis_parts.append("- Details about constraints should be reviewed in the full specification")
+        
+        # Implications
+        analysis_parts.append("\n#### Practical Implications")
+        analysis_parts.append("- Use this specification as the authoritative reference for system design and integration")
+        analysis_parts.append("- Validate all configuration choices against the detailed technical requirements")
+        analysis_parts.append("- Test system behavior against documented constraints and specifications")
+        
+        # Takeaways
+        analysis_parts.append("\n#### Key Takeaways")
+        analysis_parts.append("- This document provides authoritative technical guidance for a specific domain")
+        analysis_parts.append("- Success depends on careful attention to the specified requirements and constraints")
+        analysis_parts.append("- Refer to specific sections for detailed information on any particular aspect")
+        
+        blocks.append("\n".join(analysis_parts))
+    
+    return join_response_blocks(blocks)
+
+
+def build_overview_response(file_texts):
+    """Provide a high-level overview for quick understanding.
+    
+    Focuses on: What it is, who/what it's for, what it does, main concept, areas covered.
+    Filters: OCR noise, metadata, TOC, headers/footers.
+    
+    Written for a reader seeking quick orientation without technical depth.
+    """
+    blocks = []
+    for file_name, text in (file_texts or {}).items():
+        meaningful = get_meaningful_document_lines(text, min_len=18, max_len=300, limit=200)
+        if len(meaningful) < 3:
+            blocks.append(f"**{html.escape(file_name)}**\n\nNo readable explanatory content was found.")
+            continue
+
+        # Use LLM for polished overview if available
+        llm = load_llm()
+        if llm is not None:
+            source_text = "\n".join(meaningful)[:30000]
+            prompt = f"""You are creating a high-level overview of this document for quick understanding.
+
+Ignore: OCR artifacts, metadata, table of contents, page numbers, headers, footers, copyright text.
+
+Explain naturally:
+1. What it is
+2. Who or what it is for
+3. What it is used for
+4. The main concept
+5. The major areas it covers
+
+Write for someone seeking quick orientation. Keep it clear, simple, and professional.
+Do NOT list raw headings or page numbers. Do NOT output keyword lists.
+
+Document content:
+{source_text}"""
+            try:
+                response = llm.invoke(prompt)
+                response_text = str(response).strip()
+                if response_text and len(response_text) > 80:
+                    blocks.append(
+                        f"<div style='margin-bottom:18px; line-height:1.5;'>"
+                        f"<h3 style='margin:0 0 10px 0; color:#173152;'>Overview: {html.escape(file_name)}</h3>"
+                        f"<div style='color:#374151; font-size:0.95rem;'>{response_text}</div>"
+                        "</div>"
+                    )
+                    continue
+            except Exception:
+                pass
+        
+        # Fallback: deterministic extraction
         what_it_is = ""
-        for line in meaningful[:30]:
-            if any(term in line.lower() for term in ["is a", "provides", "enables", "supports", "system", "device", "module", "interface"]):
+        for line in meaningful[:40]:
+            if any(term in line.lower() for term in ["is a", "is an", "provides", "enables", "supports", "system", "device", "process", "document"]):
                 what_it_is = line
                 break
         if not what_it_is:
-            what_it_is = "This document provides technical reference and operational guidance."
+            what_it_is = "A technical document providing specification and operational guidance."
 
         who_for = ""
         for line in meaningful:
-            if any(term in line.lower() for term in ["for users", "target", "intended for", "engineers", "developers", "operators"]):
+            if any(term in line.lower() for term in ["for users", "for engineers", "target", "intended for", "designed for", "professionals"]):
                 who_for = line
                 break
         if not who_for:
-            who_for = "Technical professionals and system integrators."
+            who_for = "Technical professionals, engineers, operators, and system integrators."
 
         used_for = ""
         for line in meaningful:
-            if any(term in line.lower() for term in ["used to", "used for", "application", "purpose", "function"]):
+            if any(term in line.lower() for term in ["used to", "used for", "application", "purpose", "usage", "enables", "supports"]):
                 used_for = line
                 break
         if not used_for:
-            used_for = "Configuration, operation, and troubleshooting of technical systems."
+            used_for = "System design, configuration, operation, and troubleshooting."
 
         main_concept = ""
         for line in meaningful:
-            if any(term in line.lower() for term in ["concept", "overview", "introduction", "main idea"]):
+            lower_line = line.lower()
+            if any(term in lower_line for term in ["concept", "overview", "introduction", "main", "core"]):
                 main_concept = line
                 break
         if not main_concept:
-            main_concept = "Technical specification and operational reference."
+            concept_summary = ", ".join(l[:40] for l in meaningful[3:6])
+            main_concept = f"Technical specification covering: {concept_summary}."
 
         main_areas = []
         seen = set()
         for line in meaningful:
             lower_line = line.lower()
-            if any(term in lower_line for term in ["features", "capabilities", "components", "interfaces", "configuration", "usage", "troubleshooting"]) and lower_line not in seen:
+            if any(term in lower_line for term in ["feature", "capability", "component", "interface", "workflow", "configuration", "usage", "operation", "specification"]) and lower_line not in seen:
                 main_areas.append(line)
                 seen.add(lower_line)
             if len(main_areas) >= 5:
                 break
         if not main_areas:
-            main_areas = ["Technical specifications", "Operational guidance", "Configuration details"]
+            main_areas = ["Specifications and technical details", "Operational and usage guidance", "Configuration and setup"]
 
         blocks.append(
-            f"<div style='margin-bottom:18px; line-height:1.5;'>"
-            f"<h3 style='margin:0 0 10px 0; color:#173152;'>Overview: {html.escape(file_name)}</h3>"
-            f"<p><b>What it is:</b> {html.escape(what_it_is)}</p>"
-            f"<p><b>Who it is for:</b> {html.escape(who_for)}</p>"
-            f"<p><b>What it is used for:</b> {html.escape(used_for)}</p>"
-            f"<p><b>Main concept:</b> {html.escape(main_concept)}</p>"
-            f"<p><b>Main areas covered:</b> {', '.join(html.escape(area) for area in main_areas)}</p>"
+            f"<div style='margin-bottom:18px; line-height:1.6;'>"
+            f"<h3 style='margin:0 0 12px 0; color:#173152;'>{html.escape(file_name)}</h3>"
+            f"<p style='margin:8px 0;'><b>What it is:</b> {html.escape(what_it_is)}</p>"
+            f"<p style='margin:8px 0;'><b>Who it is for:</b> {html.escape(who_for)}</p>"
+            f"<p style='margin:8px 0;'><b>What it is used for:</b> {html.escape(used_for)}</p>"
+            f"<p style='margin:8px 0;'><b>Main concept:</b> {html.escape(main_concept)}</p>"
+            f"<p style='margin:8px 0;'><b>Major areas covered:</b> {', '.join(html.escape(area) for area in main_areas)}</p>"
             "</div>"
         )
     return join_response_blocks(blocks)
@@ -10026,26 +7262,46 @@ def show_help_popup(tab_name, selected_files):
     helper_defs = {
         "chat": {
             "title": "Chat Agent Helper",
-            "text": "Use the document chat assistant to get natural summaries, deeper analysis, overviews, comparisons, table answers, diagram explanations, exact search, and grounded Q&A.",
-            "hint": "Ask for Summary, Analyze, or Overview when you want a reader-friendly synthesis. Every answer includes sources and a confidence label so you can judge how complete the context was.",
+            "text": "Use Chat as an intent-routing document agent. It chooses one focused response style for analysis, summaries, overviews, features, component details, pin or connector tables, workflows, use cases, comparisons, tables, diagrams, reports, troubleshooting, requirements, exact search, and grounded Q&A.",
+            "hint": "Ask in plain language or use direct commands. The answer should stay grounded in the selected documents, use the script-specific format for the detected intent, include sources, and add a confidence label.",
             "workflow": [
                 "Upload files in the sidebar, then explicitly select only the files you want available in Chat.",
-                "Ask naturally for analysis, summary, overview, question answering, tables, components, diagrams, comparison, or search.",
-                "Use Analyze for deeper reasoning about purpose, structure, strengths, risks, design patterns, and implications.",
-                "Use Summary for a concise executive summary.",
-                "Ask specific questions when you need targeted answers from the selected documents.",
-                "Ask for tables, components, diagrams, comparisons, or searches when you need those specific outputs.",
+                "Ask naturally; the chat script classifies one primary intent and applies the matching output format.",
+                "Use Analyze for Overview, Purpose, Core concept, Architecture, Key capabilities, Components, Workflow, Use cases, Notes, and Takeaways.",
+                "Use Summary for a concise reader-friendly summary with 3-5 key insights and 2-3 takeaways.",
+                "Use Overview when you need what it is, who it is for, what it is used for, the main concept, and covered areas.",
+                "Ask for features, component details, pin diagrams, connector tables, workflows, use cases, comparisons, troubleshooting, requirements, or export-ready reports when you need those exact structures.",
+                "Use table extraction for clean table-only output and find or count commands for exact text evidence.",
                 "Review Sources and Confidence. Sources show the files, pages, slides, sheets, or sections used for the answer.",
                 "Follow-up questions reuse memory for the same user and document selection.",
-                "Use find \"phrase\" or count \"phrase\" when you need exact text evidence."
+                "Expect the answer to avoid metadata dumps, TOC text, OCR noise, copied raw text, repetition, and invented technical values."
             ],
-            "outputs": ["Full analysis", "Executive summary", "Grounded answers", "Citations", "Confidence", "Per-document memory"],
+            "outputs": [
+                "Full analysis",
+                "Short summary",
+                "Overview",
+                "Feature table",
+                "Component details",
+                "Pin/connector table",
+                "Workflow",
+                "Use cases",
+                "Comparison",
+                "Requirements table",
+                "Citations",
+                "Confidence"
+            ],
             "shortcuts": [
                 ("Analyze", "Create a deeper expert analysis."),
                 ("Summary", "Return a concise executive summary."),
                 ("Overview", "Show a high-level explanation of the document."),
-                ("table data", "Extract clean table-like content."),
-                ("components", "Extract modules/components and roles."),
+                ("features", "List capabilities in the script's feature table format."),
+                ("component", "Explain a specific component with usage, interfaces, and notes."),
+                ("pin diagram", "Extract connector, pin, channel, and diagram details."),
+                ("workflow", "Explain process steps, inputs, outputs, and tools involved."),
+                ("use cases", "Show applications, target users, benefits, and scenarios."),
+                ("compare", "Return a comparison table plus similarities and differences."),
+                ("requirements", "Extract requirements or specifications into a clean table."),
+                ("table data", "Extract clean table-only content."),
                 ("find \"phrase\"", "Locate exact occurrences in the selected files."),
                 ("count \"phrase\"", "Count exact matches in selected document text.")
             ]
