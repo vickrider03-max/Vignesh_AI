@@ -89,6 +89,11 @@ PDF_ASSET_SCAN_PAGE_LIMIT = 10
 MAX_VECTOR_TEXT_CHARS = 250000
 TEXT_EXTRACTION_SCHEMA_VERSION = "extract-v3"
 CHATPDF_SCHEMA_VERSION = "chatpdf-schema-v3"
+FILE_BRAIN_SCHEMA_VERSION = "file-brain-v1"
+FILE_BRAIN_PREVIEW_CHARS = 700
+FILE_BRAIN_PAGE_CONTEXT_CHARS = 3500
+FILE_BRAIN_SELECTED_CHUNK_CHARS = 1400
+FILE_BRAIN_MAX_TABLE_ROWS = 2000
 FILE_TEXT_CACHE = CacheManager(max_size=100)
 VECTOR_STORE_CACHE = CacheManager(max_size=20)
 EXCEL_DATA_CACHE = CacheManager(max_size=50)
@@ -3698,6 +3703,642 @@ def append_chatpdf_memory(user_id, file_names, question, answer):
     st.session_state.document_chat_memory[get_chatpdf_memory_key(user_id, file_names)] = memory[-10:]
 
 
+def init_file_brain_registry():
+    """Session-local global memory registry for uploaded file brains."""
+    if "file_brains" not in st.session_state or not isinstance(st.session_state.file_brains, dict):
+        st.session_state.file_brains = {}
+    if "global_memory_registry" not in st.session_state or not isinstance(st.session_state.global_memory_registry, dict):
+        st.session_state.global_memory_registry = {"files": {}}
+    st.session_state.global_memory_registry.setdefault("files", {})
+    return st.session_state.global_memory_registry
+
+
+def normalize_brain_cell(value):
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        return ""
+    if isinstance(value, (datetime,)):
+        return value.isoformat()
+    return str(value)
+
+
+def summarize_table_for_index(table):
+    headers = " | ".join(str(header) for header in table.get("headers", [])[:20])
+    sample_rows = []
+    for row in table.get("rows", [])[:8]:
+        sample_rows.append(" | ".join(str(cell) for cell in row[:20]))
+    table_text = "\n".join([headers] + sample_rows).strip()
+    locator = table.get("sheet") or table.get("page") or table.get("table") or "Table"
+    return clean_text(f"{locator}\n{table_text}")
+
+
+def extract_pdf_pages(file):
+    """Extract PDF pages one at a time while preserving basic block structure."""
+    file_bytes = _read_uploaded_bytes(file)
+    pages = []
+    diagrams = []
+    if not file_bytes:
+        return pages, diagrams
+
+    try:
+        fitz_module = importlib.import_module("fitz")
+    except Exception:
+        fitz_module = None
+
+    if fitz_module is not None:
+        pdf_doc = None
+        try:
+            pdf_doc = fitz_module.open(stream=file_bytes, filetype="pdf")
+            for index, page in enumerate(pdf_doc, start=1):
+                text = clean_text(page.get_text("text"))
+                blocks = page.get_text("blocks") or []
+                page_record = {"page": index, "text": text, "blocks": blocks}
+                pages.append(page_record)
+                if any(keyword in text.lower() for keyword in ["figure", "diagram", "block", "flow", "layout"]):
+                    diagrams.append({
+                        "page": index,
+                        "text": text[:500],
+                        "kind": "pdf-text-reference",
+                    })
+            return pages, diagrams
+        except Exception:
+            pages = []
+            diagrams = []
+        finally:
+            try:
+                if pdf_doc is not None:
+                    pdf_doc.close()
+            except Exception:
+                pass
+
+    try:
+        with pdfplumber.open(BytesIO(file_bytes)) as pdf:
+            for index, page in enumerate(pdf.pages, start=1):
+                text = clean_text(page.extract_text() or "")
+                pages.append({"page": index, "text": text, "blocks": []})
+                if any(keyword in text.lower() for keyword in ["figure", "diagram", "block", "flow", "layout"]):
+                    diagrams.append({
+                        "page": index,
+                        "text": text[:500],
+                        "kind": "pdf-text-reference",
+                    })
+    except Exception as exc:
+        pages.append({"page": 1, "text": f"PDF extraction failed: {str(exc)[:160]}", "blocks": []})
+    return pages, diagrams
+
+
+def extract_word_pages_and_tables(file, filename=None):
+    file_bytes = _read_uploaded_bytes(file)
+    pages = []
+    tables = []
+    ext = os.path.splitext(str(filename or ""))[1].lower()
+    if ext and ext != ".docx":
+        text = extract_word(BytesIO(file_bytes), filename)
+        return [{"page": 1, "text": text, "blocks": []}], tables
+
+    try:
+        document = docx.Document(BytesIO(file_bytes))
+        section = "Document"
+        buffer = []
+        page_number = 1
+        for paragraph in document.paragraphs:
+            paragraph_text = paragraph.text.strip()
+            if not paragraph_text:
+                continue
+            style_name = str(getattr(paragraph.style, "name", "") or "")
+            if style_name.lower().startswith("heading") and buffer:
+                pages.append({"page": page_number, "section": section, "text": clean_text("\n".join(buffer)), "blocks": []})
+                buffer = []
+                page_number += 1
+                section = paragraph_text[:120]
+            buffer.append(paragraph_text)
+            if len("\n".join(buffer)) >= FILE_BRAIN_PAGE_CONTEXT_CHARS:
+                pages.append({"page": page_number, "section": section, "text": clean_text("\n".join(buffer)), "blocks": []})
+                buffer = []
+                page_number += 1
+        if buffer:
+            pages.append({"page": page_number, "section": section, "text": clean_text("\n".join(buffer)), "blocks": []})
+
+        for table_index, table in enumerate(document.tables, start=1):
+            rows = []
+            for row in table.rows:
+                rows.append([clean_text(cell.text) for cell in row.cells])
+            if rows:
+                headers = rows[0]
+                body = rows[1:FILE_BRAIN_MAX_TABLE_ROWS + 1]
+                tables.append({
+                    "table": f"Table {table_index}",
+                    "headers": headers,
+                    "rows": body,
+                    "row_count": max(len(rows) - 1, 0),
+                    "truncated": len(rows) - 1 > FILE_BRAIN_MAX_TABLE_ROWS,
+                })
+        return pages or [{"page": 1, "text": extract_word(BytesIO(file_bytes), filename), "blocks": []}], tables
+    except Exception:
+        return [{"page": 1, "text": extract_word(BytesIO(file_bytes), filename), "blocks": []}], tables
+
+
+def extract_ppt_pages(file, filename=None):
+    file_bytes = _read_uploaded_bytes(file)
+    ext = os.path.splitext(str(filename or ""))[1].lower()
+    if ext == ".ppt":
+        return [{"page": 1, "text": extract_ppt(BytesIO(file_bytes), filename), "blocks": []}], []
+
+    pages = []
+    tables = []
+    try:
+        presentation = Presentation(BytesIO(file_bytes))
+        for slide_index, slide in enumerate(presentation.slides, start=1):
+            slide_lines = []
+            for shape in slide.shapes:
+                if hasattr(shape, "text") and shape.text:
+                    slide_lines.append(shape.text)
+                if hasattr(shape, "table"):
+                    rows = []
+                    for row in shape.table.rows:
+                        rows.append([clean_text(cell.text) for cell in row.cells])
+                    if rows:
+                        tables.append({
+                            "sheet": f"Slide {slide_index}",
+                            "table": f"Slide {slide_index} table",
+                            "headers": rows[0],
+                            "rows": rows[1:FILE_BRAIN_MAX_TABLE_ROWS + 1],
+                            "row_count": max(len(rows) - 1, 0),
+                            "truncated": len(rows) - 1 > FILE_BRAIN_MAX_TABLE_ROWS,
+                        })
+            pages.append({"page": slide_index, "text": clean_text("\n".join(slide_lines)), "blocks": []})
+    except Exception:
+        pages.append({"page": 1, "text": extract_ppt(BytesIO(file_bytes), filename), "blocks": []})
+    return pages, tables
+
+
+def extract_tables_excel(file, filename=None):
+    """Extract spreadsheet tables as structured rows instead of flattened text."""
+    file_bytes = _read_uploaded_bytes(file)
+    tables = []
+    try:
+        sheets = pd.read_excel(BytesIO(file_bytes), sheet_name=None)
+        for name, df in sheets.items():
+            normalized_df = df.fillna("")
+            rows = [
+                [normalize_brain_cell(cell) for cell in row]
+                for row in normalized_df.values.tolist()[:FILE_BRAIN_MAX_TABLE_ROWS]
+            ]
+            tables.append({
+                "sheet": str(name),
+                "headers": [normalize_brain_cell(header) for header in list(normalized_df.columns)],
+                "rows": rows,
+                "row_count": len(normalized_df.index),
+                "truncated": len(normalized_df.index) > FILE_BRAIN_MAX_TABLE_ROWS,
+            })
+    except Exception:
+        if str(filename or "").lower().endswith(".xls"):
+            text = extract_excel(BytesIO(file_bytes), filename)
+            tables.append({"sheet": "Workbook", "headers": [], "rows": [[text]], "row_count": 1, "truncated": False})
+    return tables
+
+
+def extract_csv_tables(file):
+    file_bytes = _read_uploaded_bytes(file)
+    try:
+        df = pd.read_csv(BytesIO(file_bytes)).fillna("")
+        return [{
+            "sheet": "CSV",
+            "headers": [normalize_brain_cell(header) for header in list(df.columns)],
+            "rows": [
+                [normalize_brain_cell(cell) for cell in row]
+                for row in df.values.tolist()[:FILE_BRAIN_MAX_TABLE_ROWS]
+            ],
+            "row_count": len(df.index),
+            "truncated": len(df.index) > FILE_BRAIN_MAX_TABLE_ROWS,
+        }]
+    except Exception:
+        text = extract_csv(BytesIO(file_bytes))
+        return [{"sheet": "CSV", "headers": [], "rows": [[text]], "row_count": 1, "truncated": False}]
+
+
+def extract_generic_pages(file, filename=None):
+    text = extract_text(BytesIO(_read_uploaded_bytes(file)), filename)
+    chunks = smart_chunk(text, chunk_size=FILE_BRAIN_PAGE_CONTEXT_CHARS)
+    if not chunks:
+        chunks = [text]
+    return [{"page": index, "text": clean_text(chunk), "blocks": []} for index, chunk in enumerate(chunks, start=1)]
+
+
+def extract_file_structure(file_name, file_bytes):
+    file_type = detect_file_type(file_name)
+    bio = BytesIO(file_bytes or b"")
+    if file_type == "pdf":
+        pages, diagrams = extract_pdf_pages(bio)
+        return pages, [], diagrams
+    if file_type == "word":
+        pages, tables = extract_word_pages_and_tables(bio, file_name)
+        return pages, tables, []
+    if file_type == "ppt":
+        pages, tables = extract_ppt_pages(bio, file_name)
+        diagrams = [
+            {"page": p.get("page"), "text": p.get("text", "")[:500], "kind": "slide-visual-reference"}
+            for p in pages
+            if any(keyword in str(p.get("text", "")).lower() for keyword in ["figure", "diagram", "flow", "block", "architecture"])
+        ]
+        return pages, tables, diagrams
+    if file_type == "excel":
+        tables = extract_tables_excel(bio, file_name)
+        pages = [
+            {"page": table.get("sheet") or index, "section": table.get("sheet") or "Sheet", "text": summarize_table_for_index(table), "blocks": []}
+            for index, table in enumerate(tables, start=1)
+        ]
+        return pages, tables, []
+    if file_type == "csv":
+        tables = extract_csv_tables(bio)
+        pages = [{"page": 1, "section": "CSV", "text": summarize_table_for_index(tables[0]) if tables else "", "blocks": []}]
+        return pages, tables, []
+    pages = extract_generic_pages(bio, file_name)
+    diagrams = [
+        {"page": p.get("page"), "text": p.get("text", "")[:500], "kind": "text-reference"}
+        for p in pages
+        if any(keyword in str(p.get("text", "")).lower() for keyword in ["figure", "diagram", "flow", "block", "architecture"])
+    ]
+    return pages, [], diagrams
+
+
+def extract_lightweight_entities(text):
+    entities = set()
+    for token in re.findall(r"\b[A-Za-z][A-Za-z0-9_-]{2,}\b", str(text or "")):
+        if token.isupper() or re.search(r"[A-Z]{2,}|\d", token):
+            entities.add(token[:80])
+    return entities
+
+
+def extract_lightweight_facts(text, page, limit=8):
+    fact_markers = [
+        "supports", "provides", "requires", "shall", "must", "can", "enables",
+        "contains", "includes", "used for", "configured", "connects", "consists",
+    ]
+    facts = []
+    sentences = re.split(r"(?<=[.!?])\s+|\n+", str(text or ""))
+    for sentence in sentences:
+        clean_sentence = clean_text(sentence)
+        if len(clean_sentence) < 35:
+            continue
+        if any(marker in clean_sentence.lower() for marker in fact_markers):
+            facts.append({"page": page, "fact": clean_sentence[:350]})
+        if len(facts) >= limit:
+            break
+    return facts
+
+
+def build_file_brain(file_name, file_bytes):
+    """Build a mini knowledge system for one uploaded file."""
+    pages, tables, diagrams = extract_file_structure(file_name, file_bytes)
+    brain = {
+        "schema": FILE_BRAIN_SCHEMA_VERSION,
+        "file_name": file_name,
+        "file_type": detect_file_type(file_name),
+        "file_hash": get_file_hash(file_bytes or b""),
+        "pages": pages,
+        "page_index": [],
+        "facts": [],
+        "entities": set(),
+        "tables": tables,
+        "diagrams": diagrams,
+    }
+
+    for page_record in pages:
+        page_text = clean_text(page_record.get("text", ""))
+        page_id = page_record.get("page")
+        token_counts = Counter(tokenize_chatpdf_text(page_text))
+        keywords = [word for word, _ in token_counts.most_common(30)]
+        brain["page_index"].append({
+            "page": page_id,
+            "section": page_record.get("section", f"Page {page_id}"),
+            "preview": page_text[:FILE_BRAIN_PREVIEW_CHARS],
+            "keywords": keywords,
+            "char_count": len(page_text),
+        })
+        brain["entities"].update(extract_lightweight_entities(page_text))
+        brain["facts"].extend(extract_lightweight_facts(page_text, page_id))
+
+    for table_index, table in enumerate(tables, start=1):
+        table_text = summarize_table_for_index(table)
+        brain["entities"].update(extract_lightweight_entities(table_text))
+        if table_text:
+            brain["facts"].append({
+                "page": table.get("sheet") or table.get("page") or f"Table {table_index}",
+                "fact": f"Structured table available: {table_text[:300]}",
+            })
+
+    brain["entities"] = sorted(brain["entities"])[:500]
+    return brain
+
+
+def register_file(file_id, brain):
+    registry = init_file_brain_registry()
+    registry["files"][file_id] = brain
+    return brain
+
+
+def ensure_file_brain(file_name):
+    init_file_brain_registry()
+    file_entry = get_uploaded_file_entry(file_name)
+    if not file_entry:
+        return None
+    file_bytes = file_entry.get("bytes", b"")
+    file_hash = get_file_hash(file_bytes)
+    cached = st.session_state.file_brains.get(file_name)
+    if isinstance(cached, dict) and cached.get("hash") == file_hash and isinstance(cached.get("brain"), dict):
+        register_file(file_name, cached["brain"])
+        return cached["brain"]
+
+    brain = build_file_brain(file_name, file_bytes)
+    st.session_state.file_brains[file_name] = {"hash": file_hash, "brain": brain}
+    register_file(file_name, brain)
+    return brain
+
+
+def get_file_brains(file_names):
+    brains = {}
+    for file_name in file_names or []:
+        brain = ensure_file_brain(file_name)
+        if brain:
+            brains[file_name] = brain
+    return brains
+
+
+def retrieve_pages(query, brain, top_k=8):
+    """BM25 + keyword page retrieval over the page index, not full file text."""
+    query_tokens = set(tokenize_chatpdf_text(query))
+    if not query_tokens or not brain:
+        return []
+
+    bm25_scores = []
+    bm25_okapi_class = get_bm25_okapi_class()
+    page_index = brain.get("page_index", [])
+    if bm25_okapi_class is not None and page_index:
+        try:
+            corpus_tokens = [
+                tokenize_chatpdf_text(
+                    " ".join([
+                        str(page_record.get("section", "")),
+                        str(page_record.get("preview", "")),
+                        " ".join(str(keyword) for keyword in page_record.get("keywords", [])),
+                    ])
+                )
+                for page_record in page_index
+            ]
+            bm25 = bm25_okapi_class(corpus_tokens)
+            bm25_scores = list(bm25.get_scores(list(query_tokens)))
+        except Exception:
+            bm25_scores = []
+
+    scored = []
+    for index, page_record in enumerate(page_index):
+        preview = str(page_record.get("preview", "")).lower()
+        section = str(page_record.get("section", "")).lower()
+        keywords = set(page_record.get("keywords", []))
+        score = len(query_tokens.intersection(keywords)) * 3
+        score += sum(1 for token in query_tokens if token in preview)
+        score += sum(1 for token in query_tokens if token in section)
+        if bm25_scores:
+            score += float(bm25_scores[index])
+        if str(query or "").lower().strip() and str(query or "").lower().strip() in preview:
+            score += 5
+        if score:
+            scored.append((score, page_record))
+    scored.sort(key=lambda item: item[0], reverse=True)
+    return [page for _, page in scored[:top_k]]
+
+
+def search_tables(query, tables, top_k=5):
+    query_tokens = set(tokenize_chatpdf_text(query))
+    if not query_tokens:
+        return []
+    results = []
+    for table in tables or []:
+        headers_text = " ".join(str(header) for header in table.get("headers", []))
+        rows_text = " ".join(" ".join(str(cell) for cell in row) for row in table.get("rows", [])[:120])
+        table_text = f"{table.get('sheet', '')} {headers_text} {rows_text}".lower()
+        score = sum(1 for token in query_tokens if token in table_text)
+        if any(term in str(query).lower() for term in ["table", "sheet", "row", "column", "csv", "excel"]):
+            score += 1 if score else 0
+        if score:
+            results.append((score, table))
+    results.sort(key=lambda item: item[0], reverse=True)
+    return [table for _, table in results[:top_k]]
+
+
+def search_diagrams(query, diagrams, top_k=5):
+    query_tokens = set(tokenize_chatpdf_text(query))
+    diagram_terms = {"diagram", "figure", "image", "flow", "block", "architecture", "layout", "pin", "connector"}
+    wants_diagram = bool(query_tokens.intersection(diagram_terms))
+    results = []
+    for diagram in diagrams or []:
+        diagram_text = str(diagram.get("text", "")).lower()
+        score = sum(1 for token in query_tokens if token in diagram_text)
+        if wants_diagram:
+            score += 1
+        if score:
+            results.append((score, diagram))
+    results.sort(key=lambda item: item[0], reverse=True)
+    return [diagram for _, diagram in results[:top_k]]
+
+
+def cross_file_search(query, file_names=None, top_k=5):
+    registry = init_file_brain_registry()
+    query_tokens = set(tokenize_chatpdf_text(query))
+    if not query_tokens:
+        return []
+    allowed = set(file_names or registry.get("files", {}).keys())
+    results = []
+    for file_id, brain in registry.get("files", {}).items():
+        if file_id not in allowed:
+            continue
+        score = 0
+        for fact in brain.get("facts", []):
+            fact_text = str(fact.get("fact", "")).lower()
+            if any(token in fact_text for token in query_tokens):
+                score += 2
+        for entity in brain.get("entities", []):
+            if str(entity).lower() in query_tokens:
+                score += 3
+        if score:
+            results.append((score, file_id))
+    results.sort(key=lambda item: item[0], reverse=True)
+    return results[:top_k]
+
+
+def get_page_record_by_id(brain, page_id):
+    for page_record in brain.get("pages", []):
+        if str(page_record.get("page")) == str(page_id):
+            return page_record
+    return None
+
+
+def table_to_context_text(table, max_rows=30):
+    headers = [str(header) for header in table.get("headers", [])]
+    lines = []
+    if headers:
+        lines.append(" | ".join(headers))
+    for row in table.get("rows", [])[:max_rows]:
+        lines.append(" | ".join(str(cell) for cell in row))
+    if table.get("truncated"):
+        lines.append(f"... table truncated after {max_rows} displayed rows; total rows indexed: {table.get('row_count')}")
+    return clean_text("\n".join(lines))
+
+
+def chunk_selected_documents(docs, chunk_chars=FILE_BRAIN_SELECTED_CHUNK_CHARS):
+    """Chunk only the retrieved candidates before optional lazy embedding."""
+    selected_chunks = []
+    for doc in docs or []:
+        content = clean_text(getattr(doc, "page_content", ""))
+        if not content:
+            continue
+        if len(content) <= chunk_chars:
+            selected_chunks.append(doc)
+            continue
+
+        chunks = smart_chunk(content, chunk_size=chunk_chars)
+        for chunk_index, chunk in enumerate(chunks, start=1):
+            metadata = dict(getattr(doc, "metadata", {}) or {})
+            metadata["selected_chunk_index"] = chunk_index
+            selected_chunks.append(Document(page_content=chunk, metadata=metadata))
+    return selected_chunks
+
+
+def selected_content_cache_key(question, docs):
+    signature_parts = [str(question or "")]
+    for doc in docs or []:
+        meta = getattr(doc, "metadata", {}) or {}
+        signature_parts.append(
+            "|".join([
+                str(meta.get("file_name", "")),
+                str(meta.get("page_or_sheet") or meta.get("page_number") or ""),
+                str(meta.get("section", "")),
+                hashlib.sha1(str(getattr(doc, "page_content", "")).encode("utf-8", errors="ignore")).hexdigest()[:12],
+            ])
+        )
+    return hashlib.sha1("\n".join(signature_parts).encode("utf-8", errors="ignore")).hexdigest()[:24]
+
+
+def lazy_embed_selected_documents(question, docs, top_k=8):
+    """Embed only already-retrieved page/table/diagram candidates for final ordering."""
+    docs = chunk_selected_documents([doc for doc in (docs or []) if getattr(doc, "page_content", "")])
+    if len(docs) <= 1:
+        return docs[:top_k]
+
+    cache = st.session_state.setdefault("selected_chunk_vector_cache", {})
+    cache_key = selected_content_cache_key(question, docs)
+    vector_store = cache.get(cache_key)
+    if vector_store is None:
+        try:
+            vector_store = FAISS.from_documents(docs, get_chatpdf_embeddings())
+            cache[cache_key] = vector_store
+            # Keep the lazy selected-content cache small across reruns.
+            if len(cache) > 12:
+                for old_key in list(cache.keys())[:-12]:
+                    cache.pop(old_key, None)
+            st.session_state.selected_chunk_vector_cache = cache
+        except Exception:
+            return rerank_chatpdf_documents(question, docs, top_k=top_k)
+
+    try:
+        embedded_docs = vector_store.similarity_search(str(question or ""), k=min(top_k, len(docs)))
+        if embedded_docs:
+            return embedded_docs
+    except Exception:
+        pass
+    return rerank_chatpdf_documents(question, docs, top_k=top_k)
+
+
+def retrieve_file_brain_documents(question, file_names, user_id=None, top_k=8):
+    """Retrieve only selected page/table/diagram content, then convert to Documents."""
+    del user_id  # User isolation is already handled by session state and uploaded file selection.
+    brains = get_file_brains(file_names)
+    if not brains:
+        return []
+
+    selected_documents = []
+    per_file_page_k = max(2, min(top_k, math.ceil(top_k / max(len(brains), 1)) + 2))
+    for file_name, brain in brains.items():
+        file_type = brain.get("file_type") or get_chatpdf_file_type(file_name)
+        for page_index_record in retrieve_pages(question, brain, top_k=per_file_page_k):
+            page_record = get_page_record_by_id(brain, page_index_record.get("page"))
+            if not page_record:
+                continue
+            page_text = clean_text(page_record.get("text", ""))[:FILE_BRAIN_PAGE_CONTEXT_CHARS]
+            if not page_text:
+                continue
+            selected_documents.append(Document(
+                page_content=page_text,
+                metadata={
+                    "file_name": file_name,
+                    "file_type": file_type,
+                    "page_number": str(page_record.get("page")),
+                    "page_or_sheet": str(page_record.get("page")),
+                    "document_id": get_document_id(file_name, get_uploaded_file_entry(file_name).get("bytes", b"")),
+                    "section": page_index_record.get("section") or f"Page {page_record.get('page')}",
+                    "retrieval_layer": "file_brain_page",
+                },
+            ))
+
+        for table in search_tables(question, brain.get("tables", []), top_k=3):
+            table_text = table_to_context_text(table)
+            if not table_text:
+                continue
+            locator = table.get("sheet") or table.get("table") or "Table"
+            selected_documents.append(Document(
+                page_content=table_text,
+                metadata={
+                    "file_name": file_name,
+                    "file_type": "excel" if file_type == "excel" else file_type,
+                    "page_number": str(locator),
+                    "page_or_sheet": str(locator),
+                    "document_id": get_document_id(file_name, get_uploaded_file_entry(file_name).get("bytes", b"")),
+                    "section": f"Structured table: {locator}",
+                    "retrieval_layer": "file_brain_table",
+                },
+            ))
+
+        for diagram in search_diagrams(question, brain.get("diagrams", []), top_k=2):
+            diagram_text = clean_text(diagram.get("text", ""))[:1200]
+            if not diagram_text:
+                continue
+            locator = diagram.get("page") or "Diagram"
+            selected_documents.append(Document(
+                page_content=diagram_text,
+                metadata={
+                    "file_name": file_name,
+                    "file_type": file_type,
+                    "page_number": str(locator),
+                    "page_or_sheet": str(locator),
+                    "document_id": get_document_id(file_name, get_uploaded_file_entry(file_name).get("bytes", b"")),
+                    "section": f"Diagram metadata: {diagram.get('kind', 'visual reference')}",
+                    "retrieval_layer": "file_brain_diagram",
+                },
+            ))
+
+    if not selected_documents:
+        for _, file_name in cross_file_search(question, file_names=file_names, top_k=top_k):
+            brain = brains.get(file_name)
+            if not brain:
+                continue
+            for fact in brain.get("facts", [])[:2]:
+                selected_documents.append(Document(
+                    page_content=str(fact.get("fact", "")),
+                    metadata={
+                        "file_name": file_name,
+                        "file_type": brain.get("file_type") or get_chatpdf_file_type(file_name),
+                        "page_number": str(fact.get("page") or "Memory"),
+                        "page_or_sheet": str(fact.get("page") or "Memory"),
+                        "document_id": get_document_id(file_name, get_uploaded_file_entry(file_name).get("bytes", b"")),
+                        "section": "File brain fact",
+                        "retrieval_layer": "file_brain_fact",
+                    },
+                ))
+
+    selected_documents = rerank_chatpdf_documents(question, selected_documents, top_k=max(top_k * 2, top_k))
+    return lazy_embed_selected_documents(question, selected_documents, top_k=top_k)
+
+
 def extract_chatpdf_structured_pages(file_name, file_bytes):
     """Extract page/slide/sheet-aware text records with traceable metadata."""
     records = []
@@ -4119,6 +4760,123 @@ def build_chatpdf_prompt(question, docs, memory):
     )
 
 
+SMART_QUERY_INTENT_TERMS = {
+    "FULL_DOCUMENT_ANALYSIS": (
+        "introduction overview purpose main features capabilities architecture components "
+        "workflow applications use cases technical details constraints key takeaways"
+    ),
+    "SHORT_SUMMARY": "overview purpose key points main findings summary takeaways",
+    "OVERVIEW": "overview purpose usage audience main concept areas covered",
+    "FEATURES_ONLY": "features capabilities functions benefits modules components",
+    "SPECIFIC_COMPONENT_DETAILS": "component module interface connector configuration usage limitations details",
+    "PIN_DIAGRAMS_CONNECTORS_TABLES": "pin connector pinout signal mapping table channel diagram figure",
+    "WORKFLOW_OR_PROCESS": "workflow process steps procedure input output operation usage flow",
+    "USE_CASES_APPLICATIONS": "use cases applications users scenarios benefits practical usage",
+    "COMPARISON": "compare difference similarities criteria usage capabilities limitations",
+    "TABLE_EXTRACTION": "table sheet rows columns csv data structured values",
+    "IMAGE_OR_DIAGRAM_EXPLANATION": "diagram figure image flow block architecture visual layout",
+    "DOWNLOADABLE_REPORT": "overview purpose findings features workflow tables recommendations report",
+    "TROUBLESHOOTING_OR_LIMITATIONS": "troubleshooting limitations constraints issue problem error cause recommendation",
+    "REQUIREMENTS_OR_SPECIFICATION_EXTRACTION": "requirements specifications shall must value condition applies notes",
+}
+
+
+def build_retrieval_query_for_intent(question, intent):
+    """Blend user terms with intent terms so retrieval stays focused but robust."""
+    question_text = re.sub(r"\s+", " ", str(question or "")).strip()
+    intent_terms = SMART_QUERY_INTENT_TERMS.get(str(intent or ""), "")
+    if not intent_terms:
+        return question_text
+    if not question_text:
+        return intent_terms
+    return f"{question_text} {intent_terms}"
+
+
+def build_smart_document_prompt(question, intent, docs, memory, cross_file_hits=None):
+    memory_text = "\n".join(
+        f"User: {item.get('question', '')}\nAssistant: {item.get('answer', '')}"
+        for item in (memory or [])[-4:]
+    ) or "No previous conversation."
+    context = format_chatpdf_context(docs)
+    cross_file_text = "\n".join(
+        f"- {file_id} (memory score {score})"
+        for score, file_id in (cross_file_hits or [])
+    ) or "No additional cross-file memory hits."
+    return f"""You are a document intelligence query engine.
+
+Intent: {intent or "QUESTION_ANSWERING"}
+
+Rules:
+- Use only the provided context and memory.
+- Cite page, slide, sheet, table, or diagram references from Sources.
+- Do not hallucinate missing values, specifications, pin numbers, or relationships.
+- Prefer structured output: headings, bullets, and tables where useful.
+- For table requests, preserve rows and columns from structured table context.
+- For diagram requests, use diagram metadata only and say when exact visuals are unavailable.
+- For cross-file questions, compare only files represented in the context or cross-file memory hits.
+- If the context is insufficient, say "Not specified in the provided context."
+
+Conversation memory:
+{memory_text}
+
+Cross-file memory hints:
+{cross_file_text}
+
+Context:
+{context}
+
+Question:
+{question}
+"""
+
+
+def smart_file_brain_query(question, file_names, user_id=None, intent=None, top_k=8):
+    """End-to-end query engine: intent-aware retrieval, selected chunking, lazy embedding, citations."""
+    user_id = user_id or get_active_user_id()
+    file_names = list(dict.fromkeys(file_names or []))
+    if not file_names:
+        return "Answer:\nPlease select one or more documents before asking a question.\n\nSources:\n- No sources found", []
+
+    intent = intent or classify_technical_document_request(question)
+    retrieval_query = build_retrieval_query_for_intent(question, intent)
+    docs = retrieve_file_brain_documents(retrieval_query, file_names, user_id=user_id, top_k=top_k)
+
+    if str(retrieval_query).strip().lower() != str(question or "").strip().lower():
+        direct_docs = retrieve_file_brain_documents(question, file_names, user_id=user_id, top_k=max(3, top_k // 2))
+        docs = merge_chatpdf_results(docs, direct_docs)
+        docs = rerank_chatpdf_documents(question, docs, top_k=max(top_k * 2, top_k))
+        docs = lazy_embed_selected_documents(question, docs, top_k=top_k)
+
+    if not docs:
+        docs = sparse_chatpdf_search(retrieval_query or question, file_names, user_id=user_id, top_k=top_k)
+        docs = rerank_chatpdf_documents(question, docs, top_k=top_k)
+
+    if not docs:
+        return "Answer:\nThis information is not available in the uploaded documents.\n\nSources:\n- No sources found", []
+
+    memory = get_chatpdf_memory(user_id, file_names)
+    cross_hits = cross_file_search(question, file_names=file_names, top_k=5)
+    llm = load_llm()
+    if llm is None:
+        answer = build_extractive_chatpdf_answer(question, docs)
+    else:
+        prompt = build_smart_document_prompt(question, intent, docs, memory, cross_hits)
+        try:
+            answer = str(llm.invoke(prompt)).strip()
+        except Exception:
+            answer = build_extractive_chatpdf_answer(question, docs)
+
+        if not answer:
+            answer = "Answer:\nThis information is not available in the uploaded documents."
+        if "Sources:" not in answer:
+            answer = answer.rstrip() + "\n\nSources:\n" + format_chatpdf_sources(docs)
+        elif not any((getattr(doc, "metadata", {}) or {}).get("file_name", "") in answer for doc in docs):
+            answer = answer.rstrip() + "\n" + format_chatpdf_sources(docs)
+
+    append_chatpdf_memory(user_id, file_names, question, answer)
+    return strip_llm_suggestions_from_response(answer), docs
+
+
 def build_extractive_chatpdf_answer(question, docs):
     """Fallback answer when no LLM is available; remains grounded in retrieved chunks."""
     if not docs:
@@ -4134,33 +4892,19 @@ def build_extractive_chatpdf_answer(question, docs):
 
 
 def answer_chatpdf_question(question, file_names, user_id=None, top_k=8):
-    """Hybrid RAG answer with citations and per-document memory."""
-    user_id = user_id or get_active_user_id()
-    llm = load_llm()
-    search_query = rewrite_chatpdf_query(llm, question)
-    docs = hybrid_chatpdf_retrieve(question, file_names, user_id=user_id, final_k=top_k, search_query=search_query)
-    if not docs:
-        return "Answer:\nThis information is not available in the uploaded documents.\n\nSources:\n- No sources found", []
+    """File-brain first answer with citations and per-document memory.
 
-    memory = get_chatpdf_memory(user_id, file_names)
-    if llm is None:
-        answer = build_extractive_chatpdf_answer(question, docs)
-    else:
-        prompt = build_chatpdf_prompt(question, docs, memory)
-        try:
-            answer = str(llm.invoke(prompt)).strip()
-        except Exception:
-            answer = build_extractive_chatpdf_answer(question, docs)
-
-        if not answer:
-            answer = "Answer:\nThis information is not available in the uploaded documents."
-        if "Sources:" not in answer:
-            answer = answer.rstrip() + "\n\nSources:\n" + format_chatpdf_sources(docs)
-        elif not any(meta.get("file_name", "") in answer for meta in [getattr(doc, "metadata", {}) for doc in docs]):
-            answer = answer.rstrip() + "\n" + format_chatpdf_sources(docs)
-
-    append_chatpdf_memory(user_id, file_names, question, answer)
-    return answer, docs
+    The dense FAISS path is retained as a fallback. Normal queries retrieve
+    page/table/diagram candidates from the file brain and avoid embedding the
+    whole uploaded selection.
+    """
+    return smart_file_brain_query(
+        question,
+        file_names,
+        user_id=user_id,
+        intent=classify_technical_document_request(question),
+        top_k=top_k,
+    )
 
 
 @st.cache_resource(show_spinner=False)
@@ -4194,6 +4938,7 @@ def load_llm():
 def ensure_files_processed(file_names):
     for file_name in file_names:
         ensure_file_processed(file_name)
+        ensure_file_brain(file_name)
 
 
 def process_selected_files():
@@ -5562,26 +6307,11 @@ def handle_query(user_input, combined_text, file_name):
 
 
 def handle_document_chat_query(user_input, file_texts, file_names=None, user_id=None):
-    """Agent router: map-reduce analysis, fast summary, task extraction, or RAG QA."""
-    intent = classify_intent(user_input)
+    """Agent router backed by the file-brain query engine."""
     file_texts = file_texts or {}
-    if intent == "FULL_DOCUMENT_ANALYSIS":
-        return build_full_document_summary_response(file_texts), []
-    if intent == "SHORT_SUMMARY":
-        return build_short_summary_response(file_texts), []
-    if intent == "OVERVIEW":
-        return build_overview_response(file_texts), []
-    if intent == "TABLE_EXTRACTION":
-        return build_table_extraction_response(file_texts), []
-    if intent == "DIAGRAM_ANALYSIS":
-        return build_image_or_diagram_extraction_response(file_texts, user_input), []
-    if intent == "COMPONENT_EXTRACTION":
-        return build_component_extraction_response(file_texts, user_input), []
-    if intent == "COMPARISON":
-        return build_component_comparison_response(file_texts, user_input), []
-    if intent == "SEARCH":
-        return build_extraction_response_for_query(user_input, file_texts), []
-    return answer_chatpdf_question(user_input, file_names or list(file_texts.keys()), user_id=user_id)
+    target_files = file_names or list(file_texts.keys())
+    intent = classify_technical_document_request(user_input)
+    return smart_file_brain_query(user_input, target_files, user_id=user_id, intent=intent, top_k=8)
 
 
 def infer_response_confidence(response, file_texts=None, citation_docs=None):
