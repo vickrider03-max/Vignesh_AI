@@ -154,7 +154,7 @@ def render_chat_tab():
         if lower_text == "overview":
             return "overview"
         if lower_text == "find keyword":
-            return 'find "keyword"'
+            return 'find "phrase"'
         if lower_text == "count signals":
             return 'count "signal"'
         if lower_text.startswith("item details:"):
@@ -729,7 +729,7 @@ def render_chat_tab():
                                  "Key Takeaways\n\n"
                                  "Do not copy raw text.\n"
                                  "Do not list table-of-contents headings.\n"
-                                 "Do not show page-wise extracted text.\n\n"
+                                 "Do not show raw page-by-page content.\n\n"
                                  "SHORT_SUMMARY\n\n"
                                  "Provide only:\n\n"
                                  "Short Summary\n"
@@ -918,9 +918,9 @@ def render_chat_tab():
                             if chain is None:
                                 memory_hits = search_workspace_memory(processing_input, limit=4)
                                 if memory_hits:
-                                    response = "AI model is unavailable, so I retrieved the closest workspace memory:\n\n" + "\n\n---\n\n".join(memory_hits)
+                                    response = "AI model is unavailable, so I found related workspace notes:\n\n" + "\n\n---\n\n".join(memory_hits)
                                 else:
-                                    response = "⚠️ AI model is unavailable. Use direct extraction questions such as 'count(\"keyword\")', 'find(\"phrase\")', 'summarize', or 'overview'."
+                                    response = "⚠️ AI model is unavailable. Try a direct request such as 'count(\"phrase\")', 'find(\"phrase\")', 'summarize', or 'overview'."
                         
                         # Ensure response is never empty
                         response = str(response or "").strip()
