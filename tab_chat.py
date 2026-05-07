@@ -352,6 +352,8 @@ def render_chat_tab():
                 for file_name, brain in file_brains.items():
                     semantic = brain.get("semantic_metadata", {}) or {}
                     topics = semantic.get("topics", [])[:8]
+                    concepts = semantic.get("key_concepts", [])[:6]
+                    components = semantic.get("architecture_components", [])[:6]
                     domains = [item.get("domain", "") for item in semantic.get("technical_domains", [])[:4]]
                     suggested_questions.extend(semantic.get("suggested_questions", [])[:4])
                     profile_rows.append({
@@ -363,6 +365,16 @@ def render_chat_tab():
                         "Topics": ", ".join(topics),
                         "Domains": ", ".join([domain for domain in domains if domain]),
                     })
+                    executive_summary = semantic.get("executive_summary") or semantic.get("document_summary")
+                    if executive_summary:
+                        st.markdown(f"**{html.escape(file_name)} understanding**")
+                        st.caption(document_intelligence_clean_line(executive_summary)[:700])
+                    if concepts or components:
+                        st.caption(
+                            "Concepts: "
+                            + ", ".join(concepts[:5])
+                            + (" | Components: " + ", ".join(components[:5]) if components else "")
+                        )
                 if profile_rows:
                     st.dataframe(pd.DataFrame(profile_rows), use_container_width=True, hide_index=True)
                 suggested_questions = list(dict.fromkeys(q for q in suggested_questions if q))[:6]
