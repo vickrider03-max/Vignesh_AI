@@ -153,7 +153,7 @@ def render_chat_tab():
             return "analyze"
         if lower_text == "overview":
             return "overview"
-        if lower_text == "find keyword":
+        if lower_text in {"find keyword", "find phrase"}:
             return 'find "phrase"'
         if lower_text == "count signals":
             return 'count "signal"'
@@ -449,7 +449,7 @@ def render_chat_tab():
                                 device_count = len(list(dict.fromkeys(extract_vn_devices_from_text(combined_text))))
                                 response = f"**VN device count:** {device_count}\n\n{extracted_response}"
                             else:
-                                response = "⚠️ Specify the word/phrase in quotes. Example: count('keyword') or count(\"keyword\")"
+                                response = "⚠️ Specify the word or phrase in quotes. Example: count('phrase') or count(\"phrase\")"
                         elif is_find_query:
                             match = re.search(r"'(.*?)'|\"(.*?)\"", processing_input)
                             if match:
@@ -460,7 +460,7 @@ def render_chat_tab():
                                     response_blocks.append(build_highlighted_search_results(f, file_text, query))
                                 response = "".join(response_blocks)
                             else:
-                                response = "⚠️ Specify the search word or phrase in quotes. Example: find('keyword') or search(\"keyword\")"
+                                response = "⚠️ Specify the search word or phrase in quotes. Example: find('phrase') or search(\"phrase\")"
                         elif technical_request_type == "FULL_DOCUMENT_ANALYSIS":
                             response, citation_docs = smart_file_brain_query(
                                 processing_input, chat_files, user_id=user_id,
