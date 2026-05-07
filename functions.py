@@ -36,6 +36,14 @@ from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from document_intelligence.document_processing import build_semantic_metadata
+from document_intelligence.fallback import build_best_effort_response
+from document_intelligence.prompts import build_prompt as build_document_intelligence_prompt
+from document_intelligence.query_routing import (
+    classify_query_intent,
+    requires_document_scope,
+    to_technical_intent,
+)
 
 # ==============================
 # GLOBAL CONSTANTS AND RUNTIME STORES
@@ -4028,6 +4036,14 @@ def build_file_brain(file_name, file_bytes):
             })
 
     brain["entities"] = sorted(brain["entities"])[:500]
+    brain["semantic_metadata"] = build_semantic_metadata(
+        file_name=file_name,
+        file_type=brain["file_type"],
+        pages=pages,
+        tables=tables,
+        diagrams=diagrams,
+        entities=brain["entities"],
+    )
     return brain
 
 
@@ -4337,6 +4353,77 @@ def retrieve_file_brain_documents(question, file_names, user_id=None, top_k=8):
 
     selected_documents = rerank_chatpdf_documents(question, selected_documents, top_k=max(top_k * 2, top_k))
     return lazy_embed_selected_documents(question, selected_documents, top_k=top_k)
+
+
+def retrieve_document_understanding_documents(question, file_names, user_id=None, top_k=10):
+    """Retrieve document-level summaries and semantic metadata for broad requests."""
+    del user_id
+    brains = get_file_brains(file_names)
+    documents = []
+    for file_name, brain in brains.items():
+        file_entry = get_uploaded_file_entry(file_name)
+        file_bytes = file_entry.get("bytes", b"") if file_entry else b""
+        document_id = get_document_id(file_name, file_bytes)
+        semantic = brain.get("semantic_metadata", {}) or {}
+        file_type = brain.get("file_type") or get_chatpdf_file_type(file_name)
+
+        summary = semantic.get("document_summary", "")
+        if summary:
+            documents.append(Document(
+                page_content=summary,
+                metadata={
+                    "file_name": file_name,
+                    "file_type": file_type,
+                    "page_number": "Document",
+                    "page_or_sheet": "Document",
+                    "document_id": document_id,
+                    "section": "Document summary",
+                    "retrieval_layer": "semantic_document_summary",
+                },
+            ))
+
+        topics = semantic.get("topics", [])
+        domains = semantic.get("technical_domains", [])
+        metadata_text = "\n".join([
+            "Document metadata",
+            f"File type: {file_type}",
+            f"Topics: {', '.join(str(topic) for topic in topics[:20])}",
+            f"Entities: {', '.join(str(entity) for entity in semantic.get('entities', [])[:30])}",
+            "Technical domains: " + ", ".join(str(item.get("domain", "")) for item in domains[:8]),
+            f"Tables indexed: {len(brain.get('tables', []))}",
+            f"Diagram references indexed: {len(brain.get('diagrams', []))}",
+        ])
+        documents.append(Document(
+            page_content=clean_text(metadata_text),
+            metadata={
+                "file_name": file_name,
+                "file_type": file_type,
+                "page_number": "Metadata",
+                "page_or_sheet": "Metadata",
+                "document_id": document_id,
+                "section": "Semantic metadata",
+                "retrieval_layer": "semantic_metadata",
+            },
+        ))
+
+        for section_summary in semantic.get("section_summaries", [])[:max(top_k, 8)]:
+            summary_text = section_summary.get("summary", "")
+            if not summary_text:
+                continue
+            documents.append(Document(
+                page_content=summary_text,
+                metadata={
+                    "file_name": file_name,
+                    "file_type": file_type,
+                    "page_number": str(section_summary.get("page") or "Section"),
+                    "page_or_sheet": str(section_summary.get("page") or "Section"),
+                    "document_id": document_id,
+                    "section": section_summary.get("section") or "Section summary",
+                    "retrieval_layer": "semantic_section_summary",
+                },
+            ))
+
+    return rerank_chatpdf_documents(question, documents, top_k=top_k)
 
 
 def extract_chatpdf_structured_pages(file_name, file_bytes):
@@ -4793,6 +4880,7 @@ def build_retrieval_query_for_intent(question, intent):
 
 
 def build_smart_document_prompt(question, intent, docs, memory, cross_file_hits=None):
+    document_intent = classify_query_intent(question, previous_messages=memory)
     memory_text = "\n".join(
         f"User: {item.get('question', '')}\nAssistant: {item.get('answer', '')}"
         for item in (memory or [])[-4:]
@@ -4802,32 +4890,13 @@ def build_smart_document_prompt(question, intent, docs, memory, cross_file_hits=
         f"- {file_id} (memory score {score})"
         for score, file_id in (cross_file_hits or [])
     ) or "No additional cross-file memory hits."
-    return f"""You are a document intelligence query engine.
-
-Intent: {intent or "QUESTION_ANSWERING"}
-
-Rules:
-- Use only the provided context and memory.
-- Cite page, slide, sheet, table, or diagram references from Sources.
-- Do not hallucinate missing values, specifications, pin numbers, or relationships.
-- Prefer structured output: headings, bullets, and tables where useful.
-- For table requests, preserve rows and columns from structured table context.
-- For diagram requests, use diagram metadata only and say when exact visuals are unavailable.
-- For cross-file questions, compare only files represented in the context or cross-file memory hits.
-- If the context is insufficient, say "Not specified in the provided context."
-
-Conversation memory:
-{memory_text}
-
-Cross-file memory hints:
-{cross_file_text}
-
-Context:
-{context}
-
-Question:
-{question}
-"""
+    return build_document_intelligence_prompt(
+        query=question,
+        document_intent=document_intent,
+        context=context,
+        memory=memory_text,
+        cross_file_hints=cross_file_text,
+    )
 
 
 def smart_file_brain_query(question, file_names, user_id=None, intent=None, top_k=8):
@@ -4837,9 +4906,24 @@ def smart_file_brain_query(question, file_names, user_id=None, intent=None, top_
     if not file_names:
         return "Answer:\nPlease select one or more documents before asking a question.\n\nSources:\n- No sources found", []
 
-    intent = intent or classify_technical_document_request(question)
+    document_intent = classify_query_intent(question, previous_messages=get_chatpdf_memory(user_id, file_names))
+    intent = intent or to_technical_intent(document_intent)
+    if intent in {"SHORT_SUMMARY"} and document_intent == "factual_query":
+        intent = classify_technical_document_request(question)
     retrieval_query = build_retrieval_query_for_intent(question, intent)
-    docs = retrieve_file_brain_documents(retrieval_query, file_names, user_id=user_id, top_k=top_k)
+    docs = []
+    if requires_document_scope(document_intent) or intent in {
+        "FULL_DOCUMENT_ANALYSIS",
+        "SHORT_SUMMARY",
+        "OVERVIEW",
+        "DOWNLOADABLE_REPORT",
+    }:
+        docs.extend(retrieve_document_understanding_documents(retrieval_query, file_names, user_id=user_id, top_k=top_k))
+
+    docs = merge_chatpdf_results(
+        docs,
+        retrieve_file_brain_documents(retrieval_query, file_names, user_id=user_id, top_k=top_k),
+    )
 
     if str(retrieval_query).strip().lower() != str(question or "").strip().lower():
         direct_docs = retrieve_file_brain_documents(question, file_names, user_id=user_id, top_k=max(3, top_k // 2))
@@ -4852,13 +4936,27 @@ def smart_file_brain_query(question, file_names, user_id=None, intent=None, top_
         docs = rerank_chatpdf_documents(question, docs, top_k=top_k)
 
     if not docs:
-        return "Answer:\nThis information is not available in the uploaded documents.\n\nSources:\n- No sources found", []
+        brains = get_file_brains(file_names)
+        return build_best_effort_response(
+            question,
+            document_intent,
+            brains,
+            "\n".join(f"- {file_name}" for file_name in file_names),
+        ), []
 
     memory = get_chatpdf_memory(user_id, file_names)
     cross_hits = cross_file_search(question, file_names=file_names, top_k=5)
     llm = load_llm()
     if llm is None:
-        answer = build_extractive_chatpdf_answer(question, docs)
+        if requires_document_scope(document_intent):
+            answer = build_best_effort_response(
+                question,
+                document_intent,
+                get_file_brains(file_names),
+                format_chatpdf_sources(docs),
+            )
+        else:
+            answer = build_extractive_chatpdf_answer(question, docs)
     else:
         prompt = build_smart_document_prompt(question, intent, docs, memory, cross_hits)
         try:
@@ -4867,7 +4965,12 @@ def smart_file_brain_query(question, file_names, user_id=None, intent=None, top_
             answer = build_extractive_chatpdf_answer(question, docs)
 
         if not answer:
-            answer = "Answer:\nThis information is not available in the uploaded documents."
+            answer = build_best_effort_response(
+                question,
+                document_intent,
+                get_file_brains(file_names),
+                format_chatpdf_sources(docs),
+            )
         if "Sources:" not in answer:
             answer = answer.rstrip() + "\n\nSources:\n" + format_chatpdf_sources(docs)
         elif not any((getattr(doc, "metadata", {}) or {}).get("file_name", "") in answer for doc in docs):
@@ -4880,14 +4983,21 @@ def smart_file_brain_query(question, file_names, user_id=None, intent=None, top_
 def build_extractive_chatpdf_answer(question, docs):
     """Fallback answer when no LLM is available; remains grounded in retrieved chunks."""
     if not docs:
-        return "Answer:\nThis information is not available in the uploaded documents.\n\nSources:\n- No sources found"
+        return (
+            "Answer:\nI could not find strong matching evidence in the selected documents. "
+            "Try a broader wording or ask for a summary/overview so the document-level memory can be used.\n\n"
+            "Sources:\n- No sources found"
+        )
     bullets = []
     for doc in docs[:4]:
         snippet = re.sub(r"\s+", " ", getattr(doc, "page_content", "")).strip()
         if snippet:
             bullets.append(f"- {snippet[:500]}")
     if not bullets:
-        return "Answer:\nThis information is not available in the uploaded documents.\n\nSources:\n- No sources found"
+        return (
+            "Answer:\nI found candidate context, but it did not contain enough readable detail to answer confidently.\n\n"
+            "Sources:\n- No sources found"
+        )
     return "Answer:\n" + "\n".join(bullets) + "\n\nSources:\n" + format_chatpdf_sources(docs)
 
 
@@ -5980,6 +6090,12 @@ def classify_technical_document_request(user_query):
     if compact_query in {"summary", "summarize", "summarise", "short summary", "brief summary"}:
         return "SHORT_SUMMARY"
     if compact_query == "overview":
+        return "OVERVIEW"
+    if any(term in query for term in ["key insights", "deep analysis", "document analysis", "analyze the document", "analyse the document"]):
+        return "FULL_DOCUMENT_ANALYSIS"
+    if any(term in query for term in ["main themes", "key themes", "themes", "key topics", "main topics"]):
+        return "OVERVIEW"
+    if any(term in query for term in ["architecture", "technical overview", "system design", "technical explanation"]):
         return "OVERVIEW"
 
     # Priority: Specific Component > Comparison > Full Analysis > Features > Workflow > Use Cases > Table Extraction > Image/Diagram > Report > Troubleshooting > Requirements > Overview > Short Summary
