@@ -128,16 +128,34 @@ DOCUMENT_INTELLIGENCE_DOMAIN_TERMS = {
 }
 
 DOCUMENT_INTELLIGENCE_PROMPT_BY_INTENT = {
-    "factual_query": "Answer precisely from the cited context. Prefer direct facts and short explanations.",
-    "analysis_request": "Produce deep synthesis across sections. Explain purpose, architecture, relationships, strengths, limitations, and technical takeaways.",
-    "summarization_request": "Create a concise executive summary. Avoid metadata, keyword lists, and section dumps.",
-    "overview_request": "Explain what the document is about in friendly high-level language for a new reader.",
-    "comparison_request": "Compare only supported items or files. Use a criteria table, then summarize differences.",
-    "followup_question": "Resolve references using conversation memory first, then answer from document context.",
-    "metadata_request": "Extract file metadata, document type, structure, topics, entities, and available assets.",
-    "technical_overview": "Explain the technical structure, components, interfaces, workflow, and constraints.",
-    "themes_request": "Identify recurring themes/topics and explain how they appear across sections.",
+    "factual_query": "Answer the question directly, then briefly explain the supporting evidence in plain language.",
+    "analysis_request": "Write an expert analysis with deeper reasoning, architecture insights, design patterns, strengths, risks, implications, and takeaways.",
+    "summarization_request": "Write a concise executive summary that explains the document naturally.",
+    "overview_request": "Give a high-level explanation suitable for quick understanding by a new reader.",
+    "comparison_request": "Compare only supported items or files. Explain what the differences mean, not just what words differ.",
+    "followup_question": "Use conversation memory to resolve references, then answer naturally from the document context.",
+    "metadata_request": "Answer only the user-visible facts requested. Do not expose internal metadata objects or extraction details.",
+    "technical_overview": "Explain the technical structure, components, interfaces, workflow, constraints, and engineering implications.",
+    "themes_request": "Explain recurring themes and how they connect across the document.",
 }
+
+NATURAL_DOCUMENT_RESPONSE_PROMPT = """Your job is to produce natural, human-like, insightful document answers.
+
+Do not expose internal extraction systems or diagnostics. Never show OCR artifacts, extracted heading dumps,
+keyword lists, semantic-signal language, metadata objects, retrieval mechanics, chunking details, pipeline names,
+or raw context blocks. The user cares about the document, not the machinery behind the answer.
+
+Use retrieved content only as supporting evidence for reasoning and synthesis. Explain the document clearly,
+connect ideas across sections, and write like an expert analyst.
+
+Intent behavior:
+- Summarize: provide a concise executive summary.
+- Analyze: provide deeper reasoning, architecture insights, strengths, design patterns, implications, risks, and takeaways.
+- Overview: provide a high-level explanation suitable for quick understanding.
+
+Never concatenate headings into a summary. Never make keyword lists the primary answer. Never dump raw extracted
+text unless the user explicitly asks for exact text, search matches, or table rows. If evidence is partial, state
+the limitation briefly and still provide the best grounded synthesis."""
 
 
 def normalize_document_query(text):
@@ -251,11 +269,17 @@ def detect_semantic_domains(topics, pages):
 def build_semantic_master_summary(section_summaries, topics, tables=None, diagrams=None):
     useful = [item.get("summary", "") for item in section_summaries or [] if item.get("summary")][:6]
     overview = " ".join(useful) if useful else "No meaningful document narrative was extracted."
-    topic_text = ", ".join(topics[:10]) if topics else "No dominant topics detected"
+    supporting_assets = []
+    if tables:
+        supporting_assets.append("structured data")
+    if diagrams:
+        supporting_assets.append("visual references")
+    support_sentence = ""
+    if supporting_assets:
+        support_sentence = " It also contains " + " and ".join(supporting_assets) + " that can support more detailed questions."
     return (
-        f"{overview[:1800]}\n\n"
-        f"The document's strongest semantic signals are: {topic_text}. "
-        f"It includes {len(tables or [])} structured table(s) and {len(diagrams or [])} diagram reference(s)."
+        f"{overview[:1800]}"
+        f"{support_sentence}"
     )
 
 
@@ -423,8 +447,8 @@ def build_document_intelligence_prompt(query, document_intent, context, memory="
     )
     format_rules = {
         "summarization_request": (
-            "Output format: Short Summary, Why it matters, 3-5 Key Points, Key Takeaways. "
-            "Keep it concise and do not include raw metadata."
+            "Output format: Executive Summary, Why It Matters, Key Insights, Key Takeaways. "
+            "Keep it concise and synthesized."
         ),
         "overview_request": (
             "Output format: What this is, Who/what it is for, Main idea, What it covers. "
@@ -448,14 +472,16 @@ def build_document_intelligence_prompt(query, document_intent, context, memory="
     }.get(document_intent, "Output format: structured professional answer with sources.")
     return f"""You are an advanced document intelligence assistant.
 
+{NATURAL_DOCUMENT_RESPONSE_PROMPT}
+
 Intent: {document_intent}
 Task: {intent_instruction}
 {format_rules}
 
 Rules:
-- Use only the supplied context, semantic metadata, and conversation memory.
-- Broad requests require synthesis across section summaries and representative pages.
-- Do not dump metadata, keyword lists, OCR fragments, or raw headings.
+- Use only the supplied document context and conversation memory.
+- Broad requests require synthesis across the available document understanding and representative passages.
+- Do not dump metadata, keyword lists, OCR fragments, raw headings, source headers, or internal context labels.
 - Connect ideas across sections and explain meaning in natural language.
 - Avoid generic rejection when partial evidence exists; provide best-effort, uncertainty-aware analysis.
 - Clearly say "Not specified in the provided context" only for missing details.
@@ -519,15 +545,53 @@ def _synthesis_bullets(items, limit=5):
     return lines
 
 
+def _human_join(items, limit=4):
+    clean_items = [normalize_synthesis_text(item) for item in (items or [])]
+    clean_items = [item for item in clean_items if item][:limit]
+    if not clean_items:
+        return ""
+    if len(clean_items) == 1:
+        return clean_items[0]
+    return ", ".join(clean_items[:-1]) + f", and {clean_items[-1]}"
+
+
+def _natural_focus_sentence(items, fallback="the available document content"):
+    focus = _human_join(items, limit=4)
+    if not focus:
+        focus = fallback
+    return f"The document mainly centers on {focus}, with the useful details organized around what the subject is, how it works, and why it matters."
+
+
+def _natural_insight_lines(items, limit=5):
+    clean_items = _synthesis_bullets(items, limit=limit)
+    if not clean_items:
+        return []
+    templates = [
+        "The document treats {item} as a central idea rather than an isolated term.",
+        "{item} appears to be important for understanding how the document's subject is used in practice.",
+        "A useful reading path is to connect {item} with the surrounding purpose, workflow, and constraints.",
+        "{item} is one of the clearest anchors for follow-up questions or deeper analysis.",
+        "The practical value comes from understanding how {item} relates to the rest of the document.",
+    ]
+    return [templates[index % len(templates)].format(item=item) for index, item in enumerate(clean_items)]
+
+
 def normalize_synthesis_text(text):
     """Remove metadata labels so synthesized answers sound natural."""
     clean = document_intelligence_clean_line(text)
     clean = re.sub(r"(?i)\bdocument-level summary:\s*", "", clean)
     clean = re.sub(r"(?i)\bdominant topics:\s*[^.]{0,260}\.?", "", clean)
+    clean = re.sub(r"(?i)\bkey topics:\s*[^.]{0,260}\.?", "", clean)
+    clean = re.sub(r"(?i)\btopics:\s*[^.]{0,260}\.?", "", clean)
+    clean = re.sub(r"(?i)\bentities:\s*[^.]{0,260}\.?", "", clean)
+    clean = re.sub(r"(?i)\btechnical domains:\s*[^.]{0,260}\.?", "", clean)
+    clean = re.sub(r"(?i)\bfile type:\s*[^.]{0,120}\.?", "", clean)
     clean = re.sub(r"(?i)\bthe document's strongest semantic signals are:\s*[^.]{0,260}\.?", "", clean)
     clean = re.sub(r"(?i)\bit includes \d+ structured table\(s\) and \d+ diagram reference\(s\)\.?", "", clean)
     clean = re.sub(r"(?i)\bstructured tables indexed:\s*\d+\.\s*", "", clean)
     clean = re.sub(r"(?i)\bdiagram references indexed:\s*\d+\.\s*", "", clean)
+    clean = re.sub(r"(?i)\btables indexed:\s*\d+\.\s*", "", clean)
+    clean = re.sub(r"(?i)\bdiagram references:\s*\d+\.\s*", "", clean)
     return document_intelligence_clean_line(clean)
 
 
@@ -539,7 +603,7 @@ def synthesize_document_response(query, document_intent, brains, docs=None, sour
     if not files:
         return (
             "Answer:\nI could not build enough document-level context from the selected files. "
-            "Try re-uploading the document or ask for a specific page, section, table, or keyword.\n\n"
+            "Try re-uploading the document or ask for a specific page, section, table, or exact term.\n\n"
             f"Sources:\n{sources_text or '- No sources found'}"
         )
 
@@ -558,70 +622,79 @@ def synthesize_document_response(query, document_intent, brains, docs=None, sour
     section_lines = []
     for f in files:
         for section in f["sections"][:4]:
-            summary = document_intelligence_clean_line(section.get("summary", ""))
+            summary = normalize_synthesis_text(section.get("summary", ""))
             if summary:
-                section_lines.append(f"- {section.get('section') or 'Section'}: {summary[:220]}")
+                section_lines.append(f"- {summary[:260]}")
     evidence_lines = [f"- {item['source']}: {item['snippet']}" for item in evidence[:4]]
     sources = sources_text or "\n".join(f"- {f['file_name']}" for f in files)
+    focus_items = all_concepts or all_components or all_topics
+    focus_sentence = _natural_focus_sentence(focus_items)
+    insight_lines = _natural_insight_lines(focus_items, limit=5)
 
     if document_intent == "summarization_request":
         response_parts = [
             "Answer:",
-            "**Short Summary**",
-            " ".join(all_summaries)[:1400] or "A concise summary could not be generated from the extracted document context.",
+            "**Executive Summary**",
+            " ".join(all_summaries)[:1400] or focus_sentence,
         ]
-        if all_concepts:
-            response_parts.append("**Key Points**\n" + "\n".join(f"- {item}" for item in all_concepts[:5]))
-        if all_domains:
-            response_parts.append("**Context**\n" + ", ".join(all_domains))
-        response_parts.append("**Key Takeaways**\n" + "\n".join(f"- {item}" for item in (all_topics[:3] or all_concepts[:3])))
+        if insight_lines:
+            response_parts.append("**Key Insights**\n" + "\n".join(f"- {item}" for item in insight_lines[:4]))
+        response_parts.append(
+            "**Key Takeaways**\n"
+            + "\n".join(f"- {item}" for item in (
+                insight_lines[:3] or ["Use this as a quick orientation before asking for details on a specific area."]
+            ))
+        )
     elif document_intent == "overview_request":
         response_parts = [
             "Answer:",
             "**What This Document Is About**",
-            " ".join(all_summaries)[:1100] or "The selected document contains extractable content, but the high-level narrative is limited.",
-            "**Main Areas Covered**",
-            "\n".join(f"- {item}" for item in (all_concepts[:5] or all_topics[:5])),
+            " ".join(all_summaries)[:1100] or focus_sentence,
+            "**Quick Orientation**",
+            "\n".join(f"- {item}" for item in (insight_lines[:4] or [focus_sentence])),
         ]
         if section_lines:
-            response_parts.append("**How It Is Organized**\n" + "\n".join(section_lines[:5]))
+            response_parts.append("**Useful Context**\n" + "\n".join(section_lines[:4]))
     elif document_intent in {"technical_overview", "themes_request"}:
         heading = "**Technical Overview**" if document_intent == "technical_overview" else "**Main Themes**"
         response_parts = [
             "Answer:",
             heading,
-            " ".join(all_technical or all_summaries)[:1400],
+            " ".join(all_technical or all_summaries)[:1400] or focus_sentence,
         ]
         if all_components:
-            response_parts.append("**Components / Interfaces**\n" + "\n".join(f"- {item}" for item in all_components[:8]))
+            response_parts.append("**Important Elements**\n" + "\n".join(f"- {item}" for item in all_components[:8]))
         if relationships:
             response_parts.append("**Relationships / Flow**\n" + "\n".join(f"- {item}" for item in relationships[:5]))
-        if all_topics:
-            response_parts.append("**Recurring Themes**\n" + "\n".join(f"- {item}" for item in all_topics[:6]))
+        if insight_lines:
+            response_parts.append("**What The Pattern Means**\n" + "\n".join(f"- {item}" for item in insight_lines[:5]))
     elif document_intent == "analysis_request":
         response_parts = [
             "Answer:",
             "**Executive Readout**",
-            " ".join(all_summaries)[:1200],
+            " ".join(all_summaries)[:1200] or focus_sentence,
             "**Deep Analysis**",
-            "The document appears to center on "
-            + (", ".join(all_concepts[:4]) if all_concepts else ", ".join(all_topics[:4]) or "the extracted subject matter")
-            + ". The strongest signals come from section summaries, technical terms, structured tables, and diagram references rather than from isolated keyword matches.",
+            focus_sentence,
         ]
         if all_components:
             response_parts.append("**Architecture / Structure**\n" + "\n".join(f"- {item}" for item in all_components[:8]))
         if relationships:
             response_parts.append("**Conceptual Relationships**\n" + "\n".join(f"- {item}" for item in relationships[:5]))
         response_parts.append(
-            "**Strengths / Useful Signals**\n"
-            + "\n".join(f"- {item}" for item in (all_concepts[:4] or all_topics[:4]))
+            "**Strengths / Useful Insights**\n"
+            + "\n".join(f"- {item}" for item in (insight_lines[:4] or [focus_sentence]))
         )
         response_parts.append(
             "**Limitations / Uncertainty**\n"
-            "- Details that are only present in images, weak OCR, or non-extracted diagrams may be incomplete.\n"
+            "- Details that are only visible inside images or diagrams may be incomplete.\n"
             "- Exact technical values are not inferred unless present in retrieved context."
         )
-        response_parts.append("**Actionable Takeaways**\n" + "\n".join(f"- Review {item}" for item in (all_concepts[:3] or all_topics[:3])))
+        response_parts.append(
+            "**Actionable Takeaways**\n"
+            + "\n".join(f"- {item}" for item in (
+                insight_lines[:3] or ["Ask for a component, workflow, table, or limitation to go deeper."]
+            ))
+        )
     elif document_intent == "comparison_request":
         response_parts = [
             "Answer:",
@@ -632,17 +705,15 @@ def synthesize_document_response(query, document_intent, brains, docs=None, sour
         for f in files:
             response_parts.append(f"| {f['file_name']} | {(f['summary'] or f['technical_summary'])[:260]} |")
         if all_concepts:
-            response_parts.append("**Shared / Important Concepts**\n" + "\n".join(f"- {item}" for item in all_concepts[:6]))
+            response_parts.append("**Interpretation**\n" + "\n".join(f"- {item}" for item in _natural_insight_lines(all_concepts[:6], limit=6)))
     else:
         response_parts = [
             "Answer:",
-            " ".join(all_summaries or all_technical)[:1200] or "I found partial document context but not enough detail for a precise answer.",
+            " ".join(all_summaries or all_technical)[:1200] or focus_sentence,
         ]
         if evidence_lines:
-            response_parts.append("**Supporting Evidence**\n" + "\n".join(evidence_lines))
+            response_parts.append("**What Supports This**\n" + "\n".join(evidence_lines[:2]))
 
-    if evidence_lines and document_intent in DOCUMENT_INTELLIGENCE_BROAD_INTENTS:
-        response_parts.append("**Representative Evidence**\n" + "\n".join(evidence_lines[:3]))
     response_parts.append(f"Sources:\n{sources}")
     return "\n\n".join(part for part in response_parts if str(part or "").strip())
 
@@ -671,9 +742,28 @@ def response_looks_like_metadata_dump(response):
         "entities:",
         "metadata:",
         "document-level summary:",
+        "semantic signals",
+        "retrieval_layer",
+        "chunk_index",
+        "selected_chunk_index",
+        "bm25",
+        "faiss",
+        "keyword list",
     ]
+    hard_markers = [
+        "semantic signals",
+        "retrieval_layer",
+        "chunk_index",
+        "selected_chunk_index",
+        "bm25",
+        "faiss",
+        "ocr artifacts",
+        "metadata object",
+    ]
+    if any(marker in text for marker in hard_markers):
+        return True
     marker_hits = sum(1 for marker in dump_markers if marker in text)
-    if marker_hits >= 3:
+    if marker_hits >= 2:
         return True
     if text.count("not specified in the provided context") >= 5:
         return True
@@ -685,7 +775,9 @@ MASTER_SYSTEM_PROMPT = """You are an Enterprise Document Intelligence Agent.
 
 Your role is to analyze, understand, and extract information from uploaded documents with high accuracy and professional structure.
 
-You are NOT a simple chatbot. You are a multi-capability system that must decide HOW to process each request.
+You write like an expert analyst: natural, clear, insightful, and grounded in the selected document.
+Never expose OCR artifacts, extracted heading dumps, keyword lists, semantic diagnostics, metadata objects,
+retrieval mechanics, chunking details, or internal pipeline information.
 
 ---------------------------------------------------------------------
 
@@ -726,7 +818,7 @@ Use when user says:
 "analyze", "full analysis"
 
 Strategy:
-- Use full document understanding (NOT limited retrieval)
+- Use the available document understanding across the selected content
 - Combine all available context
 
 Output:
@@ -852,6 +944,7 @@ DO NOT reject entire answer unless NOTHING useful exists.
 - Do NOT repeat raw text
 - Do NOT output noise
 - Do NOT over-generalize
+- Do NOT mention internal retrieval, chunking, embeddings, OCR diagnostics, semantic signals, or metadata objects
 
 ---------------------------------------------------------------------
 
@@ -949,6 +1042,7 @@ You MUST ignore these.
 - Do NOT assume missing context
 - Do NOT hallucinate
 - Do NOT repeat text verbatim
+- Do NOT preserve extracted headings, keyword lists, or internal extraction artifacts as the summary
 - If content is mostly noise, return:
 
 "This section contains minimal useful information."
@@ -966,6 +1060,7 @@ You are given multiple summarized sections of a document. Together they represen
 ## YOUR TASK
 
 Combine these into a complete, structured, professional document analysis.
+Write naturally, like an expert analyst explaining what matters and why.
 
 -----------------------------
 
@@ -1009,6 +1104,7 @@ Concise insights
 - Merge overlapping information
 - Avoid repetition
 - Do NOT hallucinate
+- Do NOT expose extracted headings, keyword lists, metadata, or internal processing details
 - If missing info, write:
   "Not specified in the provided context"
 
@@ -1027,7 +1123,7 @@ SECTION SUMMARIES:
 
 FAST_SUMMARY_PROMPT = """You are a document summarization assistant.
 
-Provide a concise summary of the document.
+Provide a concise executive summary of the document.
 
 -----------------------------
 
@@ -1045,6 +1141,7 @@ Provide a concise summary of the document.
 - Focus only on meaningful content
 - Ignore noise (headers, TOC, metadata)
 - Do NOT hallucinate
+- Do NOT concatenate headings or output keyword lists
 - Keep it concise
 
 CONTENT:
@@ -1070,7 +1167,8 @@ Answer the user's question using ONLY the provided context.
 - Do NOT hallucinate
 - If answer is missing, say:
   "Not specified in the provided context"
-- Always include Sources using the source metadata supplied in the context
+- Include Sources using the readable source labels supplied in the context
+- Do not mention retrieval, chunks, embeddings, keyword search, semantic search, or pipeline details
 
 -----------------------------
 
@@ -1205,6 +1303,61 @@ Output:
 
 Use a clean table if possible.
 Do not invent missing details."""
+
+# Reader-facing analysis prompts. These override the legacy button prompts above
+# so chat answers sound like expert synthesis instead of extraction diagnostics.
+ANALYSIS_PROMPT = """You are an expert document analyst.
+
+{USER_QUERY}
+
+Produce a natural, human-like, insightful analysis grounded only in the document content.
+
+Do not expose OCR artifacts, extracted headings, keyword lists, semantic diagnostics, metadata objects,
+retrieval mechanics, chunking details, or internal pipeline information.
+
+For Analyze, go beyond summary:
+- Explain what the document is really about.
+- Identify the purpose and core concept.
+- Connect architecture, components, workflow, capabilities, constraints, and implications when supported.
+- Discuss strengths, risks, design patterns, and practical takeaways.
+- Clearly mark anything missing as "Not specified in the provided context."
+
+Never dump raw extracted text unless the user explicitly asks for exact text. Never concatenate headings into
+the answer. Write like ChatGPT, Claude, Gemini, or an advanced AI document assistant."""
+
+SUMMARY_PROMPT = """Summarize this document as a concise executive summary.
+
+Ignore metadata, table of contents, headers, footers, copyright text, and extraction noise.
+
+Explain naturally:
+- What the document is about
+- The main purpose
+- The most important insights
+- The key takeaways
+
+Do not output keyword lists, raw extracted text, page-wise content, or concatenated headings."""
+
+OVERVIEW_PROMPT = """Give a high-level overview of this document for quick understanding.
+
+Ignore metadata, table of contents, headers, footers, copyright text, and extraction noise.
+
+Explain naturally:
+- What it is
+- Who or what it is for
+- What it is used for
+- The main concept
+- The major areas it covers
+
+Keep it simple, polished, and human-readable. Do not list raw headings or page numbers."""
+
+FEATURES_PROMPT = """Extract the real features and capabilities described in this document.
+
+Ignore metadata, table of contents, headers, footers, copyright text, and extraction noise.
+
+Do not list headings such as "Main Features 13" and do not output a keyword list. Identify actual
+functional features from explanatory content and explain what each feature does and why it matters.
+
+Use a clean table when useful. Do not invent missing details."""
 
 CREATOR_USERNAME = "Vignesh"
 CREATOR_PASSWORD = "Rider@100"
@@ -3737,7 +3890,7 @@ def build_preview_summary_markdown(file_name, file_bytes, extracted_text):
         sections.extend([
             "## Practical Use",
             "- Use the Viewer tab for visual inspection.",
-            "- Use Search and Q&A for targeted analysis over extracted chunks.",
+            "- Use Search and Q&A for targeted analysis over relevant passages.",
             "- Use Tables, Images, and Downloads to export reusable assets.",
         ])
         return "\n".join(sections)
@@ -4055,7 +4208,7 @@ def render_professional_document_preview(file_name, file_entry=None, highlight_t
             search_query = st.text_input("Search extracted text", value=quick_search, key=f"preview_search_{file_name}")
             if search_query:
                 chunks = keyword_search_preview_chunks(extracted_text, search_query, limit=20)
-                st.caption(f"{len(chunks)} relevant chunks found.")
+                st.caption(f"{len(chunks)} relevant passages found.")
                 for index, chunk in enumerate(chunks, start=1):
                     with st.expander(f"Match {index}", expanded=index == 1):
                         st.write(chunk)
@@ -4939,7 +5092,7 @@ def retrieve_file_brain_documents(question, file_names, user_id=None, top_k=8):
 
 
 def retrieve_document_understanding_documents(question, file_names, user_id=None, top_k=10):
-    """Retrieve document-level summaries and semantic metadata for broad requests."""
+    """Retrieve document-level understanding notes for broad requests."""
     del user_id
     brains = get_file_brains(file_names)
     documents = []
@@ -4965,29 +5118,34 @@ def retrieve_document_understanding_documents(question, file_names, user_id=None
                 },
             ))
 
-        topics = semantic.get("topics", [])
-        domains = semantic.get("technical_domains", [])
-        metadata_text = "\n".join([
-            "Document metadata",
-            f"File type: {file_type}",
-            f"Topics: {', '.join(str(topic) for topic in topics[:20])}",
-            f"Entities: {', '.join(str(entity) for entity in semantic.get('entities', [])[:30])}",
-            "Technical domains: " + ", ".join(str(item.get("domain", "")) for item in domains[:8]),
-            f"Tables indexed: {len(brain.get('tables', []))}",
-            f"Diagram references indexed: {len(brain.get('diagrams', []))}",
-        ])
-        documents.append(Document(
-            page_content=clean_text(metadata_text),
-            metadata={
-                "file_name": file_name,
-                "file_type": file_type,
-                "page_number": "Metadata",
-                "page_or_sheet": "Metadata",
-                "document_id": document_id,
-                "section": "Semantic metadata",
-                "retrieval_layer": "semantic_metadata",
-            },
-        ))
+        understanding_notes = []
+        concepts = [str(item) for item in semantic.get("key_concepts", [])[:8] if str(item).strip()]
+        components = [str(item) for item in semantic.get("architecture_components", [])[:8] if str(item).strip()]
+        if concepts:
+            understanding_notes.append(
+                "Important ideas to connect in the answer: " + _human_join(concepts, limit=5) + "."
+            )
+        if components:
+            understanding_notes.append(
+                "Important elements that may shape the explanation: " + _human_join(components, limit=5) + "."
+            )
+        if brain.get("tables"):
+            understanding_notes.append("The document includes structured data that may support table-oriented questions.")
+        if brain.get("diagrams"):
+            understanding_notes.append("The document includes visual references that may support diagram-oriented questions.")
+        if understanding_notes:
+            documents.append(Document(
+                page_content=clean_text(" ".join(understanding_notes)),
+                metadata={
+                    "file_name": file_name,
+                    "file_type": file_type,
+                    "page_number": "Document",
+                    "page_or_sheet": "Document",
+                    "document_id": document_id,
+                    "section": "Document understanding",
+                    "retrieval_layer": "document_understanding",
+                },
+            ))
 
         for section_summary in semantic.get("section_summaries", [])[:max(top_k, 8)]:
             summary_text = section_summary.get("summary", "")
@@ -5383,11 +5541,8 @@ def format_chatpdf_context(docs):
     for index, doc in enumerate(docs, start=1):
         meta = getattr(doc, "metadata", {}) or {}
         source = build_chatpdf_citation_label(meta)
-        section = meta.get("section", "")
-        file_type = meta.get("file_type", "document")
-        locator = meta.get("page_or_sheet") or meta.get("page_number", "")
         blocks.append(
-            f"[Source {index}: {source}; File type: {file_type}; Locator: {locator}; Section: {section}]\n"
+            f"[Reference {index}: {source}]\n"
             f"{getattr(doc, 'page_content', str(doc))}"
         )
     return "\n\n---\n\n".join(blocks)
@@ -5470,7 +5625,7 @@ def build_smart_document_prompt(question, intent, docs, memory, cross_file_hits=
     ) or "No previous conversation."
     context = format_chatpdf_context(docs)
     cross_file_text = "\n".join(
-        f"- {file_id} (memory score {score})"
+        f"- Related prior context from {file_id}"
         for score, file_id in (cross_file_hits or [])
     ) or "No additional cross-file memory hits."
     return build_document_intelligence_prompt(
@@ -5578,7 +5733,7 @@ def smart_file_brain_query(question, file_names, user_id=None, intent=None, top_
 
 
 def build_extractive_chatpdf_answer(question, docs):
-    """Fallback answer when no LLM is available; remains grounded in retrieved chunks."""
+    """Fallback answer when no LLM is available; remains grounded without dumping raw context blocks."""
     if not docs:
         return (
             "Answer:\nI could not find strong matching evidence in the selected documents. "
@@ -5587,15 +5742,22 @@ def build_extractive_chatpdf_answer(question, docs):
         )
     bullets = []
     for doc in docs[:4]:
-        snippet = re.sub(r"\s+", " ", getattr(doc, "page_content", "")).strip()
-        if snippet:
-            bullets.append(f"- {snippet[:500]}")
+        text = getattr(doc, "page_content", "")
+        for sentence in document_intelligence_meaningful_sentences(text, limit=3):
+            sentence = normalize_synthesis_text(sentence)
+            if sentence and sentence not in bullets:
+                bullets.append(sentence[:360])
+            if len(bullets) >= 5:
+                break
+        if len(bullets) >= 5:
+            break
     if not bullets:
         return (
             "Answer:\nI found candidate context, but it did not contain enough readable detail to answer confidently.\n\n"
             "Sources:\n- No sources found"
         )
-    return "Answer:\n" + "\n".join(bullets) + "\n\nSources:\n" + format_chatpdf_sources(docs)
+    answer_intro = "Based on the available document context, here is the most relevant synthesis:"
+    return "Answer:\n" + answer_intro + "\n\n" + "\n".join(f"- {item}" for item in bullets) + "\n\nSources:\n" + format_chatpdf_sources(docs)
 
 
 def answer_chatpdf_question(question, file_names, user_id=None, top_k=8):
@@ -7970,7 +8132,7 @@ def build_adaptive_document_analysis(file_name, file_bytes, text):
     ]
     takeaway_items = []
     if keywords:
-        takeaway_items.append(f"Primary themes: {', '.join(keywords[:5])}.")
+        takeaway_items.append("The strongest takeaway is to connect the recurring ideas into a practical understanding of the document, not treat them as isolated terms.")
     takeaway_items.extend(key_point_items[:4])
     takeaway_items = takeaway_items[:5]
 
@@ -7979,7 +8141,7 @@ def build_adaptive_document_analysis(file_name, file_bytes, text):
         f"<div><b>What the document is about:</b> {html.escape(title)}</div>"
         f"<div><b>Main purpose:</b> {html.escape(purpose_by_type[document_type])}.</div>"
         f"<div><b>Key context:</b> {html.escape(context_text)}. Detected type: {html.escape(document_type.title())}.</div>"
-        f"<div><b>Important themes:</b> {html.escape(keyword_text)}</div>"
+        f"<div><b>Reader focus:</b> Use the meaningful points below to understand the document's purpose, structure, and practical value.</div>"
         "</div>"
     )
 
@@ -7987,7 +8149,7 @@ def build_adaptive_document_analysis(file_name, file_bytes, text):
     if feature_lines or document_type == "technical":
         optional_sections += section("Features / Concepts / Components", bullet_list(
             feature_lines,
-            [f"Relevant concepts include {keyword_text}.", "No explicit feature list was detected in the extracted text."]
+            ["The document contains related concepts, but no explicit feature list was detected in the readable content."]
         ))
     if workflow_lines or document_type == "technical":
         optional_sections += section("Workflow / Process", bullet_list(
@@ -8173,7 +8335,7 @@ def build_product_documentation_analysis(file_name, file_bytes, text):
     if has_any("connector", "pin", "port", "socket", "plug"):
         generated_architecture.append("Connectivity layer: ports, connectors, pin assignments, or wiring-related details.")
     if has_any("table", "sheet", "report", "result", "metadata"):
-        generated_architecture.append("Information layer: tables, results, metadata, and reference data used to interpret the document.")
+        generated_architecture.append("Information layer: tables, results, and reference data used to interpret the document.")
     if generated_architecture:
         architecture_evidence = generated_architecture
 
@@ -8250,7 +8412,7 @@ def build_product_documentation_analysis(file_name, file_bytes, text):
         "The important ideas are grouped into purpose, structure, capabilities, usage flow, and practical value so a reader can act on them quickly.",
     ]
     if capabilities:
-        core_concept_items.append(f"The central behavior is reflected in capabilities such as {', '.join(keywords[:4])}.")
+        core_concept_items.append("The central behavior is reflected in the capabilities and usage evidence described below.")
 
     if not architecture_evidence:
         architecture_evidence = [
@@ -8280,7 +8442,7 @@ def build_product_documentation_analysis(file_name, file_bytes, text):
 
     takeaway_items = []
     if keywords:
-        takeaway_items.append(f"The main focus areas are {', '.join(keywords[:5])}.")
+        takeaway_items.append("The most useful reading is to connect the recurring technical ideas into purpose, structure, workflow, and practical value.")
     takeaway_items.append(f"The document is most useful as a {document_kind} rather than as a narrative document.")
     if capabilities:
         takeaway_items.append("The key value is translating scattered technical or functional details into usable reference knowledge.")
@@ -9788,27 +9950,27 @@ def show_help_popup(tab_name, selected_files):
     helper_defs = {
         "chat": {
             "title": "Chat Agent Helper",
-            "text": "Use the Enterprise Document Intelligence Agent to route each request to the right pipeline: cached map-reduce analysis, instant cached summary, table/component/diagram extraction, comparison, exact search, or hybrid RAG question answering.",
-            "hint": "Analyze and Summary do not use vector search. Specific questions use hybrid RAG. Every answer includes a confidence label so you can judge how complete the context was.",
+            "text": "Use the document chat assistant to get natural summaries, deeper analysis, overviews, comparisons, table answers, diagram explanations, exact search, and grounded Q&A.",
+            "hint": "Ask for Summary, Analyze, or Overview when you want a reader-friendly synthesis. Every answer includes sources and a confidence label so you can judge how complete the context was.",
             "workflow": [
                 "Upload files in the sidebar, then explicitly select only the files you want available in Chat.",
-                "The agent classifies each request as analysis, summary, overview, question answering, table extraction, component extraction, diagram analysis, comparison, or search.",
-                "Use Analyze for full-document map-reduce summarization. Results are stored in doc_cache and reused for the same document text.",
-                "Use Summary for fast summary mode. It reuses cached analysis when available, otherwise creates and caches a concise summary.",
-                "Ask specific questions for hybrid RAG. Retrieval combines FAISS semantic search, BM25 keyword search, optional query rewrite, merge/deduplicate, and reranking.",
-                "Ask for tables, components, diagrams, comparisons, or searches to trigger dedicated extraction pipelines instead of generic chat.",
-                "Review Sources and Confidence. Sources show PDF pages, slides, sheets, sections, or file names when metadata is available.",
+                "Ask naturally for analysis, summary, overview, question answering, tables, components, diagrams, comparison, or search.",
+                "Use Analyze for deeper reasoning about purpose, structure, strengths, risks, design patterns, and implications.",
+                "Use Summary for a concise executive summary.",
+                "Ask specific questions when you need targeted answers from the selected documents.",
+                "Ask for tables, components, diagrams, comparisons, or searches when you need those specific outputs.",
+                "Review Sources and Confidence. Sources show the files, pages, slides, sheets, or sections used for the answer.",
                 "Follow-up questions reuse memory for the same user and document selection.",
-                "Use find \"keyword\" or count \"phrase\" when you need deterministic text evidence."
+                "Use find \"phrase\" or count \"phrase\" when you need exact text evidence."
             ],
-            "outputs": ["Cached full analysis", "Instant summary", "Hybrid RAG answers", "Citations", "Confidence", "Per-document memory"],
+            "outputs": ["Full analysis", "Executive summary", "Grounded answers", "Citations", "Confidence", "Per-document memory"],
             "shortcuts": [
-                ("Analyze", "Run cached map-reduce full-document analysis."),
-                ("Summary", "Return fast cached summary mode."),
+                ("Analyze", "Create a deeper expert analysis."),
+                ("Summary", "Return a concise executive summary."),
                 ("Overview", "Show a high-level explanation of the document."),
                 ("table data", "Extract clean table-like content."),
                 ("components", "Extract modules/components and roles."),
-                ("find \"keyword\"", "Locate exact occurrences in the selected files."),
+                ("find \"phrase\"", "Locate exact occurrences in the selected files."),
                 ("count \"phrase\"", "Count exact matches in selected document text.")
             ]
         },
