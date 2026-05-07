@@ -320,6 +320,7 @@ def render_chat_tab():
         else:
             with st.spinner("Loading selected files..."):
                 ensure_files_processed(chat_files)
+            file_brains = get_file_brains(chat_files)
             selected_file_texts = {f: st.session_state.file_texts.get(f, "") for f in chat_files}
             combined_text = "\n".join(selected_file_texts.values())
             user_id = get_active_user_id()
@@ -339,8 +340,11 @@ def render_chat_tab():
                 st.warning("⚠️ Files are selected but their content is not loaded yet. Please wait a moment and try again, or re-select the files.")
 
             st.caption(
-                f"ChatPDF mode: {len(chat_files)} document(s) selected, "
-                f"{len(document_memory)} memory entr{'y' if len(document_memory) == 1 else 'ies'} for this selection."
+                f"File-brain mode: {len(chat_files)} document(s), "
+                f"{sum(len(brain.get('page_index', [])) for brain in file_brains.values())} indexed page/section(s), "
+                f"{sum(len(brain.get('tables', [])) for brain in file_brains.values())} structured table(s), "
+                f"{sum(len(brain.get('diagrams', [])) for brain in file_brains.values())} diagram reference(s), "
+                f"{len(document_memory)} chat memory entr{'y' if len(document_memory) == 1 else 'ies'}."
             )
 
             user_input = st.chat_input("Ask anything related to selected documents/files")
@@ -412,24 +416,9 @@ def render_chat_tab():
                                 "REQUIREMENTS_OR_SPECIFICATION_EXTRACTION",
                             }
                         )
-                        # Word count queries
-                        if exact_document_action and technical_request_type == "FULL_DOCUMENT_ANALYSIS":
-                            response, citation_docs = handle_document_chat_query(
-                                processing_input,
-                                selected_file_texts,
-                                file_names=chat_files,
-                                user_id=user_id,
-                            )
-                        elif exact_document_action and technical_request_type == "SHORT_SUMMARY":
-                            response, citation_docs = handle_document_chat_query(
-                                processing_input,
-                                selected_file_texts,
-                                file_names=chat_files,
-                                user_id=user_id,
-                            )
-                        elif exact_document_action and technical_request_type == "OVERVIEW":
-                            response = build_overview_response(selected_file_texts)
-                        elif is_count_query:
+                        # Exact count/find utilities intentionally inspect loaded text.
+                        # All document-intelligence answers below use the file-brain query engine.
+                        if is_count_query:
                             match = re.search(r"'(.*?)'|\"(.*?)\"", processing_input)
                             if match:
                                 word = match.group(1) or match.group(2)
@@ -454,33 +443,69 @@ def render_chat_tab():
                             else:
                                 response = "⚠️ Specify the search word or phrase in quotes. Example: find('keyword') or search(\"keyword\")"
                         elif technical_request_type == "FULL_DOCUMENT_ANALYSIS":
-                            response = build_full_document_summary_response(selected_file_texts)
+                            response, citation_docs = smart_file_brain_query(
+                                processing_input, chat_files, user_id=user_id,
+                                intent=technical_request_type, top_k=8
+                            )
                         elif technical_request_type == "SHORT_SUMMARY":
-                            response = build_short_summary_response(selected_file_texts)
+                            response, citation_docs = smart_file_brain_query(
+                                processing_input, chat_files, user_id=user_id,
+                                intent=technical_request_type, top_k=8
+                            )
                         elif technical_request_type == "OVERVIEW":
-                            response = build_overview_response(selected_file_texts)
+                            response, citation_docs = smart_file_brain_query(
+                                processing_input, chat_files, user_id=user_id,
+                                intent=technical_request_type, top_k=8
+                            )
                         elif technical_request_type == "FEATURES_ONLY":
-                            response = build_features_only_response(selected_file_texts)
+                            response, citation_docs = smart_file_brain_query(
+                                processing_input, chat_files, user_id=user_id,
+                                intent=technical_request_type, top_k=8
+                            )
                         elif technical_request_type == "PIN_DIAGRAMS_CONNECTORS_TABLES":
-                            response, pin_csv_downloads, ascii_diagram_downloads = build_diagram_pin_details_response(selected_file_texts, processing_input)
-                            st.session_state.chat_summary_downloads = {
-                                "images": [],
-                                "tables": [],
-                                "csv": pin_csv_downloads,
-                                "diagrams": ascii_diagram_downloads,
-                            }
+                            response, citation_docs = smart_file_brain_query(
+                                processing_input, chat_files, user_id=user_id,
+                                intent=technical_request_type, top_k=8
+                            )
                         elif technical_request_type == "WORKFLOW_OR_PROCESS":
-                            response = build_workflow_or_process_response(selected_file_texts)
+                            response, citation_docs = smart_file_brain_query(
+                                processing_input, chat_files, user_id=user_id,
+                                intent=technical_request_type, top_k=8
+                            )
                         elif technical_request_type == "USE_CASES_APPLICATIONS":
-                            response = build_use_cases_applications_response(selected_file_texts)
+                            response, citation_docs = smart_file_brain_query(
+                                processing_input, chat_files, user_id=user_id,
+                                intent=technical_request_type, top_k=8
+                            )
                         elif technical_request_type == "TABLE_EXTRACTION":
-                            response = build_table_extraction_response(selected_file_texts)
+                            response, citation_docs = smart_file_brain_query(
+                                processing_input, chat_files, user_id=user_id,
+                                intent=technical_request_type, top_k=8
+                            )
                         elif technical_request_type == "IMAGE_OR_DIAGRAM_EXPLANATION":
-                            response = build_image_or_diagram_extraction_response(selected_file_texts, processing_input)
+                            response, citation_docs = smart_file_brain_query(
+                                processing_input, chat_files, user_id=user_id,
+                                intent=technical_request_type, top_k=8
+                            )
                         elif technical_request_type == "DOWNLOADABLE_REPORT": 
-                            response = build_downloadable_report_response(selected_file_texts)
+                            response, citation_docs = smart_file_brain_query(
+                                processing_input, chat_files, user_id=user_id,
+                                intent=technical_request_type, top_k=8
+                            )
                         elif technical_request_type == "SPECIFIC_COMPONENT_DETAILS":
-                            response = build_specific_component_response(selected_file_texts, processing_input)
+                            response, citation_docs = smart_file_brain_query(
+                                processing_input, chat_files, user_id=user_id,
+                                intent=technical_request_type, top_k=8
+                            )
+                        elif technical_request_type in {
+                            "COMPARISON",
+                            "TROUBLESHOOTING_OR_LIMITATIONS",
+                            "REQUIREMENTS_OR_SPECIFICATION_EXTRACTION",
+                        }:
+                            response, citation_docs = smart_file_brain_query(
+                                processing_input, chat_files, user_id=user_id,
+                                intent=technical_request_type, top_k=8
+                            )
                         elif technical_request_type == "COMPARISON":
                             compared_items = extract_multiple_component_names(processing_input)
                             if len(compared_items) >= 2:
@@ -885,13 +910,19 @@ def render_chat_tab():
                                     "introduction overview purpose main features capabilities architecture components "
                                     "workflow applications use cases technical details key takeaways"
                                 )
-                            citation_docs = hybrid_chatpdf_retrieve(
-                                processing_input,
+                            citation_docs = retrieve_file_brain_documents(
+                                source_query,
                                 chat_files,
                                 user_id=user_id,
-                                final_k=7,
-                                search_query=source_query,
+                                top_k=7,
                             )
+                            if not citation_docs:
+                                citation_docs = sparse_chatpdf_search(
+                                    source_query or processing_input,
+                                    chat_files,
+                                    user_id=user_id,
+                                    top_k=7,
+                                )
                             sources_text = format_chatpdf_sources(citation_docs) if citation_docs else "\n".join(
                                 f"- {file_name}" for file_name in chat_files
                             )
