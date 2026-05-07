@@ -784,6 +784,9 @@ for key, default_value in [
     ("document_summary", {}),
     ("chatpdf_documents", {}),
     ("chatpdf_bm25_indexes", {}),
+    ("file_brains", {}),
+    ("global_memory_registry", {"files": {}}),
+    ("selected_chunk_vector_cache", {}),
     ("welcome_shown", False),
     ("mobile_sidebar_visible", False),
 ]:
@@ -1594,7 +1597,13 @@ with st.sidebar:
                 st.session_state.document_summary.pop(deleted_name, None)
             if isinstance(st.session_state.get("doc_cache"), dict):
                 st.session_state.doc_cache.pop(deleted_name, None)
-            for cache_key in ["vector_stores", "chatpdf_documents", "chatpdf_bm25_indexes"]:
+            if isinstance(st.session_state.get("file_brains"), dict):
+                st.session_state.file_brains.pop(deleted_name, None)
+            if isinstance(st.session_state.get("global_memory_registry"), dict):
+                files_registry = st.session_state.global_memory_registry.setdefault("files", {})
+                if isinstance(files_registry, dict):
+                    files_registry.pop(deleted_name, None)
+            for cache_key in ["vector_stores", "chatpdf_documents", "chatpdf_bm25_indexes", "selected_chunk_vector_cache"]:
                 if isinstance(st.session_state.get(cache_key), dict):
                     st.session_state[cache_key].clear()
             if st.session_state.get("file_dropdown") == deleted_name:
@@ -1652,8 +1661,10 @@ with st.sidebar:
         st.markdown("---")
         if st.button("Clear All Files"):
             for key in ["uploaded_files", "selected_files", "file_texts", "excel_data_by_file", "vector_stores",
-                        "messages", "chatpdf_documents", "chatpdf_bm25_indexes", "doc_cache", "document_summary"]:
+                        "messages", "chatpdf_documents", "chatpdf_bm25_indexes", "file_brains",
+                        "selected_chunk_vector_cache", "doc_cache", "document_summary"]:
                 st.session_state[key].clear()
+            st.session_state.global_memory_registry = {"files": {}}
             for tab_name in ["chat", "dashboard", "compare", "capl"]:
                 clear_tab_uploads(tab_name)
             st.session_state.chat_summary_downloads = {"images": [], "tables": [], "csv": [], "diagrams": []}
