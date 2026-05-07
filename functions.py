@@ -36,14 +36,6 @@ from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from document_intelligence.document_processing import build_semantic_metadata
-from document_intelligence.fallback import build_best_effort_response
-from document_intelligence.prompts import build_prompt as build_document_intelligence_prompt
-from document_intelligence.query_routing import (
-    classify_query_intent,
-    requires_document_scope,
-    to_technical_intent,
-)
 
 # ==============================
 # GLOBAL CONSTANTS AND RUNTIME STORES
@@ -117,6 +109,278 @@ SUMMARY_STOPWORDS = {
     "before", "within", "without", "each", "page", "pages", "table", "tables", "image", "images",
     "document", "content", "metadata", "information", "product", "file", "text"
 }
+
+DOCUMENT_INTELLIGENCE_BROAD_INTENTS = {
+    "analysis_request",
+    "summarization_request",
+    "technical_overview",
+    "themes_request",
+}
+
+DOCUMENT_INTELLIGENCE_DOMAIN_TERMS = {
+    "automotive": {"can", "capl", "canoe", "canalyzer", "ecu", "vehicle", "lin", "flexray"},
+    "software": {"api", "code", "function", "class", "module", "database", "server", "client"},
+    "networking": {"ethernet", "tcp", "ip", "network", "gateway", "protocol", "bus"},
+    "electronics": {"pin", "connector", "signal", "voltage", "current", "channel", "wiring"},
+    "business": {"revenue", "customer", "market", "sales", "cost", "risk", "strategy"},
+    "testing": {"test", "validation", "requirement", "result", "pass", "fail", "coverage"},
+}
+
+DOCUMENT_INTELLIGENCE_PROMPT_BY_INTENT = {
+    "factual_query": "Answer precisely from the cited context. Prefer direct facts and short explanations.",
+    "analysis_request": "Synthesize across sections. Explain purpose, architecture, themes, important details, risks, and takeaways.",
+    "summarization_request": "Create a concise document-level summary using section summaries and representative evidence.",
+    "comparison_request": "Compare only supported items or files. Use a criteria table, then summarize differences.",
+    "followup_question": "Resolve references using conversation memory first, then answer from document context.",
+    "metadata_request": "Extract file metadata, document type, structure, topics, entities, and available assets.",
+    "technical_overview": "Explain the technical structure, components, interfaces, workflow, and constraints.",
+    "themes_request": "Identify recurring themes/topics and explain how they appear across sections.",
+}
+
+
+def normalize_document_query(text):
+    return re.sub(r"\s+", " ", str(text or "").strip())
+
+
+def classify_query_intent(query, previous_messages=None):
+    """Classify user intent for document-intelligence routing."""
+    del previous_messages
+    q = normalize_document_query(query).lower()
+    compact = re.sub(r"[^a-z0-9]+", " ", q).strip()
+
+    if compact in {"analyze", "analyse", "analysis"} or any(
+        term in q for term in ["deep analysis", "full analysis", "analyze document", "analyse document", "key insights"]
+    ):
+        return "analysis_request"
+    if compact in {"summary", "summarize", "summarise"} or any(
+        term in q for term in ["summarize", "summarise", "short summary", "main points", "recap"]
+    ):
+        return "summarization_request"
+    if any(term in q for term in ["technical overview", "explain the architecture", "architecture", "system design"]):
+        return "technical_overview"
+    if any(term in q for term in ["main themes", "themes", "topics", "key topics"]):
+        return "themes_request"
+    if any(term in q for term in ["compare", "difference", "differences", " versus ", " vs "]):
+        return "comparison_request"
+    if any(term in q for term in ["metadata", "author", "created", "file type", "document type"]):
+        return "metadata_request"
+    if any(term in q for term in ["previous", "that", "it", "those", "follow up", "again", "same"]):
+        return "followup_question"
+    return "factual_query"
+
+
+def to_technical_intent(document_intent):
+    """Map document-intelligence intents onto existing response intent names."""
+    return {
+        "analysis_request": "FULL_DOCUMENT_ANALYSIS",
+        "summarization_request": "SHORT_SUMMARY",
+        "technical_overview": "OVERVIEW",
+        "themes_request": "OVERVIEW",
+        "comparison_request": "COMPARISON",
+        "metadata_request": "OVERVIEW",
+        "followup_question": "QUESTION_ANSWERING",
+        "factual_query": "QUESTION_ANSWERING",
+    }.get(document_intent, "QUESTION_ANSWERING")
+
+
+def requires_document_scope(document_intent):
+    return document_intent in DOCUMENT_INTELLIGENCE_BROAD_INTENTS or document_intent == "metadata_request"
+
+
+def document_intelligence_tokenize(text):
+    return [
+        token
+        for token in re.findall(r"[A-Za-z][A-Za-z0-9_-]{2,}", str(text or "").lower())
+        if token not in SUMMARY_STOPWORDS
+    ]
+
+
+def document_intelligence_clean_line(text):
+    return re.sub(r"\s+", " ", str(text or "")).strip()
+
+
+def document_intelligence_meaningful_sentences(text, limit=8):
+    sentences = []
+    for sentence in re.split(r"(?<=[.!?])\s+|\n+", str(text or "")):
+        sentence = document_intelligence_clean_line(sentence)
+        if 45 <= len(sentence) <= 320:
+            sentences.append(sentence)
+        if len(sentences) >= limit:
+            break
+    return sentences
+
+
+def summarize_semantic_page(page_record, max_sentences=3):
+    text = page_record.get("text", "")
+    sentences = document_intelligence_meaningful_sentences(text, limit=max_sentences)
+    summary = " ".join(sentences) if sentences else document_intelligence_clean_line(text)[:420]
+    return {
+        "page": page_record.get("page"),
+        "section": page_record.get("section") or f"Page {page_record.get('page')}",
+        "summary": summary,
+        "keywords": [word for word, _ in Counter(document_intelligence_tokenize(text)).most_common(12)],
+    }
+
+
+def extract_semantic_topics(pages, tables=None, limit=14):
+    counter = Counter()
+    for page in pages or []:
+        counter.update(document_intelligence_tokenize(page.get("text", "")))
+    for table in tables or []:
+        counter.update(document_intelligence_tokenize(" ".join(str(h) for h in table.get("headers", []))))
+    return [word for word, _ in counter.most_common(limit)]
+
+
+def detect_semantic_domains(topics, pages):
+    topic_set = set(topics or [])
+    combined_sample = " ".join(str(page.get("text", ""))[:1200].lower() for page in (pages or [])[:12])
+    domains = []
+    for domain, terms in DOCUMENT_INTELLIGENCE_DOMAIN_TERMS.items():
+        score = len(topic_set.intersection(terms)) + sum(1 for term in terms if term in combined_sample)
+        if score:
+            domains.append({"domain": domain, "score": score})
+    domains.sort(key=lambda item: item["score"], reverse=True)
+    return domains[:5]
+
+
+def build_semantic_master_summary(section_summaries, topics, tables=None, diagrams=None):
+    useful = [item.get("summary", "") for item in section_summaries or [] if item.get("summary")][:6]
+    overview = " ".join(useful) if useful else "No meaningful document narrative was extracted."
+    topic_text = ", ".join(topics[:10]) if topics else "No dominant topics detected"
+    return (
+        f"Document-level summary: {overview[:1800]}\n\n"
+        f"Dominant topics: {topic_text}.\n"
+        f"Structured tables indexed: {len(tables or [])}. Diagram references indexed: {len(diagrams or [])}."
+    )
+
+
+def build_semantic_suggested_questions(topics, domains, has_tables=False, has_diagrams=False):
+    topic = topics[0] if topics else "this document"
+    suggestions = [
+        "Summarize the document",
+        "Give key insights",
+        f"Explain {topic}",
+        "Provide a technical overview",
+    ]
+    if domains:
+        suggestions.append(f"Explain the {domains[0]['domain']} context")
+    if has_tables:
+        suggestions.append("Extract the relevant tables")
+    if has_diagrams:
+        suggestions.append("Explain the diagrams or figures")
+    return suggestions[:6]
+
+
+def build_semantic_hierarchy(section_summaries):
+    return [
+        {
+            "level": "section",
+            "page": item.get("page"),
+            "title": item.get("section"),
+            "keywords": item.get("keywords", []),
+        }
+        for item in section_summaries or []
+    ]
+
+
+def build_semantic_metadata(file_name, file_type, pages, tables=None, diagrams=None, entities=None):
+    """Create document-level understanding artifacts at upload/file-brain time."""
+    section_summaries = [summarize_semantic_page(page) for page in pages or []]
+    topics = extract_semantic_topics(pages, tables=tables)
+    domains = detect_semantic_domains(topics, pages)
+    return {
+        "metadata": {
+            "file_name": file_name,
+            "file_type": file_type,
+            "page_or_section_count": len(pages or []),
+            "table_count": len(tables or []),
+            "diagram_count": len(diagrams or []),
+        },
+        "section_summaries": section_summaries,
+        "document_summary": build_semantic_master_summary(section_summaries, topics, tables=tables, diagrams=diagrams),
+        "topics": topics,
+        "entities": list(entities or [])[:500],
+        "technical_domains": domains,
+        "suggested_questions": build_semantic_suggested_questions(topics, domains, bool(tables), bool(diagrams)),
+        "hierarchy": build_semantic_hierarchy(section_summaries),
+    }
+
+
+def build_document_intelligence_prompt(query, document_intent, context, memory="", cross_file_hints=""):
+    intent_instruction = DOCUMENT_INTELLIGENCE_PROMPT_BY_INTENT.get(
+        document_intent,
+        DOCUMENT_INTELLIGENCE_PROMPT_BY_INTENT["factual_query"],
+    )
+    return f"""You are an advanced document intelligence assistant.
+
+Intent: {document_intent}
+Task: {intent_instruction}
+
+Rules:
+- Use only the supplied context, semantic metadata, and conversation memory.
+- Broad requests require synthesis across section summaries and representative pages.
+- Avoid generic rejection when partial evidence exists; provide best-effort, uncertainty-aware analysis.
+- Clearly say "Not specified in the provided context" only for missing details.
+- Cite relevant pages, sections, sheets, tables, or diagram references.
+- End with a confidence label.
+
+Conversation memory:
+{memory or "No previous conversation."}
+
+Cross-file hints:
+{cross_file_hints or "No cross-file hints."}
+
+Context:
+{context}
+
+User question:
+{query}
+"""
+
+
+def build_best_effort_response(query, document_intent, brains, sources_text):
+    """Graceful fallback for broad questions when retrieval/LLM coverage is thin."""
+    blocks = []
+    for file_name, brain in (brains or {}).items():
+        semantic = brain.get("semantic_metadata", {}) or {}
+        summary = semantic.get("document_summary") or ""
+        topics = semantic.get("topics") or brain.get("entities", [])[:10]
+        sections = semantic.get("section_summaries") or []
+        domains = semantic.get("technical_domains") or []
+
+        if not summary and not sections and not topics:
+            continue
+
+        blocks.append(f"### {file_name}")
+        if summary:
+            blocks.append(document_intelligence_clean_line(summary)[:1200])
+        if topics:
+            blocks.append("**Key topics:** " + ", ".join(str(topic) for topic in topics[:10]))
+        if domains:
+            blocks.append("**Likely technical domains:** " + ", ".join(item.get("domain", "") for item in domains[:4]))
+        if sections:
+            section_lines = []
+            for item in sections[:6]:
+                label = item.get("section") or f"Page {item.get('page')}"
+                section_lines.append(f"- {label}: {document_intelligence_clean_line(item.get('summary', ''))[:220]}")
+            blocks.append("**Relevant sections:**\n" + "\n".join(section_lines))
+
+    if not blocks:
+        return (
+            "Answer:\nI could not build enough document-level context from the selected files. "
+            "Try re-uploading the document or ask for a specific page, section, table, or keyword.\n\n"
+            f"Sources:\n{sources_text or '- No sources found'}"
+        )
+
+    caveat = (
+        "This is a best-effort document-level synthesis from extracted summaries, topics, entities, "
+        "tables, and diagram metadata. Details not represented in those artifacts are not assumed."
+    )
+    return (
+        f"Answer:\n{caveat}\n\n"
+        + "\n\n".join(blocks)
+        + f"\n\nSources:\n{sources_text or '- File brain semantic metadata'}"
+    )
 
 MASTER_SYSTEM_PROMPT = """You are an Enterprise Document Intelligence Agent.
 
