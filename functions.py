@@ -145,6 +145,8 @@ Do not expose internal extraction systems or diagnostics. Never show OCR artifac
 keyword lists, semantic-signal language, metadata objects, retrieval mechanics, chunking details, pipeline names,
 raw extraction artifacts, page formatting noise, repeated labels, low-level parsing details, or raw context blocks.
 The user cares about the document, not the machinery behind the answer.
+Never turn extracted entities, figure labels, module labels, table fields, captions, or repeated section titles
+into insights. Avoid claims that a term is central unless the surrounding document meaning clearly supports that conclusion.
 
 Use retrieved content only as supporting evidence for reasoning and synthesis. Explain the document clearly,
 connect ideas across sections, and write like an expert analyst.
@@ -175,6 +177,11 @@ LOW_SIGNAL_THEME_TERMS = {
     "length", "width", "height", "minimum", "maximum", "min", "max", "typical", "value",
     "values", "unit", "units", "spec", "specs", "specification", "specifications", "table",
     "row", "column", "page", "pages", "number", "numbers", "total", "text", "content",
+    "figure", "figures", "caption", "captions", "label", "labels", "field", "fields",
+    "module", "modules", "channel", "channels", "technical", "data", "technical data",
+    "section", "sections", "heading", "headings", "title", "titles", "diagram", "diagrams",
+    "signal", "signals", "connector", "connectors", "pin", "pins", "system", "systems",
+    "product", "products", "information", "overview",
 }
 
 
@@ -607,14 +614,26 @@ def _natural_insight_lines(items, limit=5):
     clean_items = _synthesis_bullets(items, limit=limit, filter_low_signal=True)
     if not clean_items:
         return []
-    templates = [
-        "The document treats {item} as a central idea rather than an isolated term.",
-        "{item} appears to be important for understanding how the document's subject is used in practice.",
-        "A useful reading path is to connect {item} with the surrounding purpose, workflow, and constraints.",
-        "{item} is one of the clearest anchors for follow-up questions or deeper analysis.",
-        "The practical value comes from understanding how {item} relates to the rest of the document.",
+    focus = _human_join(clean_items, limit=4, filter_low_signal=True)
+    if not focus:
+        return []
+    lines = [
+        f"The useful interpretation is how the relevant system elements, including {focus}, support the document's stated purpose and practical use.",
+        "Repeated specification fields should be read as constraints or implementation details, not as the main message.",
+        "The strongest answers should explain what the system does, how its parts fit together, and why the document exists.",
     ]
-    return [templates[index % len(templates)].format(item=item) for index, item in enumerate(clean_items)]
+    return lines[:limit]
+
+
+def _component_context_text(items):
+    clean_items = _synthesis_bullets(items, limit=6, filter_low_signal=True)
+    if not clean_items:
+        return ""
+    focus = _human_join(clean_items, limit=4, filter_low_signal=True)
+    return (
+        f"The available context points to {focus} as relevant system elements. "
+        "They should be interpreted through their role in the architecture, workflow, and engineering purpose rather than as a standalone module list."
+    )
 
 
 def normalize_synthesis_text(text):
@@ -653,7 +672,7 @@ def synthesize_document_response(query, document_intent, brains, docs=None, sour
     all_topics = _synthesis_bullets([topic for f in files for topic in f["topics"]], limit=8, filter_low_signal=True)
     all_concepts = _synthesis_bullets([concept for f in files for concept in f["concepts"]], limit=8, filter_low_signal=True)
     all_domains = _synthesis_bullets([domain for f in files for domain in f["domains"]], limit=5)
-    all_components = _synthesis_bullets([component for f in files for component in f["components"]], limit=10)
+    all_components = _synthesis_bullets([component for f in files for component in f["components"]], limit=10, filter_low_signal=True)
     relationships = [
         rel.get("text", "")
         for f in files
@@ -680,8 +699,9 @@ def synthesize_document_response(query, document_intent, brains, docs=None, sour
             "**Executive Summary**",
             core_purpose,
         ]
-        if all_components:
-            response_parts.append("**Key Systems / Components**\n" + "\n".join(f"- {item}" for item in all_components[:5]))
+        component_context = _component_context_text(all_components)
+        if component_context:
+            response_parts.append("**System Context**\n" + component_context)
         if insight_lines:
             response_parts.append("**Key Insights**\n" + "\n".join(f"- {item}" for item in insight_lines[:4]))
         response_parts.append(
@@ -707,8 +727,9 @@ def synthesize_document_response(query, document_intent, brains, docs=None, sour
             heading,
             technical_readout,
         ]
-        if all_components:
-            response_parts.append("**Important Elements**\n" + "\n".join(f"- {item}" for item in all_components[:8]))
+        component_context = _component_context_text(all_components)
+        if component_context:
+            response_parts.append("**System / Architecture Context**\n" + component_context)
         if relationships:
             response_parts.append("**Relationships / Flow**\n" + "\n".join(f"- {item}" for item in relationships[:5]))
         if insight_lines:
@@ -721,8 +742,9 @@ def synthesize_document_response(query, document_intent, brains, docs=None, sour
             "**Deep Analysis**",
             focus_sentence,
         ]
-        if all_components:
-            response_parts.append("**Architecture / Structure**\n" + "\n".join(f"- {item}" for item in all_components[:8]))
+        component_context = _component_context_text(all_components)
+        if component_context:
+            response_parts.append("**Architecture / Structure**\n" + component_context)
         if relationships:
             response_parts.append("**Conceptual Relationships**\n" + "\n".join(f"- {item}" for item in relationships[:5]))
         response_parts.append(
