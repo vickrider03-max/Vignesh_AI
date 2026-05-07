@@ -2775,14 +2775,8 @@ def _help_query_param_key(tab_name):
 
 def ensure_help_popup_state(tab_name):
     key = _help_state_key(tab_name)
-    query_key = _help_query_param_key(tab_name)
     if key not in st.session_state:
         st.session_state[key] = False
-    if query_key in query_params and query_params[query_key]:
-        query_value = query_params[query_key]
-        if isinstance(query_value, list):
-            query_value = query_value[0] if query_value else ""
-        st.session_state[key] = str(query_value).strip().lower() in {"1", "true", "yes", "open"}
     return key
 
 
@@ -2805,26 +2799,7 @@ def _set_query_params(params):
 
 def set_help_popup_state(tab_name, is_open):
     state_key = ensure_help_popup_state(tab_name)
-    query_key = _help_query_param_key(tab_name)
-    st.session_state[state_key] = is_open
-
-    updated_params = {}
-    try:
-        for param_key in query_params.keys():
-            param_value = query_params[param_key]
-            if isinstance(param_value, list):
-                updated_params[param_key] = list(param_value)
-            else:
-                updated_params[param_key] = param_value
-    except Exception:
-        updated_params = dict(query_params) if isinstance(query_params, dict) else {}
-
-    if is_open:
-        updated_params[query_key] = "1"
-    else:
-        updated_params.pop(query_key, None)
-
-    _set_query_params(updated_params)
+    st.session_state[state_key] = bool(is_open)
 
 
 def init_workspace_db():
@@ -7538,9 +7513,13 @@ def show_help_popup(tab_name, selected_files):
         with header_col:
             st.markdown(f"### 🧠 {html.escape(helper_def['title'])}")
         with close_col:
-            if st.button("✕", key=helper_close_key, help="Close helper"):
-                set_help_popup_state(tab_name, False)
-                st.rerun()
+            st.button(
+                "✕",
+                key=helper_close_key,
+                help="Close helper",
+                on_click=set_help_popup_state,
+                args=(tab_name, False),
+            )
 
         suggestion_tags = "".join(f"<span>{html.escape(s)}</span>" for s in suggestions)
         workflow_items = "".join(f"<li>{html.escape(item)}</li>" for item in helper_def.get("workflow", []))
