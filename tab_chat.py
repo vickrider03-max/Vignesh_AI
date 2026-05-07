@@ -346,6 +346,34 @@ def render_chat_tab():
                 f"{sum(len(brain.get('diagrams', [])) for brain in file_brains.values())} diagram reference(s), "
                 f"{len(document_memory)} chat memory entr{'y' if len(document_memory) == 1 else 'ies'}."
             )
+            with st.expander("Document intelligence profile", expanded=False):
+                profile_rows = []
+                suggested_questions = []
+                for file_name, brain in file_brains.items():
+                    semantic = brain.get("semantic_metadata", {}) or {}
+                    topics = semantic.get("topics", [])[:8]
+                    domains = [item.get("domain", "") for item in semantic.get("technical_domains", [])[:4]]
+                    suggested_questions.extend(semantic.get("suggested_questions", [])[:4])
+                    profile_rows.append({
+                        "File": file_name,
+                        "Type": brain.get("file_type", "unknown"),
+                        "Sections": len(brain.get("page_index", [])),
+                        "Tables": len(brain.get("tables", [])),
+                        "Diagrams": len(brain.get("diagrams", [])),
+                        "Topics": ", ".join(topics),
+                        "Domains": ", ".join([domain for domain in domains if domain]),
+                    })
+                if profile_rows:
+                    st.dataframe(pd.DataFrame(profile_rows), use_container_width=True, hide_index=True)
+                suggested_questions = list(dict.fromkeys(q for q in suggested_questions if q))[:6]
+                if suggested_questions:
+                    st.caption("Suggested broad questions")
+                    suggestion_cols = st.columns(min(len(suggested_questions), 3))
+                    for suggestion_index, suggestion in enumerate(suggested_questions):
+                        with suggestion_cols[suggestion_index % len(suggestion_cols)]:
+                            if st.button(suggestion, key=f"doc_intel_suggest_{suggestion_index}", use_container_width=True):
+                                st.session_state.input_prefill = suggestion
+                                st.rerun()
 
             user_input = st.chat_input("Ask anything related to selected documents/files")
             if st.session_state.get("input_prefill"):
@@ -529,7 +557,10 @@ def render_chat_tab():
                                 top_k=7,
                             )
                         elif chat_intent == "UNKNOWN":
-                            response = build_short_summary_response(selected_file_texts)
+                            response, citation_docs = smart_file_brain_query(
+                                processing_input, chat_files, user_id=user_id,
+                                intent=technical_request_type, top_k=8
+                            )
                         else:
                             combined_vs = get_workspace_vector_store(chat_files) or get_combined_vector_store(chat_files)
                             retriever = combined_vs.as_retriever(search_kwargs={"k": 3})
