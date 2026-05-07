@@ -143,19 +143,39 @@ NATURAL_DOCUMENT_RESPONSE_PROMPT = """Your job is to produce natural, human-like
 
 Do not expose internal extraction systems or diagnostics. Never show OCR artifacts, extracted heading dumps,
 keyword lists, semantic-signal language, metadata objects, retrieval mechanics, chunking details, pipeline names,
-or raw context blocks. The user cares about the document, not the machinery behind the answer.
+raw extraction artifacts, page formatting noise, repeated labels, low-level parsing details, or raw context blocks.
+The user cares about the document, not the machinery behind the answer.
 
 Use retrieved content only as supporting evidence for reasoning and synthesis. Explain the document clearly,
 connect ideas across sections, and write like an expert analyst.
 
+Before answering, reason about the document's real meaning:
+1. What is it fundamentally about?
+2. What problem does it solve?
+3. Which systems or components are central?
+4. What technical concepts, workflows, applications, architecture, and takeaways matter most?
+
+Prioritize document purpose and semantic meaning over keyword frequency. Do not assume repeated table terms
+such as temperature range, power consumption, weight, voltage, dimensions, min/max values, or other isolated
+specifications are the document's main themes unless the document is actually about those topics.
+
 Intent behavior:
-- Summarize: provide a concise executive summary.
-- Analyze: provide deeper reasoning, architecture insights, strengths, design patterns, implications, risks, and takeaways.
-- Overview: provide a high-level explanation suitable for quick understanding.
+- Summarize: provide a concise executive summary with purpose, key systems/components, major capabilities, and practical significance.
+- Analyze: provide deeper technical reasoning, architecture insights, design philosophy, strengths, limitations, relationships, engineering implications, and practical applications.
+- Overview: provide a broad, accessible explanation of what the system/document is, how it is organized, what it covers, and who it is for.
+- Factual questions: answer directly and precisely from the document.
 
 Never concatenate headings into a summary. Never make keyword lists the primary answer. Never dump raw extracted
 text unless the user explicitly asks for exact text, search matches, or table rows. If evidence is partial, state
 the limitation briefly and still provide the best grounded synthesis."""
+
+LOW_SIGNAL_THEME_TERMS = {
+    "temperature", "range", "temperature range", "power", "power consumption", "consumption",
+    "weight", "approx", "approximately", "voltage", "current", "dimension", "dimensions",
+    "length", "width", "height", "minimum", "maximum", "min", "max", "typical", "value",
+    "values", "unit", "units", "spec", "specs", "specification", "specifications", "table",
+    "row", "column", "page", "pages", "number", "numbers", "total", "text", "content",
+}
 
 
 def normalize_document_query(text):
@@ -482,7 +502,10 @@ Rules:
 - Use only the supplied document context and conversation memory.
 - Broad requests require synthesis across the available document understanding and representative passages.
 - Do not dump metadata, keyword lists, OCR fragments, raw headings, source headers, or internal context labels.
+- Do not treat repeated words, table fields, or isolated specifications as primary themes by default.
+- For repeated specs such as temperature, weight, power, voltage, dimensions, and min/max fields, use them as supporting details unless the document is truly about those measurements.
 - Connect ideas across sections and explain meaning in natural language.
+- Prefer concise analyst prose over robotic templates; use headings only when they improve readability.
 - Avoid generic rejection when partial evidence exists; provide best-effort, uncertainty-aware analysis.
 - Clearly say "Not specified in the provided context" only for missing details.
 - Cite relevant pages, sections, sheets, tables, or diagram references.
@@ -534,10 +557,26 @@ def collect_synthesis_inputs(brains, docs=None):
     return {"files": files, "evidence": evidence[:8]}
 
 
-def _synthesis_bullets(items, limit=5):
+def _is_low_signal_theme(item):
+    clean_item = normalize_synthesis_text(item).lower()
+    if not clean_item:
+        return True
+    tokens = set(re.findall(r"[a-z][a-z0-9_-]*", clean_item))
+    if clean_item in LOW_SIGNAL_THEME_TERMS:
+        return True
+    if tokens and tokens.issubset(LOW_SIGNAL_THEME_TERMS):
+        return True
+    if re.fullmatch(r"[\d\s.,:+\-/%()]+", clean_item):
+        return True
+    return False
+
+
+def _synthesis_bullets(items, limit=5, filter_low_signal=False):
     lines = []
     for item in items or []:
         clean_item = normalize_synthesis_text(item)
+        if filter_low_signal and _is_low_signal_theme(clean_item):
+            continue
         if clean_item and clean_item not in lines:
             lines.append(clean_item)
         if len(lines) >= limit:
@@ -545,8 +584,10 @@ def _synthesis_bullets(items, limit=5):
     return lines
 
 
-def _human_join(items, limit=4):
+def _human_join(items, limit=4, filter_low_signal=False):
     clean_items = [normalize_synthesis_text(item) for item in (items or [])]
+    if filter_low_signal:
+        clean_items = [item for item in clean_items if not _is_low_signal_theme(item)]
     clean_items = [item for item in clean_items if item][:limit]
     if not clean_items:
         return ""
@@ -556,14 +597,14 @@ def _human_join(items, limit=4):
 
 
 def _natural_focus_sentence(items, fallback="the available document content"):
-    focus = _human_join(items, limit=4)
+    focus = _human_join(items, limit=4, filter_low_signal=True)
     if not focus:
         focus = fallback
-    return f"The document mainly centers on {focus}, with the useful details organized around what the subject is, how it works, and why it matters."
+    return f"The document is best understood around {focus}, with the useful details organized by purpose, structure, workflow, and practical value."
 
 
 def _natural_insight_lines(items, limit=5):
-    clean_items = _synthesis_bullets(items, limit=limit)
+    clean_items = _synthesis_bullets(items, limit=limit, filter_low_signal=True)
     if not clean_items:
         return []
     templates = [
@@ -609,8 +650,8 @@ def synthesize_document_response(query, document_intent, brains, docs=None, sour
 
     all_summaries = _synthesis_bullets([f["summary"] for f in files], limit=3)
     all_technical = _synthesis_bullets([f["technical_summary"] for f in files], limit=3)
-    all_topics = _synthesis_bullets([topic for f in files for topic in f["topics"]], limit=8)
-    all_concepts = _synthesis_bullets([concept for f in files for concept in f["concepts"]], limit=8)
+    all_topics = _synthesis_bullets([topic for f in files for topic in f["topics"]], limit=8, filter_low_signal=True)
+    all_concepts = _synthesis_bullets([concept for f in files for concept in f["concepts"]], limit=8, filter_low_signal=True)
     all_domains = _synthesis_bullets([domain for f in files for domain in f["domains"]], limit=5)
     all_components = _synthesis_bullets([component for f in files for component in f["components"]], limit=10)
     relationships = [
@@ -627,16 +668,20 @@ def synthesize_document_response(query, document_intent, brains, docs=None, sour
                 section_lines.append(f"- {summary[:260]}")
     evidence_lines = [f"- {item['source']}: {item['snippet']}" for item in evidence[:4]]
     sources = sources_text or "\n".join(f"- {f['file_name']}" for f in files)
-    focus_items = all_concepts or all_components or all_topics
+    focus_items = all_components or all_concepts or all_topics
     focus_sentence = _natural_focus_sentence(focus_items)
     insight_lines = _natural_insight_lines(focus_items, limit=5)
+    core_purpose = " ".join(all_summaries)[:1400] or focus_sentence
+    technical_readout = " ".join(all_technical or all_summaries)[:1400] or focus_sentence
 
     if document_intent == "summarization_request":
         response_parts = [
             "Answer:",
             "**Executive Summary**",
-            " ".join(all_summaries)[:1400] or focus_sentence,
+            core_purpose,
         ]
+        if all_components:
+            response_parts.append("**Key Systems / Components**\n" + "\n".join(f"- {item}" for item in all_components[:5]))
         if insight_lines:
             response_parts.append("**Key Insights**\n" + "\n".join(f"- {item}" for item in insight_lines[:4]))
         response_parts.append(
@@ -649,7 +694,7 @@ def synthesize_document_response(query, document_intent, brains, docs=None, sour
         response_parts = [
             "Answer:",
             "**What This Document Is About**",
-            " ".join(all_summaries)[:1100] or focus_sentence,
+            core_purpose[:1100],
             "**Quick Orientation**",
             "\n".join(f"- {item}" for item in (insight_lines[:4] or [focus_sentence])),
         ]
@@ -660,7 +705,7 @@ def synthesize_document_response(query, document_intent, brains, docs=None, sour
         response_parts = [
             "Answer:",
             heading,
-            " ".join(all_technical or all_summaries)[:1400] or focus_sentence,
+            technical_readout,
         ]
         if all_components:
             response_parts.append("**Important Elements**\n" + "\n".join(f"- {item}" for item in all_components[:8]))
@@ -672,7 +717,7 @@ def synthesize_document_response(query, document_intent, brains, docs=None, sour
         response_parts = [
             "Answer:",
             "**Executive Readout**",
-            " ".join(all_summaries)[:1200] or focus_sentence,
+            core_purpose[:1200],
             "**Deep Analysis**",
             focus_sentence,
         ]
@@ -687,7 +732,8 @@ def synthesize_document_response(query, document_intent, brains, docs=None, sour
         response_parts.append(
             "**Limitations / Uncertainty**\n"
             "- Details that are only visible inside images or diagrams may be incomplete.\n"
-            "- Exact technical values are not inferred unless present in retrieved context."
+            "- Exact technical values are not inferred unless present in the document context.\n"
+            "- Repeated specification fields are treated as supporting detail, not automatically as the document's purpose."
         )
         response_parts.append(
             "**Actionable Takeaways**\n"
@@ -3792,7 +3838,7 @@ def build_preview_answer(file_name, text, question):
     try:
         chunks = semantic_search_preview_chunks(file_name, text, question, limit=5)
         if not chunks:
-            return "No relevant information was found in the extracted text."
+            return "No relevant information was found in the document text."
         answer_parts = []
         for chunk in chunks[:3]:
             sentences = re.split(r"(?<=[.!?])\s+", chunk)
@@ -5119,8 +5165,14 @@ def retrieve_document_understanding_documents(question, file_names, user_id=None
             ))
 
         understanding_notes = []
-        concepts = [str(item) for item in semantic.get("key_concepts", [])[:8] if str(item).strip()]
-        components = [str(item) for item in semantic.get("architecture_components", [])[:8] if str(item).strip()]
+        concepts = [
+            str(item) for item in semantic.get("key_concepts", [])[:8]
+            if str(item).strip() and not _is_low_signal_theme(item)
+        ]
+        components = [
+            str(item) for item in semantic.get("architecture_components", [])[:8]
+            if str(item).strip() and not _is_low_signal_theme(item)
+        ]
         if concepts:
             understanding_notes.append(
                 "Important ideas to connect in the answer: " + _human_join(concepts, limit=5) + "."
@@ -7729,7 +7781,7 @@ def build_image_or_diagram_extraction_response(file_texts, user_query):
                 f"</div>"
             )
         else:
-            blocks.append(f"**{html.escape(file_name)}**\n\nNo image or diagram references were found in the extracted text.")
+            blocks.append(f"**{html.escape(file_name)}**\n\nNo image or diagram references were found in the readable document content.")
     return join_response_blocks(blocks)
 
 
@@ -7765,7 +7817,7 @@ def build_downloadable_report_response(file_texts):
             blocks.append(
                 f"<div style='margin-bottom:18px; line-height:1.5;'>"
                 f"<h3 style='margin:0 0 10px 0; color:#173152;'>Downloadable Report: {html.escape(file_name)}</h3>"
-                f"<p>This response is prepared for export-style delivery. Use the document preview Downloads tab to generate a DOCX or Markdown report from the extracted content.</p>"
+                f"<p>This response is prepared for export-style delivery. Use the document preview Downloads tab to generate a DOCX or Markdown report from the readable content.</p>"
                 f"</div>"
             )
         else:
@@ -7806,7 +7858,7 @@ def build_document_visual_response(file_name, text, item_name=None):
         f"<h3 style='margin:0 0 10px 0; color:#173152;'>Diagrams / Pin Details: {html.escape(display_name)}</h3>",
         f"<p><b>Source:</b> {html.escape(file_name)}</p>",
         "<h4 style='margin:16px 0 6px 0; color:#173152;'>Pin Table</h4>",
-        html_table(["Pin Number", "Signal Name", "Description", "Notes"], pin_table_rows) if pin_rows else "<p>No explicit pin rows were found in the extracted text.</p>",
+        html_table(["Pin Number", "Signal Name", "Description", "Notes"], pin_table_rows) if pin_rows else "<p>No explicit pin rows were found in the provided document context.</p>",
         "<h4 style='margin:16px 0 6px 0; color:#173152;'>Diagram</h4>",
         f"<pre style='white-space:pre-wrap; background:#f4f7fb; padding:12px; border-radius:8px;'>{html.escape(ascii_diagram)}</pre>",
         html_section("Connector Mapping", connector_lines),
@@ -8005,6 +8057,7 @@ def build_adaptive_document_analysis(file_name, file_bytes, text):
         return value.strip()
 
     keywords = [prettify_extracted_text(keyword) for keyword in keywords]
+    keywords = [keyword for keyword in keywords if not _is_low_signal_theme(keyword)]
     keyword_text = ", ".join(keywords) if keywords else "Not available"
 
     def clean_content_lines(max_items=12):
@@ -8105,8 +8158,8 @@ def build_adaptive_document_analysis(file_name, file_bytes, text):
         structure_items = [f"{num + ' ' if num else ''}{prettify_extracted_text(heading)}" for num, heading in headings[:6]]
     else:
         structure_items = [
-            "Content is presented as extracted text rather than clearly labeled sections.",
-            f"Detected document assets: {context_text}.",
+            "The readable content is best understood by grouping related ideas rather than following the original layout.",
+            f"Available context includes {context_text}.",
         ]
 
     purpose_by_type = {
@@ -8115,14 +8168,14 @@ def build_adaptive_document_analysis(file_name, file_bytes, text):
         "research": "to explain a problem, method, evidence, findings, and conclusions",
         "general": "to present information in a readable and referenceable form",
     }
-    summary_focus = ", ".join(keywords[:4]) if keywords else "the extracted document content"
-    key_point_items = key_lines[:5] or ["No detailed content lines could be extracted, but document metadata was detected."]
+    summary_focus = ", ".join(keywords[:4]) if keywords else title
+    key_point_items = key_lines[:5] or ["Not enough explanatory content was available to identify detailed points."]
     insight_items = [
-        f"The document appears to focus on {summary_focus}.",
+        f"The document is best read as a {document_type} reference centered on {summary_focus}.",
         f"It should be read as a {document_type} document.",
     ]
     if image_count or table_count:
-        insight_items.append("Visual or tabular assets may contain supporting details that complement the extracted text.")
+        insight_items.append("Visual or tabular material may contain supporting details that complement the readable text.")
     if important_note_lines:
         insight_items.append("Several lines contain requirements, constraints, warnings, or operational notes.")
 
@@ -8140,7 +8193,7 @@ def build_adaptive_document_analysis(file_name, file_bytes, text):
         "<div>"
         f"<div><b>What the document is about:</b> {html.escape(title)}</div>"
         f"<div><b>Main purpose:</b> {html.escape(purpose_by_type[document_type])}.</div>"
-        f"<div><b>Key context:</b> {html.escape(context_text)}. Detected type: {html.escape(document_type.title())}.</div>"
+        f"<div><b>Key context:</b> {html.escape(context_text)}.</div>"
         f"<div><b>Reader focus:</b> Use the meaningful points below to understand the document's purpose, structure, and practical value.</div>"
         "</div>"
     )
@@ -8154,7 +8207,7 @@ def build_adaptive_document_analysis(file_name, file_bytes, text):
     if workflow_lines or document_type == "technical":
         optional_sections += section("Workflow / Process", bullet_list(
             workflow_lines,
-            ["No clear step-by-step workflow was detected in the extracted text."]
+            ["No clear step-by-step workflow was identified in the readable content."]
         ))
     if use_case_lines or document_type in ("technical", "business"):
         optional_sections += section("Use Cases / Applications", bullet_list(
@@ -8232,6 +8285,7 @@ def build_product_documentation_analysis(file_name, file_bytes, text):
         if len(word) > 3 and word.lower() not in SUMMARY_STOPWORDS and not word.isdigit()
     )
     keywords = [normalize_extracted_line(word).title() for word, _ in keyword_counts.most_common(10)]
+    keywords = [keyword for keyword in keywords if not _is_low_signal_theme(keyword)]
 
     type_scores = {
         "technical system": sum(1 for term in [
@@ -8776,7 +8830,7 @@ def build_item_visual_response(file_name, text, item_name):
     sections = [
         f"<h3 style='margin:0 0 10px 0; color:#173152;'>Visual / Pin Reference: {html.escape(item_name)}</h3>",
         f"<p><b>Source:</b> {html.escape(file_name)}</p>",
-        html_section("Pin Diagrams", ["Recreated below from extracted pin/signal lines." if pin_rows else "No explicit pin diagram was found in the extracted text."]),
+        html_section("Pin Diagrams", ["Recreated below from available pin/signal information." if pin_rows else "No explicit pin diagram was found in the provided document context."]),
         f"<pre style='white-space:pre-wrap; background:#f4f7fb; padding:12px; border-radius:8px;'>{html.escape(ascii_diagram)}</pre>",
         f"<h4 style='margin:16px 0 6px 0; color:#173152;'>Pin Configuration Table</h4>",
         html_table(["Pin Number", "Signal Name", "Description", "Notes"], pin_table_rows) if pin_rows else "<p>No pin table data was found.</p>",
@@ -8789,7 +8843,7 @@ def build_item_visual_response(file_name, text, item_name):
         "<p><b>b) Diagram as ASCII / structured format</b></p>",
         f"<pre style='white-space:pre-wrap; background:#f4f7fb; padding:12px; border-radius:8px;'>{html.escape(ascii_diagram)}</pre>",
         "<p><b>c) Image references or recreated diagrams</b></p>",
-        html_bullet_list(image_lines or ["No direct image reference was found in extracted text; use the recreated ASCII diagram above when pin rows are available."]),
+        html_bullet_list(image_lines or ["No direct image reference was found in the provided document context; use the recreated ASCII diagram above when pin rows are available."]),
     ]
     return "<div style='margin-bottom:18px; line-height:1.5;'>" + "".join(section for section in sections if section) + "</div>"
 
@@ -9863,7 +9917,7 @@ def get_dynamic_suggestions(tab_name, skill_level):
         "chat": {
             "beginner": ["Analyze", "Summary", "Ask document question", "Review confidence"],
             "intermediate": ["Use agent routing", "Ask follow-up with memory", "Find exact evidence", "Compare selected docs"],
-            "advanced": ["Validate RAG citations", "Use cached summaries", "Audit confidence", "Cross-document reasoning"]
+            "advanced": ["Validate citations", "Use cached summaries", "Audit confidence", "Cross-document reasoning"]
         },
         "dashboard": {
             "beginner": ["Select HTML/XLSX report", "Choose chart type", "Review metrics"],
@@ -9889,8 +9943,8 @@ def get_next_best_action(tab_name, skill_level):
     """Intelligently recommends the next workflow step."""
     workflow_paths = {
         "chat": {
-            "beginner": "Pro Tip: Use Analyze for cached full-document analysis, Summary for instant summary, and normal questions for RAG answers.",
-            "intermediate": "Next: Let the intent router choose map-reduce, fast summary, table/component/diagram extraction, comparison, search, or RAG.",
+            "beginner": "Pro Tip: Use Analyze for full-document analysis, Summary for a concise executive summary, and normal questions for grounded answers.",
+            "intermediate": "Next: Ask naturally and the chat assistant will choose the right style for analysis, summary, tables, components, diagrams, comparison, or exact search.",
             "advanced": "Next: Validate confidence, citations, cached summaries, and exact find/count evidence before using the answer downstream."
         },
         "dashboard": {
@@ -10031,7 +10085,7 @@ def show_help_popup(tab_name, selected_files):
     helper_def = helper_defs.get(tab_name, helper_defs["chat"])
     suggestions = get_dynamic_suggestions(tab_name, skill_level)[:4]
     if not suggestions:
-        suggestions = ["Review the documents", "Ask a question", "Request an overview", "Search for keywords"]
+        suggestions = ["Review the documents", "Ask a question", "Request an overview", "Search for exact phrases"]
     next_action = get_next_best_action(tab_name, skill_level)
     modal_key = f"helper_modal_{tab_name}"
     helper_close_key = f"helper_close_{tab_name}"
