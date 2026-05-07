@@ -324,6 +324,247 @@ def render_chat_tab():
 
         return text
 
+    def split_response_footer(response_text):
+        """Keep Sources and Confidence out of body cleanup/reformatting."""
+        text = str(response_text or "").strip()
+        if not text:
+            return "", ""
+
+        footer_parts = []
+        confidence_match = re.search(r"(?im)^\s*Confidence:\s*(High|Medium|Low)\s*$", text)
+        if confidence_match:
+            footer_parts.insert(0, confidence_match.group(0).strip())
+            text = (text[:confidence_match.start()] + text[confidence_match.end():]).strip()
+
+        sources_match = re.search(r"(?ims)(?:^|\n{1,2})\s*Sources:\s*.*$", text)
+        if sources_match:
+            footer_parts.insert(0, sources_match.group(0).strip())
+            text = text[:sources_match.start()].strip()
+
+        footer = "\n\n".join(part for part in footer_parts if part).strip()
+        return text, footer
+
+    def normalize_final_sentence(text):
+        text = re.sub(r"<[^>]+>", " ", str(text or ""))
+        return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+
+    def is_near_duplicate_sentence(sentence, seen_sentences, threshold=0.86):
+        normalized = normalize_final_sentence(sentence)
+        if len(normalized.split()) < 6:
+            return False
+        for previous in seen_sentences[-120:]:
+            if normalized == previous or SequenceMatcher(None, normalized, previous).ratio() >= threshold:
+                return True
+        seen_sentences.append(normalized)
+        return False
+
+    def is_instruction_like_sentence(sentence):
+        sentence_lower = str(sentence or "").strip().lower()
+        instruction_patterns = [
+            r"\bthe useful interpretation is\b",
+            r"\buseful interpretation is\b",
+            r"\bshould be interpreted as\b",
+            r"\bshould be read as\b",
+            r"\bkey insights include\b",
+            r"\bkey insight includes\b",
+            r"\bkey takeaways include\b",
+            r"\bkey takeaway includes\b",
+            r"\bimportant insights include\b",
+        ]
+        return any(re.search(pattern, sentence_lower) for pattern in instruction_patterns)
+
+    def strip_instruction_like_sentences(text):
+        cleaned_lines = []
+        for raw_line in str(text or "").splitlines():
+            stripped = raw_line.strip()
+            if not stripped:
+                cleaned_lines.append("")
+                continue
+            if "|" in stripped:
+                cleaned_lines.append(raw_line.rstrip())
+                continue
+            sentence_parts = re.split(r"(?<=[.!?])\s+(?=[A-Z0-9\"'])", stripped)
+            kept_parts = [part for part in sentence_parts if part.strip() and not is_instruction_like_sentence(part)]
+            if kept_parts:
+                prefix = re.match(r"^\s*", raw_line).group(0)
+                cleaned_lines.append(prefix + " ".join(kept_parts))
+        return re.sub(r"\n{3,}", "\n\n", "\n".join(cleaned_lines)).strip()
+
+    def strip_pdf_header_noise(text):
+        raw_lines = str(text or "").splitlines()
+        line_counts = {}
+        for line in raw_lines:
+            normalized = re.sub(r"[^a-z0-9]+", " ", line.lower()).strip()
+            if normalized:
+                line_counts[normalized] = line_counts.get(normalized, 0) + 1
+
+        cleaned_lines = []
+        for raw_line in raw_lines:
+            stripped = raw_line.strip()
+            normalized = re.sub(r"[^a-z0-9]+", " ", stripped.lower()).strip()
+            if not stripped:
+                cleaned_lines.append("")
+                continue
+            noise_patterns = [
+                r"^[\s._-]{4,}$",
+                r"(?i)^page\s+\d+(\s*(of|/)\s*\d+)?\s*$",
+                r"(?i)^page\s+\d+\s+(text|content|table)\b.*$",
+                r"(?i)^slide\s+\d+\s*:?.*$",
+                r"(?i)^(total\s+pages|table\s+of\s+contents|contents|index)\b.*$",
+                r"^.*\.{2,}\s*\d+\s*$",
+                r"^\d+(\.\d+)*\s+.{2,90}\s+\d+\s*$",
+            ]
+            if any(re.search(pattern, stripped) for pattern in noise_patterns):
+                continue
+            if line_counts.get(normalized, 0) > 1 and len(normalized) < 100:
+                continue
+            cleaned_lines.append(raw_line.rstrip())
+        return re.sub(r"\n{3,}", "\n\n", "\n".join(cleaned_lines)).strip()
+
+    def deduplicate_sentences(text):
+        seen_sentences = []
+        deduped_lines = []
+        for raw_line in str(text or "").splitlines():
+            stripped = raw_line.strip()
+            if not stripped:
+                deduped_lines.append("")
+                continue
+            if "|" in stripped and not re.match(r"^\s*[-|: ]+\s*$", stripped):
+                deduped_lines.append(raw_line.rstrip())
+                continue
+            sentence_parts = re.split(r"(?<=[.!?])\s+(?=[A-Z0-9\"'])", stripped)
+            kept_parts = []
+            for part in sentence_parts:
+                part = part.strip()
+                if not part:
+                    continue
+                if is_near_duplicate_sentence(part, seen_sentences):
+                    continue
+                kept_parts.append(part)
+            if kept_parts:
+                prefix = re.match(r"^\s*", raw_line).group(0)
+                deduped_lines.append(prefix + " ".join(kept_parts))
+        return re.sub(r"\n{3,}", "\n\n", "\n".join(deduped_lines)).strip()
+
+    def is_final_heading_line(line):
+        stripped = str(line or "").strip()
+        stripped = re.sub(r"^\s{0,3}#{1,6}\s*", "", stripped)
+        stripped = re.sub(r"^\s*\d+[\).]\s*", "", stripped)
+        stripped = stripped.strip("*_: ")
+        normalized = re.sub(r"[^a-z]+", " ", stripped.lower()).strip()
+        heading_starts = (
+            "summary",
+            "short summary",
+            "technical breakdown",
+            "technical details",
+            "key points",
+            "key insights",
+            "key takeaways",
+            "takeaways",
+            "overview",
+            "purpose",
+            "main purpose",
+            "important notes",
+            "core concept",
+        )
+        return len(normalized.split()) <= 5 and any(normalized.startswith(prefix) for prefix in heading_starts)
+
+    def extract_plain_sentences_for_formatting(text):
+        plain_lines = []
+        for line in str(text or "").splitlines():
+            stripped = line.strip()
+            if not stripped or "|" in stripped or is_final_heading_line(stripped):
+                continue
+            stripped = re.sub(r"^\s*(?:[-*]|\d+[\).])\s+", "", stripped)
+            plain_lines.append(stripped)
+        plain_text = " ".join(plain_lines)
+        sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+", plain_text) if part.strip()]
+        if not sentences and plain_lines:
+            sentences = [line for line in plain_lines if len(line.split()) >= 4]
+        return sentences
+
+    def remove_first_occurrence(text, snippet):
+        if not snippet:
+            return text
+        return re.sub(re.escape(snippet), "", text, count=1).strip()
+
+    def force_three_section_structure(text):
+        lines = []
+        bullet_candidates = []
+        for raw_line in str(text or "").splitlines():
+            stripped = raw_line.strip()
+            if not stripped:
+                lines.append("")
+                continue
+            if is_final_heading_line(stripped):
+                continue
+            bullet_match = re.match(r"^\s*(?:[-*]|\d+[\).])\s+(.+)$", stripped)
+            if bullet_match and "|" not in stripped:
+                bullet_text = bullet_match.group(1).strip()
+                if bullet_text and not is_instruction_like_sentence(bullet_text):
+                    bullet_candidates.append(bullet_text)
+                continue
+            lines.append(raw_line.rstrip())
+
+        content = re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+        if not content and not bullet_candidates:
+            content = "Not specified in the provided context."
+
+        sentences = extract_plain_sentences_for_formatting(content)
+        summary_sentences = sentences[:2]
+        summary = " ".join(summary_sentences).strip() or "Not specified in the provided context."
+
+        key_candidates = bullet_candidates[:]
+        if len(key_candidates) < 3:
+            key_candidates.extend(sentences[2:7])
+        key_points = []
+        seen_points = []
+        for candidate in key_candidates:
+            candidate = re.sub(r"\s+", " ", str(candidate or "")).strip(" -")
+            if not candidate or is_instruction_like_sentence(candidate):
+                continue
+            normalized = normalize_final_sentence(candidate)
+            if not normalized or any(SequenceMatcher(None, normalized, previous).ratio() >= 0.86 for previous in seen_points):
+                continue
+            seen_points.append(normalized)
+            key_points.append(candidate)
+            if len(key_points) >= 5:
+                break
+        if not key_points:
+            key_points = ["Not specified in the provided context."]
+
+        technical = content
+        for sentence in summary_sentences:
+            technical = remove_first_occurrence(technical, sentence)
+        for point in key_points:
+            if point != "Not specified in the provided context.":
+                technical = remove_first_occurrence(technical, point)
+        technical = re.sub(r"\n{3,}", "\n\n", technical).strip()
+        technical = technical or "Not specified in the provided context."
+
+        key_points_text = "\n".join(f"- {html.escape(point)}" for point in key_points)
+        return (
+            f"### Summary\n{summary}\n\n"
+            f"### Technical Breakdown\n{technical}\n\n"
+            f"### Key Points\n{key_points_text}"
+        ).strip()
+
+    def final_chat_formatting_pass(response_text, force_structure=True):
+        body, footer = split_response_footer(response_text)
+        if not body:
+            body = "Not specified in the provided context."
+
+        body = strip_pdf_header_noise(body)
+        body = strip_instruction_like_sentences(body)
+        body = deduplicate_sentences(body)
+
+        contains_html_result = bool(re.search(r"</?(div|span|mark|table|ul|ol|li)\b", body, flags=re.IGNORECASE))
+        if force_structure and not contains_html_result:
+            body = force_three_section_structure(body)
+
+        body = body.strip() or "Not specified in the provided context."
+        return (body + ("\n\n" + footer if footer else "")).strip()
+
     def purge_legacy_unavailable_document_actions(messages):
 
         """Remove stale Analyze/Summary/Overview answers produced by the old RAG route."""
@@ -383,8 +624,14 @@ def render_chat_tab():
         if not chat_files:
             st.info("Choose one or more files in this tab to start chatting.")
         else:
-            with st.spinner("Loading selected files..."):
-                ensure_files_processed(chat_files)
+            files_needing_processing = [
+                file_name for file_name in chat_files
+                if not str(st.session_state.get("file_texts", {}).get(file_name, "")).strip()
+                or file_name not in st.session_state.get("file_brains", {})
+            ]
+            if files_needing_processing:
+                with st.spinner("Loading selected files..."):
+                    ensure_files_processed(files_needing_processing)
             file_brains = get_file_brains(chat_files)
             selected_file_texts = {f: st.session_state.file_texts.get(f, "") for f in chat_files}
             combined_text = "\n".join(selected_file_texts.values())
@@ -934,6 +1181,10 @@ def render_chat_tab():
                                  "Did I clearly mark unsupported or missing information?\n"
                                  "Is the output professional, structured, and useful?\n"
                                  "Would \"Analyze\", \"Summary\", \"Overview\", \"Features\", \"Specific Component\", and \"Pin Diagrams\" produce clearly different outputs?\n\n"
+                                 "10. Final formatting pass\n\n"
+                                 "Before sending the final answer, remove instruction-like/meta sentences such as \"The useful interpretation is...\", \"Should be interpreted as...\", and \"Key insights include...\".\n"
+                                 "Remove repeated PDF headers, page labels, dotted table-of-contents fragments, repeated dot leaders, metadata, and duplicated sentences.\n"
+                                 "For narrative answers, use exactly these body sections once: Summary, Technical Breakdown, Key Points. Do not create separate duplicate Key Insights, Key Takeaways, Main Points, or Overview sections.\n\n"
                                  "Final instruction:\n"
                                  "Always tailor the depth, structure, and format to the user's exact query. Do not reuse the same response structure for different request types.\n\n"
                                  "INTENT CLASSIFICATION: Choose ONE primary intent only: FULL_DOCUMENT_ANALYSIS, SHORT_SUMMARY, OVERVIEW, FEATURES_ONLY, SPECIFIC_COMPONENT_DETAILS, PIN_DIAGRAMS_CONNECTORS_TABLES, WORKFLOW_OR_PROCESS, USE_CASES_APPLICATIONS, COMPARISON, TABLE_EXTRACTION, IMAGE_OR_DIAGRAM_EXPLANATION, DOWNLOADABLE_REPORT, TROUBLESHOOTING_OR_LIMITATIONS, REQUIREMENTS_OR_SPECIFICATION_EXTRACTION.\n"
@@ -1024,6 +1275,10 @@ def render_chat_tab():
 
                         # Enforce Document Intelligence output rules across all document types.
                         response = enforce_document_intelligence_output_rules(response)
+                        response = final_chat_formatting_pass(
+                            response,
+                            force_structure=not (is_count_query or is_find_query),
+                        )
                         
                         current_chat_messages.append({"role": "assistant", "content": response})
                         st.session_state.document_chat_display[chat_display_key] = current_chat_messages[-100:]
