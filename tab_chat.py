@@ -260,7 +260,72 @@ def render_chat_tab():
         else:
             st.markdown(content)
 
+    def enforce_document_intelligence_output_rules(response_text):
+        """Best-effort post-processor to keep chat outputs meaning-focused.
+
+        Enforces: no raw extraction dumps / TOC dumps / metadata diagnostics / page labels.
+        """
+        text = str(response_text or "").strip()
+        if not text:
+            return text
+
+        text = re.sub(r"(?im)^\s*Answer:\s*\n?", "", text).strip()
+        text = re.sub(r"(?i)\bExecutive Readout\b", "What the document is about", text)
+        text = re.sub(
+            r"(?im)^.*\b(?:is|are)\s+important\s+because\s+(?:it|they)\s+appear(?:s)?\s+frequently\.?\s*$",
+            "",
+            text,
+        ).strip()
+
+        # 1) Strip explicit extraction-system / diagnostics artifacts if they leak.
+        removal_patterns = [
+            r"(?is)\n*\bSuggestions\s*:.*$",
+            r"(?is)\b(Document|Chat)\s*/?\s*intelligence\s*features.*$",
+            r"(?is)\bretrieval mechanics.*$",
+            r"(?is)\borc\s*artifacts.*$",
+            r"(?is)\bocr\s*dump.*$",
+            r"(?is)\bmetadata\s*(object|dump).*?$",
+            r"(?is)\bentity\s*dumps?.*$",
+            r"(?is)\bkeyword\s*lists?.*$",
+            r"(?is)\bchunk(ing)?\b.*$",
+            r"(?is)\bsemant(ic|ical)\s+diagnostics\b.*$",
+            r"(?is)\bpage-by-page\b.*$",
+            r"(?is)\btable-of-contents\b.*$",
+        ]
+        for pat in removal_patterns:
+            text = re.sub(pat, "", text).strip()
+
+        # 2) Remove obvious TOC / page-label lines that sometimes appear in synthesized text.
+        line_filters = [
+            r"(?i)^\s*page\s+\d+\s*(text|content)?\s*:?.*\s*$",
+            r"(?i)^\s*slide\s+\d+\s*:?.*\s*$",
+            r"(?i)^\s*table\s+\d+\s*:?.*\s*$",
+            r"(?i)^\s*figure\s+\d+\s*:?.*\s*$",
+            r"(?i)^\s*table\s+of\s+contents\b.*$",
+            r"(?i)^\s*contents\b.*$",
+        ]
+        filtered_lines = []
+        for line in text.splitlines():
+            drop = False
+            for lf in line_filters:
+                if re.match(lf, line.strip()):
+                    drop = True
+                    break
+            if not drop:
+                filtered_lines.append(line)
+        text = "\n".join(filtered_lines).strip()
+
+        # 3) If response looks like metadata dump, replace with a compliant missing-content message.
+        if 'confidence:' in text.lower() and len(text) < 120:
+            return text
+
+        if re.search(r"(?i)(keyword list|entities:|metadata:|dominant topics:|semantic signals|retrieval_layer|bm25|faiss|chunk_index|selected_chunk_index)", text):
+            return "The provided context does not contain enough meaningful document content to answer accurately. Please retrieve or provide relevant sections such as Introduction, Overview, Purpose, Usage, Features, Architecture, Technical Data, Connectors, Tables, or the requested component pages."
+
+        return text
+
     def purge_legacy_unavailable_document_actions(messages):
+
         """Remove stale Analyze/Summary/Overview answers produced by the old RAG route."""
         cleaned_messages = []
         skip_next = False
@@ -956,6 +1021,9 @@ def render_chat_tab():
                             file_texts=selected_file_texts,
                             citation_docs=citation_docs,
                         )
+
+                        # Enforce Document Intelligence output rules across all document types.
+                        response = enforce_document_intelligence_output_rules(response)
                         
                         current_chat_messages.append({"role": "assistant", "content": response})
                         st.session_state.document_chat_display[chat_display_key] = current_chat_messages[-100:]
