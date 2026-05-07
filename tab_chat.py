@@ -339,47 +339,26 @@ def render_chat_tab():
             if not combined_text or not any(selected_file_texts.values()):
                 st.warning("⚠️ Files are selected but their content is not loaded yet. Please wait a moment and try again, or re-select the files.")
 
+            memory_count = len(document_memory)
             st.caption(
-                f"File-brain mode: {len(chat_files)} document(s), "
-                f"{sum(len(brain.get('page_index', [])) for brain in file_brains.values())} indexed page/section(s), "
-                f"{sum(len(brain.get('tables', [])) for brain in file_brains.values())} structured table(s), "
-                f"{sum(len(brain.get('diagrams', [])) for brain in file_brains.values())} diagram reference(s), "
-                f"{len(document_memory)} chat memory entr{'y' if len(document_memory) == 1 else 'ies'}."
+                f"Ready to answer from {len(chat_files)} selected document(s). "
+                f"Conversation memory: {memory_count} entr{'y' if memory_count == 1 else 'ies'}."
             )
-            with st.expander("Document intelligence profile", expanded=False):
-                profile_rows = []
+            with st.expander("Document understanding", expanded=False):
                 suggested_questions = []
                 for file_name, brain in file_brains.items():
                     semantic = brain.get("semantic_metadata", {}) or {}
-                    topics = semantic.get("topics", [])[:8]
-                    concepts = semantic.get("key_concepts", [])[:6]
-                    components = semantic.get("architecture_components", [])[:6]
-                    domains = [item.get("domain", "") for item in semantic.get("technical_domains", [])[:4]]
                     suggested_questions.extend(semantic.get("suggested_questions", [])[:4])
-                    profile_rows.append({
-                        "File": file_name,
-                        "Type": brain.get("file_type", "unknown"),
-                        "Sections": len(brain.get("page_index", [])),
-                        "Tables": len(brain.get("tables", [])),
-                        "Diagrams": len(brain.get("diagrams", [])),
-                        "Topics": ", ".join(topics),
-                        "Domains": ", ".join([domain for domain in domains if domain]),
-                    })
                     executive_summary = semantic.get("executive_summary") or semantic.get("document_summary")
-                    if executive_summary:
-                        st.markdown(f"**{html.escape(file_name)} understanding**")
-                        st.caption(document_intelligence_clean_line(executive_summary)[:700])
-                    if concepts or components:
-                        st.caption(
-                            "Concepts: "
-                            + ", ".join(concepts[:5])
-                            + (" | Components: " + ", ".join(components[:5]) if components else "")
-                        )
-                if profile_rows:
-                    st.dataframe(pd.DataFrame(profile_rows), use_container_width=True, hide_index=True)
+                    clean_summary = normalize_synthesis_text(executive_summary) if executive_summary else ""
+                    st.markdown(f"**{html.escape(file_name)}**")
+                    if clean_summary:
+                        st.caption(clean_summary[:700])
+                    else:
+                        st.caption("Ask for a summary, overview, or analysis and I will synthesize the readable document content.")
                 suggested_questions = list(dict.fromkeys(q for q in suggested_questions if q))[:6]
                 if suggested_questions:
-                    st.caption("Suggested broad questions")
+                    st.caption("Questions you can ask")
                     suggestion_cols = st.columns(min(len(suggested_questions), 3))
                     for suggestion_index, suggestion in enumerate(suggested_questions):
                         with suggestion_cols[suggestion_index % len(suggestion_cols)]:
@@ -584,6 +563,7 @@ def render_chat_tab():
                             prompt = ChatPromptTemplate.from_messages([
                                 ("system",
                                  MASTER_SYSTEM_PROMPT + "\n\n"
+                                 + NATURAL_DOCUMENT_RESPONSE_PROMPT + "\n\n"
                                  "You are an Enterprise Document Intelligence Engine.\n\n"
                                  "You analyze ANY uploaded document type, including PDF, DOCX, DOC, PPTX, PPT, XLSX, XLS, CSV, TXT, HTML, Markdown, RTF, ODT, images, technical manuals, reports, specifications, presentations, spreadsheets, and mixed-format documents.\n\n"
                                  "You must answer based on the USER'S EXACT REQUEST, not by summarizing the entire document every time.\n\n"
@@ -698,8 +678,8 @@ def render_chat_tab():
                                  "Index\n"
                                  "Repeated headers/footers\n\n"
                                  "Do not base the answer only on the first few pages unless those pages contain meaningful explanatory content.\n\n"
-                                 "For component-specific requests, retrieve and use only chunks where the requested component name or aliases appear, plus nearby connector/specification/usage sections.\n\n"
-                                 "For pin/diagram/table requests, prioritize pages or chunks containing:\n\n"
+                                 "For component-specific requests, use only document passages where the requested component name or aliases appear, plus nearby connector/specification/usage sections.\n\n"
+                                 "For pin/diagram/table requests, prioritize relevant document passages containing:\n\n"
                                  "connector\n"
                                  "pin\n"
                                  "signal\n"
@@ -729,7 +709,7 @@ def render_chat_tab():
                                  "For analysis, explain what the data represents and key patterns if visible.\n"
                                  "For extraction, preserve rows/columns.\n\n"
                                  "HTML/Markdown/TXT:\n\n"
-                                 "Use semantic headings and sections.\n"
+                                 "Use meaningful headings and sections.\n"
                                  "Ignore navigation menus and boilerplate.\n\n"
                                  "Images:\n\n"
                                  "Describe visible diagrams, labels, tables, flowcharts, or screenshots.\n"
