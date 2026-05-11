@@ -4,7 +4,7 @@
 # Optimized + cleaned merged version
 # ==============================
 
-from functions import 
+from functions import * 
 from tabs.tab_memory import get_tab_uploaded_files
 
 DOCUMENT_INTELLIGENCE_INTENTS = {
