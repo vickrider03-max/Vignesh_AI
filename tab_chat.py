@@ -1,18 +1,11 @@
 from functions import *
 from tab_memory import get_tab_uploaded_files
-
 from functools import lru_cache
 import re
-import html
 import time
-import streamlit as st
-
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnablePassthrough
-
 
 # ==============================
-# HELPERS
+# CLEANING HELPERS
 # ==============================
 
 def clean_context(text: str) -> str:
@@ -27,165 +20,100 @@ def deduplicate_lines(text: str) -> str:
     seen = set()
     out = []
     for line in text.splitlines():
-        key = line.strip().lower()
-        if key and key not in seen:
-            seen.add(key)
+        k = line.strip().lower()
+        if k and k not in seen:
+            seen.add(k)
             out.append(line)
     return "\n".join(out)
 
 
-def remove_page_artifacts(text: str) -> str:
-    text = re.sub(r"(?i)page\s*\d+\s*table\s*\d+.*", "", text)
-    text = re.sub(r"(?i)page\s*\d+.*document", "", text)
-    return text
+def remove_noise(text: str) -> str:
+    # IMPORTANT FIX: remove memory spam responses
+    if not text:
+        return ""
+
+    bad_markers = [
+        "[MEMORY EVENT]",
+        "queued for processing",
+        "Uploaded and queued"
+    ]
+
+    for m in bad_markers:
+        text = text.replace(m, "")
+
+    return text.strip()
 
 
 # ==============================
-# AGENT STATE
-# ==============================
-
-class AgentState:
-    def __init__(self):
-        self.plan = []
-        self.context = ""
-        self.memory = ""
-        self.draft = ""
-        self.final = ""
-        self.issues = []
-        self.docs = []
-
-
-# ==============================
-# VECTOR CACHE
+# VECTOR CACHE (FIXED)
 # ==============================
 
 @lru_cache(maxsize=32)
 def cached_vectorstore(files_key: str):
-    file_names = [f for f in str(files_key or "").split("|") if f]
-    if not file_names:
+    files = [f for f in files_key.split("|") if f]
+    if not files:
         return None
-    return get_workspace_vector_store(file_names) or get_combined_vector_store(file_names)
+    return get_workspace_vector_store(files) or get_combined_vector_store(files)
 
 
-# ==============================
-# RERANK (simple but stable)
-# ==============================
-
-def rerank_docs(query, docs):
-    query_terms = {w for w in re.findall(r"\w+", str(query).lower()) if len(w) > 2}
-
-    def score(doc):
-        text = str(getattr(doc, "page_content", doc)).lower()
-        return sum(1 for t in query_terms if t in text)
-
-    return sorted(docs or [], key=score, reverse=True)[:6]
-
-
-# ==============================
-# SAFE LLM CALL
-# ==============================
-
-def _invoke_llm(llm, prompt):
-    if not llm:
-        return ""
+def safe_retrieve(vector_store, query, k=6):
+    if not vector_store:
+        return []
     try:
-        return str(llm.invoke(prompt))
+        return vector_store.similarity_search(query, k=k)
     except:
-        return ""
-
-
-# ==============================
-# 🔥 FIXED RETRIEVAL (IMPORTANT FIX)
-# ==============================
-
-def retriever_agent(query, chat_files):
-    key = "|".join(chat_files or [])
-
-    docs = []
-
-    # 1. VECTOR DB (highest priority)
-    vector_store = cached_vectorstore(key)
-    if vector_store:
         try:
-            docs = vector_store.similarity_search(query, k=10)
+            retriever = vector_store.as_retriever(search_kwargs={"k": k})
+            return retriever.invoke(query)
         except:
-            try:
-                docs = vector_store.as_retriever(search_kwargs={"k": 10}).invoke(query)
-            except:
-                docs = []
+            return []
 
-    # 2. COMBINED VECTOR STORE fallback
+
+def rerank(query, docs):
     if not docs:
-        vs = get_combined_vector_store(chat_files)
-        if vs:
-            try:
-                docs = vs.similarity_search(query, k=10)
-            except:
-                docs = []
+        return []
 
-    # 3. RAW TEXT fallback (CRITICAL)
+    q = set(re.findall(r"\w+", query.lower()))
+    def score(d):
+        t = str(getattr(d, "page_content", d)).lower()
+        return sum(1 for w in q if w in t)
+
+    return sorted(docs, key=score, reverse=True)[:5]
+
+
+# ==============================
+# CORE RAG PIPELINE (FIXED)
+# ==============================
+
+def build_context(query, files):
+    key = "|".join(files)
+
+    docs = safe_retrieve(cached_vectorstore(key), query, 6)
     if not docs:
-        raw_text = "\n".join(
-            st.session_state.file_texts.get(f, "")
-            for f in (chat_files or [])
-        )
-        docs = [raw_text[i:i+2000] for i in range(0, len(raw_text), 2000)]
+        docs = safe_retrieve(get_combined_vector_store(files), query, 6)
 
-    docs = rerank_docs(query, docs)
+    docs = rerank(query, docs)
 
-    context = "\n\n".join(
+    doc_text = "\n\n".join(
         str(getattr(d, "page_content", d)) for d in docs
     )
 
-    return clean_context(context), docs
+    doc_text = clean_context(doc_text)
+
+    return doc_text, docs
 
 
-# ==============================
-# REASONING
-# ==============================
+def generate_answer(llm, query, context):
+    if not llm:
+        return "LLM not loaded."
 
-def reasoning_agent(llm, query, context, chat_history):
     prompt = f"""
-You are a strict document QA system.
+You are a document QA assistant.
 
 RULES:
-- Use ONLY context
-- If answer is not in context, say "Not found in document"
-
-CONTEXT:
-{context}
-
-CHAT:
-{chat_history}
-
-QUESTION:
-{query}
-"""
-    return _invoke_llm(llm, prompt)
-
-
-# ==============================
-# VERIFICATION
-# ==============================
-
-def verification(answer, context):
-    issues = []
-    if len(answer or "") < 30:
-        issues.append("Too short")
-    if len(set(answer.lower().split()) & set(context.lower().split())) < 5:
-        issues.append("Weak grounding")
-    return issues
-
-
-def repair(llm, query, answer, context, issues):
-    prompt = f"""
-Fix answer using ONLY context.
-
-ISSUES:
-{issues}
-
-ANSWER:
-{answer}
+- Answer ONLY using context
+- If not found, say "Not found in document"
+- Do NOT include system logs or memory events
 
 CONTEXT:
 {context}
@@ -193,39 +121,15 @@ CONTEXT:
 QUESTION:
 {query}
 """
-    return _invoke_llm(llm, prompt)
+
+    try:
+        return llm.invoke(prompt)
+    except:
+        return "Error generating response."
 
 
 # ==============================
-# AGENT PIPELINE
-# ==============================
-
-def autonomous_agent_run(llm, query, chat_files, chat_history):
-    state = AgentState()
-
-    state.context, state.docs = retriever_agent(query, chat_files)
-
-    state.draft = reasoning_agent(llm, query, state.context, chat_history)
-
-    state.issues = verification(state.draft, state.context)
-
-    if state.issues:
-        state.final = repair(llm, query, state.draft, state.context, state.issues)
-    else:
-        state.final = state.draft
-
-    # 🔥 SAFE FALLBACK (IMPORTANT FIX)
-    if not state.final or len(state.final.strip()) < 20:
-        if state.context.strip():
-            state.final = state.context[:2500]
-        else:
-            state.final = "No relevant content found in documents."
-
-    return state.final
-
-
-# ==============================
-# CHAT UI
+# STREAMLIT UI
 # ==============================
 
 def render_chat_tab():
@@ -237,11 +141,11 @@ def render_chat_tab():
     available_files = list(dict.fromkeys(st.session_state.get("selected_files", [])))
 
     if not available_files:
-        st.warning("Upload files first")
+        st.warning("No files selected.")
         return
 
     chat_files = st.multiselect(
-        "Choose file(s) for Chat",
+        "Choose file(s)",
         options=available_files,
         default=st.session_state.get("chat_file_selection", [])
     )
@@ -249,35 +153,44 @@ def render_chat_tab():
     if not chat_files:
         return
 
-    key = "|".join(chat_files)
-    messages = st.session_state.document_chat_display.setdefault(key, [])
+    chat_key = get_chatpdf_memory_key(get_active_user_id(), chat_files)
+    messages = st.session_state.document_chat_display.setdefault(chat_key, [])
 
-    user_input = st.chat_input("Ask from documents")
+    user_input = st.chat_input("Ask something from document")
 
     if user_input:
+
         messages.append({"role": "user", "content": user_input})
 
         llm = load_llm()
 
-        chat_history = "\n".join(
-            f"{m['role']}: {m['content']}" for m in messages[-10:]
-        )
+        # ==========================
+        # STEP 1: RETRIEVE CONTEXT
+        # ==========================
+        context, docs = build_context(user_input, chat_files)
 
-        response = autonomous_agent_run(
-            llm,
-            user_input,
-            chat_files,
-            chat_history
-        )
+        # IMPORTANT FIX: prevent memory-only answers
+        if not context.strip():
+            response = "No relevant information found in the document."
+        else:
+            # ==========================
+            # STEP 2: GENERATE ANSWER
+            # ==========================
+            response = generate_answer(llm, user_input, context)
 
-        response = clean_context(response)
-        response = remove_page_artifacts(response)
+        # cleanup hallucinated memory logs
+        response = remove_noise(response)
         response = deduplicate_lines(response)
 
         messages.append({"role": "assistant", "content": response})
 
-        st.session_state.document_chat_display[key] = messages[-50:]
+        st.session_state.document_chat_display[chat_key] = messages[-50:]
 
-    for msg in messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+    # ==============================
+    # DISPLAY
+    # ==============================
+    for m in messages:
+        with st.chat_message(m["role"]):
+            st.markdown(m["content"])
+
+    st.markdown("</div>", unsafe_allow_html=True)
