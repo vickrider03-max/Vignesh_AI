@@ -68,7 +68,7 @@ def cached_vectorstore(files_key: str):
 
 
 # ==============================
-# RERANK
+# RERANK (simple but stable)
 # ==============================
 
 def rerank_docs(query, docs):
@@ -95,44 +95,41 @@ def _invoke_llm(llm, prompt):
 
 
 # ==============================
-# 🔥 FIXED RETRIEVAL (IMPORTANT)
+# 🔥 FIXED RETRIEVAL (IMPORTANT FIX)
 # ==============================
 
 def retriever_agent(query, chat_files):
     key = "|".join(chat_files or [])
 
-    vector_store = cached_vectorstore(key)
     docs = []
 
-    # 1. vector store search
+    # 1. VECTOR DB (highest priority)
+    vector_store = cached_vectorstore(key)
     if vector_store:
         try:
-            docs = vector_store.similarity_search(query, k=8)
+            docs = vector_store.similarity_search(query, k=10)
         except:
             try:
-                docs = vector_store.as_retriever(search_kwargs={"k": 8}).invoke(query)
+                docs = vector_store.as_retriever(search_kwargs={"k": 10}).invoke(query)
             except:
                 docs = []
 
-    # 2. fallback combined store
+    # 2. COMBINED VECTOR STORE fallback
     if not docs:
         vs = get_combined_vector_store(chat_files)
         if vs:
             try:
-                docs = vs.similarity_search(query, k=8)
+                docs = vs.similarity_search(query, k=10)
             except:
                 docs = []
 
-    # 3. FINAL fallback → raw text chunking (CRITICAL FIX)
+    # 3. RAW TEXT fallback (CRITICAL)
     if not docs:
         raw_text = "\n".join(
             st.session_state.file_texts.get(f, "")
             for f in (chat_files or [])
         )
-        docs = [
-            raw_text[i:i+1500]
-            for i in range(0, len(raw_text), 1500)
-        ]
+        docs = [raw_text[i:i+2000] for i in range(0, len(raw_text), 2000)]
 
     docs = rerank_docs(query, docs)
 
@@ -152,8 +149,8 @@ def reasoning_agent(llm, query, context, chat_history):
 You are a strict document QA system.
 
 RULES:
-- Use ONLY provided context
-- If missing info, say "Not found in document"
+- Use ONLY context
+- If answer is not in context, say "Not found in document"
 
 CONTEXT:
 {context}
@@ -217,9 +214,12 @@ def autonomous_agent_run(llm, query, chat_files, chat_history):
     else:
         state.final = state.draft
 
-    # 🔥 FIX: better fallback
+    # 🔥 SAFE FALLBACK (IMPORTANT FIX)
     if not state.final or len(state.final.strip()) < 20:
-        state.final = state.context[:2000] if state.context else "No relevant context found."
+        if state.context.strip():
+            state.final = state.context[:2500]
+        else:
+            state.final = "No relevant content found in documents."
 
     return state.final
 
