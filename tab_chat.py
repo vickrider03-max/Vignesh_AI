@@ -3,7 +3,10 @@
 # CHAT TAB UI
 # Optimized + cleaned merged version
 # ==============================
-
+import streamlit as st
+import re
+import time
+import html
 from functions import * 
 from tabs.tab_memory import get_tab_uploaded_files
 
