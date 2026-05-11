@@ -1,16 +1,17 @@
-# ==============================
-# FIXED + RESTORED VERSION
-# ==============================
-
 from functions import *
 from tab_memory import get_tab_uploaded_files
+
 from functools import lru_cache
 import re
 import html
 import time
+import streamlit as st
+
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnablePassthrough
 
 # ==============================
-# HELPERS (UNCHANGED + SAFE)
+# HELPERS
 # ==============================
 
 def clean_context(text: str) -> str:
@@ -39,32 +40,22 @@ def remove_page_artifacts(text: str) -> str:
 
 
 # ==============================
-# 🔥 ONLY ADDITION (SAFE FIX)
+# AGENT STATE (FIXED - IMPORTANT)
 # ==============================
 
-def is_valid_context(context: str) -> bool:
-    if not context:
-        return False
-
-    text = context.lower()
-
-    bad_signals = [
-        "uploaded and queued",
-        "processing",
-        "loading",
-        "no content",
-        "empty",
-    ]
-
-    # must contain real semantic content
-    words = [w for w in text.split() if len(w) > 3]
-    has_signal = len(words) > 40
-
-    return has_signal and not any(b in text for b in bad_signals)
+class AgentState:
+    def __init__(self):
+        self.plan = []
+        self.context = ""
+        self.memory = ""
+        self.draft = ""
+        self.final = ""
+        self.issues = []
+        self.docs = []
 
 
 # ==============================
-# RAG + AGENT SYSTEM (UNCHANGED)
+# CACHE VECTOR STORE
 # ==============================
 
 @lru_cache(maxsize=32)
@@ -75,11 +66,12 @@ def cached_vectorstore(files_key: str):
     return get_workspace_vector_store(file_names) or get_combined_vector_store(file_names)
 
 
+# ==============================
+# RETRIEVAL CORE
+# ==============================
+
 def rerank_docs(query, docs):
-    query_terms = {
-        word for word in re.findall(r"\w+", str(query or "").lower())
-        if len(word) > 2
-    }
+    query_terms = {w for w in re.findall(r"\w+", str(query).lower()) if len(w) > 2}
 
     def score(doc):
         text = str(getattr(doc, "page_content", doc)).lower()
@@ -88,197 +80,179 @@ def rerank_docs(query, docs):
     return sorted(docs or [], key=score, reverse=True)[:6]
 
 
-def hallucination_check(answer: str, context: str) -> bool:
-    if not answer or not context:
-        return True
-
-    answer = answer.lower()
-    context = context.lower()
-
-    if len(answer) < 50:
-        return True
-
-    terms = [w for w in re.findall(r"\w+", answer) if len(w) > 4][:20]
-    overlap = sum(1 for t in terms if t in context)
-
-    return overlap < 2
+def _retrieve(vector_store, query, k=6):
+    if not vector_store:
+        return []
+    try:
+        return vector_store.similarity_search(query, k=k)
+    except:
+        try:
+            return vector_store.as_retriever(search_kwargs={"k": k}).invoke(query)
+        except:
+            return []
 
 
 # ==============================
-# RETRIEVER (FIX ONLY HERE)
+# SIMPLE LLM WRAPPER
+# ==============================
+
+def _invoke_llm(llm, prompt):
+    if not llm:
+        return ""
+    try:
+        return str(llm.invoke(prompt))
+    except:
+        return ""
+
+
+# ==============================
+# RAG PIPELINE
 # ==============================
 
 def retriever_agent(query, chat_files):
+    key = "|".join(chat_files or [])
 
-    files_key = "|".join(chat_files or [])
+    docs = _retrieve(cached_vectorstore(key), query, k=8)
+    if not docs:
+        docs = _retrieve(get_combined_vector_store(chat_files), query, k=8)
 
-    doc_docs = _retrieve_docs_from_vector_store(
-        cached_vectorstore(files_key), query, limit=8
+    docs = rerank_docs(query, docs)
+
+    context = "\n\n".join(
+        str(getattr(d, "page_content", d)) for d in docs
     )
 
-    if not doc_docs:
-        doc_docs = _retrieve_docs_from_vector_store(
-            get_combined_vector_store(chat_files), query, limit=8
-        )
-
-    doc_docs = rerank_docs(query, doc_docs)
-
-    memory_docs = _retrieve_docs_from_vector_store(
-        get_workspace_vector_store(chat_files), query, limit=4
-    )
-
-    docs = rerank_docs(query, doc_docs + memory_docs)
-
-    doc_context = "\n\n".join(
-        f"[DOC]\n{getattr(d, 'page_content', str(d))}"
-        for d in docs
-    )
-
-    memory_context = build_agent_memory_context(query, chat_files)
-    context = clean_context(doc_context + "\n\n" + memory_context)
-
-    # 🔥 ONLY FIX HERE
-    if not is_valid_context(context):
-        context = ""
-
-    return context, memory_context, docs
+    return clean_context(context), docs
 
 
 # ==============================
-# REASONING (RESTORED)
+# AGENT CORE
 # ==============================
 
 def reasoning_agent(llm, query, context, chat_history):
-
-    if not is_valid_context(context):
-        return "No sufficient document context found to answer this query."
-
     prompt = f"""
-You are a reasoning engine.
+You are a strict RAG assistant.
 
 RULES:
 - Use ONLY context
-- Do not hallucinate
-- If unsure, say so
+- If unsure, say "not found in document"
 
 CONTEXT:
-{safe_text(context, 40000)}
+{context}
 
 CHAT:
-{safe_text(chat_history, 8000)}
+{chat_history}
 
 QUESTION:
-{safe_text(query, 3000)}
+{query}
 """
-
-    answer = _invoke_llm(llm, prompt)
-
-    if hallucination_check(answer, context):
-        return "The document does not contain enough grounded information."
-
-    return answer
+    return _invoke_llm(llm, prompt)
 
 
-# ==============================
-# AUTONOMOUS AGENT (FULL RESTORED)
-# ==============================
+def verification(answer, context):
+    if len(answer or "") < 30:
+        return ["Answer too short"]
+    if "not found" in answer.lower():
+        return []
+    if len(set(answer.lower().split()) & set(context.lower().split())) < 5:
+        return ["Low grounding in context"]
+    return []
+
+
+def repair(llm, query, answer, context, issues):
+    prompt = f"""
+Fix this answer using ONLY context.
+
+ISSUES:
+{issues}
+
+ANSWER:
+{answer}
+
+CONTEXT:
+{context}
+
+QUESTION:
+{query}
+"""
+    return _invoke_llm(llm, prompt)
+
 
 def autonomous_agent_run(llm, query, chat_files, chat_history):
-
     state = AgentState()
 
-    state.plan = planner_agent(llm, query)
-    state.context, state.memory, state.docs = retriever_agent(query, chat_files)
-
-    state.plan.extend(reasoning_steps(query, state.docs))
-
-    if not state.context:
-        return "No relevant document content found."
+    state.context, state.docs = retriever_agent(query, chat_files)
 
     state.draft = reasoning_agent(llm, query, state.context, chat_history)
 
-    state.issues = verification_agent(llm, query, state.draft, state.context)
+    state.issues = verification(state.draft, state.context)
 
     if state.issues:
-        state.final = _repair_answer(
-            llm, query, state.draft, state.context, state.issues
-        )
+        state.final = repair(llm, query, state.draft, state.context, state.issues)
     else:
         state.final = state.draft
 
-    if state.docs and "Sources:" not in state.final:
-        state.final += "\n\nSources:\n" + format_chatpdf_sources(state.docs)
-
-    pin_diagrams = extract_pin_diagram(state.context)
-    if pin_diagrams:
-        state.final += "\n\nPin/Signal Info:\n" + str(pin_diagrams)
-
-    st.session_state.chat_agent_trace = {
-        "plan": state.plan,
-        "issues": state.issues,
-        "doc_count": len(state.docs),
-        "context_chars": len(state.context or "")
-    }
+    if not state.final:
+        state.final = "No valid answer generated from document context."
 
     return state.final
 
 
 # ==============================
-# CHAT TAB (UNCHANGED STRUCTURE)
+# CHAT TAB UI
 # ==============================
 
 def render_chat_tab():
+    st.markdown('<div id="chat-section">', unsafe_allow_html=True)
 
-    current_chat_messages = []
+    if "document_chat_display" not in st.session_state:
+        st.session_state.document_chat_display = {}
 
-    available_chat_files = list(dict.fromkeys(
-        st.session_state.get("selected_files", [])
-    ))
+    available_chat_files = list(dict.fromkeys(st.session_state.get("selected_files", [])))
 
-    if available_chat_files:
+    if not available_chat_files:
+        st.warning("Upload files first")
+        return
 
-        chat_files = st.multiselect(
-            "Choose file(s) for Chat",
-            options=available_chat_files,
-            default=st.session_state.get("chat_file_selection", [])
+    chat_files = st.multiselect(
+        "Choose file(s) for Chat",
+        options=available_chat_files,
+        default=st.session_state.get("chat_file_selection", [])
+    )
+
+    if not chat_files:
+        return
+
+    chat_key = "|".join(chat_files)
+    messages = st.session_state.document_chat_display.setdefault(chat_key, [])
+
+    user_input = st.chat_input("Ask from documents")
+
+    if user_input:
+        messages.append({"role": "user", "content": user_input})
+
+        llm = load_llm()
+
+        chat_history = "\n".join(
+            f"{m['role']}: {m['content']}" for m in messages[-10:]
         )
 
-        if chat_files:
+        response = autonomous_agent_run(
+            llm,
+            user_input,
+            chat_files,
+            chat_history
+        )
 
-            user_input = st.chat_input("Ask anything from documents")
+        response = clean_context(response)
+        response = remove_page_artifacts(response)
+        response = deduplicate_lines(response)
 
-            if user_input:
+        messages.append({"role": "assistant", "content": response})
 
-                current_chat_messages.append({"role": "user", "content": user_input})
+        st.session_state.document_chat_display[chat_key] = messages[-50:]
 
-                llm = load_llm()
-
-                chat_history = "\n".join(
-                    f"{m['role']}: {m['content']}"
-                    for m in current_chat_messages[-10:]
-                )
-
-                response = autonomous_agent_run(
-                    llm,
-                    user_input,
-                    chat_files,
-                    chat_history
-                )
-
-                # 🔥 FINAL SAFETY FIX ONLY
-                if not response or "uploaded and queued" in response.lower():
-                    response = "No valid grounded answer could be generated."
-
-                response = clean_context(response)
-                response = remove_page_artifacts(response)
-                response = deduplicate_lines(response)
-
-                current_chat_messages.append(
-                    {"role": "assistant", "content": response}
-                )
-
-                st.session_state.messages = current_chat_messages
-
-    for msg in current_chat_messages:
+    # display
+    for msg in messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
