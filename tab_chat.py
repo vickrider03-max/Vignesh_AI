@@ -1,8 +1,8 @@
 from functions import *
 from tab_memory import get_tab_uploaded_files
 from functools import lru_cache
+import streamlit as st
 import re
-import time
 
 # ==============================
 # CLEANING HELPERS
@@ -28,7 +28,6 @@ def deduplicate_lines(text: str) -> str:
 
 
 def remove_noise(text: str) -> str:
-    # IMPORTANT FIX: remove memory spam responses
     if not text:
         return ""
 
@@ -45,7 +44,7 @@ def remove_noise(text: str) -> str:
 
 
 # ==============================
-# VECTOR CACHE (FIXED)
+# VECTOR CACHE
 # ==============================
 
 @lru_cache(maxsize=32)
@@ -61,11 +60,13 @@ def safe_retrieve(vector_store, query, k=6):
         return []
     try:
         return vector_store.similarity_search(query, k=k)
-    except:
+    except Exception as e:
+        print("Retrieval error:", e)
         try:
             retriever = vector_store.as_retriever(search_kwargs={"k": k})
             return retriever.invoke(query)
-        except:
+        except Exception as e:
+            print("Retriever fallback error:", e)
             return []
 
 
@@ -74,21 +75,23 @@ def rerank(query, docs):
         return []
 
     q = set(re.findall(r"\w+", query.lower()))
+
     def score(d):
         t = str(getattr(d, "page_content", d)).lower()
-        return sum(1 for w in q if w in t)
+        return sum(t.count(w) for w in q)
 
     return sorted(docs, key=score, reverse=True)[:5]
 
 
 # ==============================
-# CORE RAG PIPELINE (FIXED)
+# CORE RAG
 # ==============================
 
 def build_context(query, files):
     key = "|".join(files)
 
     docs = safe_retrieve(cached_vectorstore(key), query, 6)
+
     if not docs:
         docs = safe_retrieve(get_combined_vector_store(files), query, 6)
 
@@ -99,6 +102,10 @@ def build_context(query, files):
     )
 
     doc_text = clean_context(doc_text)
+
+    # Prevent token overflow
+    MAX_CHARS = 6000
+    doc_text = doc_text[:MAX_CHARS]
 
     return doc_text, docs
 
@@ -123,8 +130,18 @@ QUESTION:
 """
 
     try:
-        return llm.invoke(prompt)
-    except:
+        res = llm.invoke(prompt)
+
+        # ✅ Fix: handle different response formats
+        if isinstance(res, str):
+            return res
+        elif hasattr(res, "content"):
+            return res.content
+        else:
+            return str(res)
+
+    except Exception as e:
+        print("LLM error:", e)
         return "Error generating response."
 
 
@@ -133,6 +150,7 @@ QUESTION:
 # ==============================
 
 def render_chat_tab():
+
     st.markdown('<div id="chat-section">', unsafe_allow_html=True)
 
     if "document_chat_display" not in st.session_state:
@@ -162,14 +180,20 @@ def render_chat_tab():
 
         messages.append({"role": "user", "content": user_input})
 
+        # ✅ LOAD LLM (with debug)
         llm = load_llm()
+
+        if not llm:
+            st.error("❌ LLM failed to load. Check API key / model config.")
+            return
+        else:
+            print("✅ LLM loaded successfully")
 
         # ==========================
         # STEP 1: RETRIEVE CONTEXT
         # ==========================
         context, docs = build_context(user_input, chat_files)
 
-        # IMPORTANT FIX: prevent memory-only answers
         if not context.strip():
             response = "No relevant information found in the document."
         else:
@@ -178,7 +202,7 @@ def render_chat_tab():
             # ==========================
             response = generate_answer(llm, user_input, context)
 
-        # cleanup hallucinated memory logs
+        # Cleanup
         response = remove_noise(response)
         response = deduplicate_lines(response)
 
