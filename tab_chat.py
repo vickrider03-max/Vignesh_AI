@@ -10,6 +10,7 @@ import streamlit as st
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 
+
 # ==============================
 # HELPERS
 # ==============================
@@ -40,7 +41,7 @@ def remove_page_artifacts(text: str) -> str:
 
 
 # ==============================
-# AGENT STATE (FIXED - IMPORTANT)
+# AGENT STATE
 # ==============================
 
 class AgentState:
@@ -55,19 +56,19 @@ class AgentState:
 
 
 # ==============================
-# CACHE VECTOR STORE
+# VECTOR CACHE
 # ==============================
 
 @lru_cache(maxsize=32)
 def cached_vectorstore(files_key: str):
-    file_names = [name for name in str(files_key or "").split("|") if name]
+    file_names = [f for f in str(files_key or "").split("|") if f]
     if not file_names:
         return None
     return get_workspace_vector_store(file_names) or get_combined_vector_store(file_names)
 
 
 # ==============================
-# RETRIEVAL CORE
+# RERANK
 # ==============================
 
 def rerank_docs(query, docs):
@@ -80,20 +81,8 @@ def rerank_docs(query, docs):
     return sorted(docs or [], key=score, reverse=True)[:6]
 
 
-def _retrieve(vector_store, query, k=6):
-    if not vector_store:
-        return []
-    try:
-        return vector_store.similarity_search(query, k=k)
-    except:
-        try:
-            return vector_store.as_retriever(search_kwargs={"k": k}).invoke(query)
-        except:
-            return []
-
-
 # ==============================
-# SIMPLE LLM WRAPPER
+# SAFE LLM CALL
 # ==============================
 
 def _invoke_llm(llm, prompt):
@@ -106,15 +95,44 @@ def _invoke_llm(llm, prompt):
 
 
 # ==============================
-# RAG PIPELINE
+# 🔥 FIXED RETRIEVAL (IMPORTANT)
 # ==============================
 
 def retriever_agent(query, chat_files):
     key = "|".join(chat_files or [])
 
-    docs = _retrieve(cached_vectorstore(key), query, k=8)
+    vector_store = cached_vectorstore(key)
+    docs = []
+
+    # 1. vector store search
+    if vector_store:
+        try:
+            docs = vector_store.similarity_search(query, k=8)
+        except:
+            try:
+                docs = vector_store.as_retriever(search_kwargs={"k": 8}).invoke(query)
+            except:
+                docs = []
+
+    # 2. fallback combined store
     if not docs:
-        docs = _retrieve(get_combined_vector_store(chat_files), query, k=8)
+        vs = get_combined_vector_store(chat_files)
+        if vs:
+            try:
+                docs = vs.similarity_search(query, k=8)
+            except:
+                docs = []
+
+    # 3. FINAL fallback → raw text chunking (CRITICAL FIX)
+    if not docs:
+        raw_text = "\n".join(
+            st.session_state.file_texts.get(f, "")
+            for f in (chat_files or [])
+        )
+        docs = [
+            raw_text[i:i+1500]
+            for i in range(0, len(raw_text), 1500)
+        ]
 
     docs = rerank_docs(query, docs)
 
@@ -126,16 +144,16 @@ def retriever_agent(query, chat_files):
 
 
 # ==============================
-# AGENT CORE
+# REASONING
 # ==============================
 
 def reasoning_agent(llm, query, context, chat_history):
     prompt = f"""
-You are a strict RAG assistant.
+You are a strict document QA system.
 
 RULES:
-- Use ONLY context
-- If unsure, say "not found in document"
+- Use ONLY provided context
+- If missing info, say "Not found in document"
 
 CONTEXT:
 {context}
@@ -149,19 +167,22 @@ QUESTION:
     return _invoke_llm(llm, prompt)
 
 
+# ==============================
+# VERIFICATION
+# ==============================
+
 def verification(answer, context):
+    issues = []
     if len(answer or "") < 30:
-        return ["Answer too short"]
-    if "not found" in answer.lower():
-        return []
+        issues.append("Too short")
     if len(set(answer.lower().split()) & set(context.lower().split())) < 5:
-        return ["Low grounding in context"]
-    return []
+        issues.append("Weak grounding")
+    return issues
 
 
 def repair(llm, query, answer, context, issues):
     prompt = f"""
-Fix this answer using ONLY context.
+Fix answer using ONLY context.
 
 ISSUES:
 {issues}
@@ -178,6 +199,10 @@ QUESTION:
     return _invoke_llm(llm, prompt)
 
 
+# ==============================
+# AGENT PIPELINE
+# ==============================
+
 def autonomous_agent_run(llm, query, chat_files, chat_history):
     state = AgentState()
 
@@ -192,14 +217,15 @@ def autonomous_agent_run(llm, query, chat_files, chat_history):
     else:
         state.final = state.draft
 
-    if not state.final:
-        state.final = "No valid answer generated from document context."
+    # 🔥 FIX: better fallback
+    if not state.final or len(state.final.strip()) < 20:
+        state.final = state.context[:2000] if state.context else "No relevant context found."
 
     return state.final
 
 
 # ==============================
-# CHAT TAB UI
+# CHAT UI
 # ==============================
 
 def render_chat_tab():
@@ -208,23 +234,23 @@ def render_chat_tab():
     if "document_chat_display" not in st.session_state:
         st.session_state.document_chat_display = {}
 
-    available_chat_files = list(dict.fromkeys(st.session_state.get("selected_files", [])))
+    available_files = list(dict.fromkeys(st.session_state.get("selected_files", [])))
 
-    if not available_chat_files:
+    if not available_files:
         st.warning("Upload files first")
         return
 
     chat_files = st.multiselect(
         "Choose file(s) for Chat",
-        options=available_chat_files,
+        options=available_files,
         default=st.session_state.get("chat_file_selection", [])
     )
 
     if not chat_files:
         return
 
-    chat_key = "|".join(chat_files)
-    messages = st.session_state.document_chat_display.setdefault(chat_key, [])
+    key = "|".join(chat_files)
+    messages = st.session_state.document_chat_display.setdefault(key, [])
 
     user_input = st.chat_input("Ask from documents")
 
@@ -250,9 +276,8 @@ def render_chat_tab():
 
         messages.append({"role": "assistant", "content": response})
 
-        st.session_state.document_chat_display[chat_key] = messages[-50:]
+        st.session_state.document_chat_display[key] = messages[-50:]
 
-    # display
     for msg in messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
