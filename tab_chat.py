@@ -96,6 +96,7 @@ def render_chat_tab():
     # MAIN UI
     # ==============================
 
+    current_chat_messages = []
     available_chat_files = list(dict.fromkeys(st.session_state.selected_files))
 
     if available_chat_files:
