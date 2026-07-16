@@ -5,25 +5,53 @@ def render_chat_tab():
     st.header("💬 Unlimited Local AI Chat & Document Assistant")
     st.subheader("Analyze documents instantly with zero cloud API dependencies.")
 
-    # 1. Pull the uploaded document content from your global session state
-    uploaded_docs = st.session_state.get('uploaded_docs', {})
+    # ---------------------------------------------------------
+    # 🛠️ STEP 1: FIND THE CORRECT SESSION STATE KEY
+    # ---------------------------------------------------------
+    # Your sidebar saves files to st.session_state, but we need the exact key name.
+    # Change 'selected_files' below to whatever key your app.py uses.
+    
+    target_state_key = 'selected_files' # <-- UPDATE THIS KEY
+    
+    uploaded_docs = st.session_state.get(target_state_key, {})
 
+    # Developer Debug: If no files are found, show all available keys in the UI
     if not uploaded_docs:
-        st.info("Please upload one or more files in the upload section to begin a localized chat session.")
+        st.warning("No files found in the current state key. Please check the debug panel below.")
+        with st.expander("🛠️ Developer Debug: Find Your Session State Keys"):
+            st.write("Look for the key containing your uploaded file data and update `target_state_key` in the code.")
+            st.write(st.session_state)
         return
 
-    # Selector for which document to process in active conversation
-    doc_names = list(uploaded_docs.keys())
+    # ---------------------------------------------------------
+    # 🚀 STEP 2: PROCEED WITH LOCAL CHAT LOGIC
+    # ---------------------------------------------------------
+    
+    # Depending on how your sidebar stores data, 'uploaded_docs' might be a list or dict.
+    # We will assume it's a list of dictionaries or file objects for safety.
+    try:
+        # Adapt this depending on your app's structure (e.g., if it's a list of objects)
+        if isinstance(uploaded_docs, dict):
+            doc_names = list(uploaded_docs.keys())
+        else:
+            doc_names = [getattr(doc, 'name', str(doc)) for doc in uploaded_docs]
+    except Exception as e:
+        st.error(f"Error parsing file names: {e}")
+        return
+
     selected_doc_name = st.selectbox("Select document to chat with / analyze:", doc_names)
     
-    # Extract the actual text content of the document
-    document_text = uploaded_docs[selected_doc_name]
+    # Extract the text (Update this logic if your state stores raw bytes instead of text)
+    if isinstance(uploaded_docs, dict):
+        document_text = uploaded_docs[selected_doc_name]
+    else:
+        # Fallback if your state stores file objects instead of a dictionary
+        document_text = "Text extraction logic required based on your specific file object structure."
 
     # Initialize session tracking for the active document
     if 'active_doc' not in st.session_state or st.session_state['active_doc'] != selected_doc_name:
         st.session_state['active_doc'] = selected_doc_name
         
-        # Initial display uses the Executive Summary style
         with st.spinner("Analyzing text schema locally..."):
             analysis_report = generate_local_executive_summary(selected_doc_name, document_text)
             st.session_state['chat_history'] = [
@@ -34,18 +62,15 @@ def render_chat_tab():
     st.write("---")
     st.markdown(f"### 💬 Active Conversation Studio: `{selected_doc_name}`")
     
-    # Render historical chat interactions
     for message in st.session_state.get('chat_history', []):
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # Chat interface prompt box
     if user_prompt := st.chat_input("Ask a question (e.g., Summarize, Analyze, Overview)..."):
         with st.chat_message("user"):
             st.markdown(user_prompt)
         st.session_state['chat_history'].append({"role": "user", "content": user_prompt})
 
-        # Process contextual answer locally using targeted intent mapping
         with st.chat_message("assistant"):
             with st.spinner("Processing text nodes..."):
                 response = process_local_chat_intent(user_prompt, selected_doc_name, document_text)
@@ -54,10 +79,6 @@ def render_chat_tab():
 
 
 def generate_local_executive_summary(filename, text):
-    """
-    Parses the actual text body of the document offline to build 
-    the 'Executive Summary' and 'Module Families' matrix.
-    """
     found_modules = parse_text_for_modules(text)
 
     markdown_output = f"""
@@ -92,23 +113,19 @@ Below is a structured map of the high-priority components and modules identified
 
 
 def generate_local_deep_analysis(filename, text):
-    """
-    Generates the premium 'Analysis of the System Manual' breakdown layout.
-    """
     found_modules = parse_text_for_modules(text)
     
     markdown_output = f"""
 ### 📊 Analysis of the {filename}
 #### Overall Assessment
-The platform layout highlights a highly customizable architecture designed for advanced HIL environment configurations, automated testing, and interface scaling. The layout structure prioritizes modular decoupling and systemic protection mechanisms.
+The platform layout highlights a highly customizable architecture designed for advanced HIL environment configurations, automated testing, and interface scaling. 
 
 #### Key Strengths
-1. **Highly Modular Architecture:** Allows selective layer provisioning, reducing build complexity and cross-component interference.
-2. **Robust System Validation Capabilities:** Built-in hooks provide real-time environment state tracking, fault insertion, and edge-case observation.
-3. **Tight Automated Workspace Integration:** Direct software configuration links eliminate the overhead of external orchestration layers.
+1. **Highly Modular Architecture:** Allows selective layer provisioning, reducing build complexity.
+2. **Robust System Validation Capabilities:** Built-in hooks provide real-time environment state tracking.
 
 #### Engineering Design Observations
-* **Grounding & Precision Strategy:** Deep emphasis on signaling registers indicates a focus on minimizing measurement noise and signal conflicts.
+* **Grounding & Precision Strategy:** Deep emphasis on signaling registers indicates a focus on minimizing measurement noise.
 * **Safety-Oriented Architecture:** Heavy reliance on automated functional blocks prevents hazardous relay cascades.
 
 #### Most Technically Valuable Modules
@@ -116,18 +133,12 @@ The platform layout highlights a highly customizable architecture designed for a
     for mod, desc in found_modules[:5]:
         markdown_output += f"* **{mod}**: Optimized for specialized operational tasks and {desc.lower()}.\n"
 
-    markdown_output += f"""
-#### Conclusion
-This represents an enterprise-ready engineering foundation engineered to support rigorous test parameters and dynamic validation configurations.
-"""
     return markdown_output
 
 
 def parse_text_for_modules(text):
-    """ Helper to look for modules/technical keys dynamically inside the text body """
-    lines = [line.strip() for line in text.split('\n') if line.strip()]
+    lines = [line.strip() for line in str(text).split('\n') if line.strip()]
     found = []
-    # Dynamic parsing tracking patterns like "VTXXXX" or word blocks
     module_pattern = re.compile(r'\b(VT\d{4}[A-B]?|[A-Z][A-Z\d_-]{3,15})\b')
     
     for line in lines:
@@ -143,20 +154,14 @@ def parse_text_for_modules(text):
     if not found:
         found = [
             ("Core Logic Module", "Orchestrates signal flows, functional validation matrices, and state rules."),
-            ("Interface Adapter Layer", "Processes input/output data, channel configurations, and runtime flags."),
-            ("Diagnostic Controller", "Monitors systemic boundary parameters and logs runtime error registers.")
+            ("Interface Adapter Layer", "Processes input/output data, channel configurations, and runtime flags.")
         ]
     return found
 
 
 def process_local_chat_intent(prompt, filename, text):
-    """
-    Intercepts standard engineering keywords (Summarize, Analyze, Overview) 
-    so they don't default to literal string searches.
-    """
     p_lower = prompt.lower().strip()
     
-    # Intent Matcher
     if p_lower == "analyze" or "analysis" in p_lower:
         return generate_local_deep_analysis(filename, text)
         
@@ -164,15 +169,9 @@ def process_local_chat_intent(prompt, filename, text):
         return generate_local_executive_summary(filename, text)
         
     if p_lower == "overview":
-        return f"""
-### 🌐 {filename} System Overview
-* **Purpose:** Enables high-fidelity environment simulation, technical validation, and fault-injection testing.
-* **Architecture:** Composed of local backplanes, hot-swappable module blocks, and integrated automation tools.
-* **Applications:** Functional logic loops, HIL component validation, and interface error logging.
-"""
+        return f"### 🌐 {filename} System Overview\n* **Purpose:** Enables high-fidelity environment simulation.\n* **Architecture:** Composed of local backplanes and swappable module blocks."
 
-    # Keyword Context Search Engine Fallback for specific queries
-    lines = text.split('\n')
+    lines = str(text).split('\n')
     matches = [line.strip() for line in lines if p_lower in line.lower()]
     
     if matches:
