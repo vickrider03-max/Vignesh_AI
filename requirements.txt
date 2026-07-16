@@ -21,3 +21,4 @@ torchvision
 transformers
 xlrd
 rank-bm25
+accelerate
